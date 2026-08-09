@@ -35,7 +35,13 @@ async function executeCalendarAction(userId: number, action: string, params: Rec
       const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
       const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; location?: string }> };
       if (!data.items || data.items.length === 0) return "Keine Termine in diesem Zeitraum.";
-      return data.items.map(ev => { const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? ""); return `• ${d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })} ${ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "Ganztägig"}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}`; }).join("\n");
+      const tz = "Europe/Zurich";
+      return data.items.map(ev => {
+        const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
+        const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
+        const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganztägig";
+        return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}`;
+      }).join("\n");
     }
     if (action === "create_event") {
       const event = { summary: params.summary, description: params.description, location: params.location, start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" }, end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" } };

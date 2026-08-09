@@ -26,12 +26,12 @@ const CALENDAR_COLORS: Record<string, string> = {
 function formatDate(iso?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Zurich" });
 }
 
 function formatTime(iso?: string): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" });
 }
 
 function toLocalDatetimeInput(iso?: string): string {
@@ -352,4 +352,3 @@ export default function JarvisCalendar() {
     </div>
   );
 }
-
