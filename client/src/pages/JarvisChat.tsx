@@ -61,35 +61,48 @@ export default function JarvisChat() {
 
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
-    if (!ttsEnabledRef.current || !("speechSynthesis" in window)) return;
-    const doSpeak = () => {
-      window.speechSynthesis.cancel();
-      const clean = text.replace(/[#*`_~>[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
-      if (!clean) return;
-      const utterance = new SpeechSynthesisUtterance(clean);
-      utterance.lang = "de-DE";
-      utterance.rate = 0.95;
-      utterance.pitch = 0.9;
-      const voices = window.speechSynthesis.getVoices();
-      const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google"))
-        || voices.find(v => v.lang.startsWith("de"))
-        || voices.find(v => v.default);
-      if (deVoice) utterance.voice = deVoice;
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-      // iOS-Fix: speak in setTimeout(0) damit es auch nach async-Calls funktioniert
-      setTimeout(() => window.speechSynthesis.speak(utterance), 0);
-    };
-    if (ttsUnlockedRef.current) {
-      doSpeak();
-    } else {
-      // Noch nicht entsperrt – Text merken und nach nächster User-Geste sprechen
-      console.warn("[TTS] Noch nicht entsperrt – bitte TTS-Button einmal antippen");
+    if (!("speechSynthesis" in window)) return;
+    if (!ttsUnlockedRef.current) {
+      console.warn("[TTS] Noch nicht entsperrt – bitte Sprachausgabe-Banner antippen");
+      return;
     }
+    window.speechSynthesis.cancel();
+    const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = "de-DE";
+    utterance.rate = 0.95;
+    utterance.pitch = 0.9;
+    const voices = window.speechSynthesis.getVoices();
+    const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google"))
+      || voices.find(v => v.lang.startsWith("de"))
+      || voices.find(v => v.default);
+    if (deVoice) utterance.voice = deVoice;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    // iOS-Fix: speak in setTimeout(0) damit es auch nach async-Calls funktioniert
+    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+  }, []);
+
+  // TTS einmalig entsperren (per User-Gesture)
+  const unlockTts = useCallback(() => {
+    if (!("speechSynthesis" in window)) return;
+    const unlock = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(unlock);
+    ttsUnlockedRef.current = true;
+    ttsEnabledRef.current = true;
+    setTtsUnlocked(true);
+    setTtsEnabled(true);
+    voicesLoadedRef.current = true;
+    window.speechSynthesis.getVoices();
   }, []);
 
   const toggleTts = useCallback(() => {
+    if (!ttsUnlockedRef.current) {
+      unlockTts();
+      return;
+    }
     if (isSpeaking) {
       window.speechSynthesis?.cancel();
       setIsSpeaking(false);
@@ -97,17 +110,8 @@ export default function JarvisChat() {
       const next = !ttsEnabled;
       setTtsEnabled(next);
       ttsEnabledRef.current = next;
-      if ("speechSynthesis" in window) {
-        // iOS entsperren: leere Utterance sprechen (User-Gesture-Kontext!)
-        const unlock = new SpeechSynthesisUtterance("");
-        window.speechSynthesis.speak(unlock);
-        ttsUnlockedRef.current = true;
-        setTtsUnlocked(true);
-        voicesLoadedRef.current = true;
-        window.speechSynthesis.getVoices();
-      }
     }
-  }, [ttsEnabled, isSpeaking]);
+  }, [ttsEnabled, isSpeaking, unlockTts]);
 
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
@@ -260,6 +264,7 @@ export default function JarvisChat() {
       if (final) {
         setInterimText("");
         setIsListening(false);
+        recognitionRef.current = null;
         recognition.abort();
         // Automatisch senden
         sendMessageFromText(final.trim());
@@ -279,6 +284,7 @@ export default function JarvisChat() {
     recognition.onend = () => {
       setIsListening(false);
       setInterimText("");
+      recognitionRef.current = null;
     };
 
     recognitionRef.current = recognition;
@@ -286,7 +292,10 @@ export default function JarvisChat() {
   }, [sendMessageFromText]);
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
     setIsListening(false);
     setInterimText("");
   }, []);
@@ -398,7 +407,7 @@ export default function JarvisChat() {
           {!ttsUnlocked && (
             <div className="mx-auto max-w-sm mb-4 mt-2">
               <button
-                onClick={toggleTts}
+                onClick={unlockTts}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all group"
               >
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/30">
