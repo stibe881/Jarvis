@@ -2,8 +2,9 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 const navItems = [
   { href: "/", label: "Chat", icon: MessageSquare },
@@ -14,6 +15,7 @@ const navItems = [
 export default function JarvisLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   if (loading) {
     return (
@@ -28,19 +30,19 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-8 p-8">
+      <div className="min-h-screen flex items-center justify-center bg-background px-6">
+        <div className="flex flex-col items-center gap-8 p-8 w-full max-w-sm">
           <JarvisOrb size={120} />
           <div className="text-center">
             <h1 className="font-jarvis text-4xl font-bold text-primary jarvis-glow-text mb-2">JARVIS</h1>
             <p className="text-muted-foreground text-sm tracking-widest">PERSÖNLICHER KI-ASSISTENT</p>
           </div>
-          <p className="text-foreground/70 text-center max-w-sm">
+          <p className="text-foreground/70 text-center text-sm">
             Dein intelligenter Assistent powered by Claude. Bitte melde dich an, um fortzufahren.
           </p>
           <Button
             onClick={() => startLogin()}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-widest px-8 py-3 jarvis-glow-sm"
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-widest py-3 jarvis-glow-sm"
           >
             ANMELDEN
           </Button>
@@ -49,87 +51,155 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
     );
   }
 
+  const isActive = (href: string) =>
+    location === href || (href === "/" && (location === "/chat" || location === "/"));
+
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Sidebar */}
-      <aside className="w-64 flex-shrink-0 flex flex-col border-r border-border bg-sidebar">
-        {/* Logo */}
-        <div className="p-6 border-b border-border">
-          <div className="flex items-center gap-3">
-            <JarvisOrb size={36} />
-            <div>
-              <h1 className="font-jarvis text-lg font-bold text-primary jarvis-glow-text">JARVIS</h1>
-              <p className="text-xs text-muted-foreground tracking-widest">KI-ASSISTENT</p>
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* ── Mobile Top-Bar (nur auf kleinen Bildschirmen) ── */}
+      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-sidebar flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <JarvisOrb size={28} />
+          <span className="font-jarvis text-base font-bold text-primary jarvis-glow-text">JARVIS</span>
+        </div>
+        <button
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          className="text-muted-foreground hover:text-primary p-1"
+        >
+          {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
+        </button>
+      </header>
+
+      {/* ── Mobile Slide-Down-Menü ── */}
+      {mobileMenuOpen && (
+        <div className="md:hidden absolute top-[57px] left-0 right-0 z-50 bg-sidebar border-b border-border shadow-xl">
+          <nav className="p-3 space-y-1">
+            {navItems.map(({ href, label, icon: Icon }) => (
+              <Link key={href} href={href}>
+                <div
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-md text-sm font-medium transition-all",
+                    isActive(href)
+                      ? "bg-primary/20 text-primary jarvis-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  )}
+                >
+                  <Icon size={18} />
+                  {label}
+                </div>
+              </Link>
+            ))}
+          </nav>
+          <div className="px-3 pb-3 border-t border-border pt-3">
+            <div className="flex items-center gap-3 px-4 py-2 mb-2">
+              <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0">
+                <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
+              </div>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout()}
+              className="w-full justify-start text-muted-foreground hover:text-foreground gap-2"
+            >
+              <LogOut size={14} />
+              Abmelden
+            </Button>
           </div>
         </div>
+      )}
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
-          {navItems.map(({ href, label, icon: Icon }) => {
-            const isActive = location === href || (href === "/" && location === "/chat");
-            return (
+      {/* ── Desktop + Mobile Body ── */}
+      <div className="flex flex-1 min-h-0">
+        {/* ── Desktop Sidebar (ab md) ── */}
+        <aside className="hidden md:flex w-64 flex-shrink-0 flex-col border-r border-border bg-sidebar">
+          <div className="p-5 border-b border-border">
+            <div className="flex items-center gap-3">
+              <JarvisOrb size={36} />
+              <div>
+                <h1 className="font-jarvis text-lg font-bold text-primary jarvis-glow-text">JARVIS</h1>
+                <p className="text-xs text-muted-foreground tracking-widest">KI-ASSISTENT</p>
+              </div>
+            </div>
+          </div>
+          <nav className="flex-1 p-4 space-y-1">
+            {navItems.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href}>
                 <div className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
-                  isActive
+                  isActive(href)
                     ? "bg-primary/20 text-primary jarvis-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}>
-                  <Icon size={18} className={isActive ? "text-primary" : ""} />
+                  <Icon size={18} className={isActive(href) ? "text-primary" : ""} />
                   {label}
-                  {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />}
+                  {isActive(href) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />}
                 </div>
               </Link>
-            );
-          })}
-        </nav>
-
-        {/* User */}
-        <div className="p-4 border-t border-border">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-              <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+            ))}
+          </nav>
+          <div className="p-4 border-t border-border">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
+                <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
+                <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => logout()}
+              className="w-full justify-start text-muted-foreground hover:text-foreground gap-2"
+            >
+              <LogOut size={14} />
+              Abmelden
+            </Button>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => logout()}
-            className="w-full justify-start text-muted-foreground hover:text-foreground gap-2"
-          >
-            <LogOut size={14} />
-            Abmelden
-          </Button>
-        </div>
-      </aside>
+        </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {children}
-      </main>
+        {/* ── Hauptinhalt ── */}
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {children}
+        </main>
+      </div>
+
+      {/* ── Mobile Bottom-Navigation ── */}
+      <nav className="md:hidden flex-shrink-0 flex items-center justify-around border-t border-border bg-sidebar py-2 px-4">
+        {navItems.map(({ href, label, icon: Icon }) => (
+          <Link key={href} href={href}>
+            <div className={cn(
+              "flex flex-col items-center gap-1 px-4 py-1.5 rounded-lg transition-all",
+              isActive(href) ? "text-primary" : "text-muted-foreground"
+            )}>
+              <Icon size={22} />
+              <span className="text-[10px] font-medium tracking-wide">{label}</span>
+              {isActive(href) && <span className="w-1 h-1 rounded-full bg-primary" />}
+            </div>
+          </Link>
+        ))}
+      </nav>
     </div>
   );
 }
 
 export function JarvisOrb({ size = 48 }: { size?: number }) {
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      {/* Outer ring */}
+    <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
       <div
         className="absolute inset-0 rounded-full border-2 border-primary/30 animate-jarvis-spin"
         style={{ borderTopColor: "oklch(0.65 0.22 220)" }}
       />
-      {/* Middle ring */}
       <div
         className="absolute rounded-full border border-primary/20 animate-jarvis-spin-reverse"
         style={{ inset: size * 0.1, borderRightColor: "oklch(0.75 0.18 195)" }}
       />
-      {/* Core */}
       <div
         className="relative rounded-full bg-primary/10 flex items-center justify-center animate-pulse-ring"
         style={{ width: size * 0.55, height: size * 0.55 }}
@@ -139,4 +209,3 @@ export function JarvisOrb({ size = 48 }: { size?: number }) {
     </div>
   );
 }
-

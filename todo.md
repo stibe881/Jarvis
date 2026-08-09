@@ -27,3 +27,10 @@
 ## Tests
 - [x] Backend-Unit-Tests für Chat-Route (13 Tests, alle grün)
 - [x] Backend-Unit-Tests für Notizen/Aufgaben
+
+## Neue Features (Phase 2)
+- [x] Mobile-Layout: responsiv, Bottom-Navigation auf kleinen Bildschirmen
+- [x] Chat-Sidebar auf Mobile: ausblendbar per Hamburger-Menü
+- [x] Bessere Dateianalyse: PDFs und Bilder als Claude Vision/File-Input senden
+- [x] Push-Benachrichtigungen für Aufgaben-Fälligkeiten (notifyOwner)
+- [x] Expo iOS-App: Chat, Notizen, Aufgaben (ZIP-Archiv)

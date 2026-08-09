@@ -154,17 +154,94 @@ Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: 
       content: m.content,
     }));
 
-    // Aktuelle Nachricht mit optionalem Kontext
-    let userContent = message;
+    // Aktuelle Nachricht mit optionalem Kontext aufbauen
+    const textParts: string[] = [message];
     if (searchResults && searchResults.length > 0) {
       const searchContext = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
-      userContent = `${message}\n\n[Web-Suchergebnisse für Kontext:\n${searchContext}]`;
-    }
-    if (fileUrl && fileName) {
-      userContent = `${userContent}\n\n[Datei hochgeladen: ${fileName} – bitte analysiere diese Datei]`;
+      textParts.push(`\n[Web-Suchergebnisse für Kontext:\n${searchContext}]`);
     }
 
-    anthropicMessages.push({ role: "user", content: userContent });
+    // Dateianalyse: Bilder als Vision-Input, PDFs als file_url, Text als Inhalt
+    if (fileUrl && fileName) {
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+      const isPdf = ext === "pdf";
+
+      // Absolute URL für Claude bauen (Storage-Proxy-URL)
+      const baseUrl = process.env.BUILT_IN_FORGE_API_URL?.replace("/v1", "") ?? "";
+      const absoluteFileUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+
+      if (isImage) {
+        // Bild direkt als Vision-Input an Claude senden
+        const userMsg: Anthropic.MessageParam = {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: { type: "url", url: absoluteFileUrl },
+            },
+            {
+              type: "text",
+              text: textParts.join("") || `Analysiere dieses Bild (${fileName}) und beschreibe, was du siehst.`,
+            },
+          ],
+        };
+        anthropicMessages.push(userMsg);
+      } else if (isPdf) {
+        // PDF als file_url an Claude senden (Claude 3.5+ unterstützt PDFs)
+        const userMsg: Anthropic.MessageParam = {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `${textParts.join("")}\n\n[Angehängte Datei: ${fileName}]`,
+            },
+          ],
+        };
+        // Versuche PDF-Inhalt zu laden und als base64 zu senden
+        try {
+          const pdfResponse = await fetch(absoluteFileUrl);
+          if (pdfResponse.ok) {
+            const pdfBuffer = await pdfResponse.arrayBuffer();
+            const base64 = Buffer.from(pdfBuffer).toString("base64");
+            const pdfMsg: Anthropic.MessageParam = {
+              role: "user",
+              content: [
+                {
+                  type: "document",
+                  source: { type: "base64", media_type: "application/pdf", data: base64 },
+                } as unknown as Anthropic.TextBlockParam,
+                {
+                  type: "text",
+                  text: textParts.join("") || `Analysiere dieses PDF-Dokument (${fileName}) und fasse den Inhalt zusammen.`,
+                },
+              ],
+            };
+            anthropicMessages.push(pdfMsg);
+          } else {
+            anthropicMessages.push(userMsg);
+          }
+        } catch {
+          anthropicMessages.push(userMsg);
+        }
+      } else {
+        // Andere Dateitypen: Inhalt laden und als Text senden
+        let fileContent = "";
+        try {
+          const fileResponse = await fetch(absoluteFileUrl);
+          if (fileResponse.ok) {
+            fileContent = await fileResponse.text();
+            if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[Inhalt gekürzt]";
+          }
+        } catch { /* ignorieren */ }
+        const textContent = fileContent
+          ? `${textParts.join("")}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
+          : `${textParts.join("")}\n\n[Datei hochgeladen: ${fileName}]`;
+        anthropicMessages.push({ role: "user", content: textContent });
+      }
+    } else {
+      anthropicMessages.push({ role: "user", content: textParts.join("") });
+    }
 
     // SSE-Header setzen
     res.setHeader("Content-Type", "text/event-stream");

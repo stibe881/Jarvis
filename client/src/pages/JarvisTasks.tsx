@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckSquare, Square, Calendar, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, CheckSquare, Square, Calendar, AlertCircle, Bell } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +44,16 @@ export default function JarvisTasks() {
   const deleteMutation = trpc.tasks.delete.useMutation({
     onSuccess: () => { utils.tasks.list.invalidate(); toast.success("Aufgabe gelöscht"); },
   });
+  const checkDueMutation = trpc.notifications.checkDueTasks.useMutation({
+    onSuccess: (data) => {
+      if (data.sent) {
+        toast.success(`Benachrichtigung gesendet: ${data.overdue} überfällig, ${data.dueSoon} bald fällig`);
+      } else {
+        toast.info(data.message ?? "Keine fälligen Aufgaben – alles im grünen Bereich!");
+      }
+    },
+    onError: () => toast.error("Benachrichtigung fehlgeschlagen"),
+  });
 
   const filteredTasks = tasks?.filter((t) => {
     if (filter === "pending") return !t.completed;
@@ -57,7 +67,7 @@ export default function JarvisTasks() {
   return (
     <div className="flex flex-col h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+      <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 border-b border-border">
         <div className="flex items-center gap-3">
           <CheckSquare className="text-primary" size={20} />
           <h1 className="font-jarvis text-lg font-bold text-primary">AUFGABEN</h1>
@@ -66,13 +76,26 @@ export default function JarvisTasks() {
             <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{done} erledigt</span>
           </div>
         </div>
-        <Button
-          onClick={() => setIsCreating(true)}
-          size="sm"
-          className="gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
-        >
-          <Plus size={14} /> NEUE AUFGABE
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => checkDueMutation.mutate()}
+            disabled={checkDueMutation.isPending}
+            title="Fällige Aufgaben prüfen & Benachrichtigung senden"
+            className="gap-1 text-muted-foreground hover:text-primary text-xs px-2"
+          >
+            <Bell size={14} className={checkDueMutation.isPending ? "animate-pulse" : ""} />
+            <span className="hidden sm:inline">Erinnern</span>
+          </Button>
+          <Button
+            onClick={() => setIsCreating(true)}
+            size="sm"
+            className="gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
+          >
+            <Plus size={14} /> <span className="hidden sm:inline">NEUE AUFGABE</span><span className="sm:hidden">NEU</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filter */}
@@ -216,4 +239,3 @@ export default function JarvisTasks() {
     </div>
   );
 }
-

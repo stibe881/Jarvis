@@ -15,6 +15,13 @@
       "when": 1786284816844,
       "tag": "0001_oval_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1786290955299,
+      "tag": "0002_sudden_maddog",
+      "breakpoints": true
     }
   ]
 }

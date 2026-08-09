@@ -7,9 +7,9 @@ import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import {
   Send, Mic, MicOff, Volume2, VolumeX, Plus, Trash2,
-  Paperclip, Globe, X, FileText, Loader2
+  Paperclip, Globe, X, FileText, Loader2, ChevronLeft, MessageSquare
 } from "lucide-react";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { JarvisOrb } from "@/components/JarvisLayout";
 
@@ -35,6 +35,7 @@ export default function JarvisChat() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false);
+  const [showConvSidebar, setShowConvSidebar] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -252,17 +253,34 @@ export default function JarvisChat() {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Conversation Sidebar */}
-      <div className="w-56 flex-shrink-0 border-r border-border flex flex-col bg-sidebar/50">
-        <div className="p-3 border-b border-border">
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      {/* Conversation Sidebar – Desktop immer sichtbar, Mobile als Overlay */}
+      {/* Mobile Overlay-Backdrop */}
+      {showConvSidebar && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/60"
+          onClick={() => setShowConvSidebar(false)}
+        />
+      )}
+      <div className={cn(
+        "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
+        // Desktop: immer sichtbar, feste Breite
+        "md:w-52 md:flex-shrink-0 md:relative md:translate-x-0",
+        // Mobile: als Slide-in-Panel
+        "fixed top-0 bottom-0 left-0 z-40 w-72",
+        showConvSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+      )}>
+        <div className="p-3 border-b border-border flex items-center gap-2">
           <Button
-            onClick={() => { setActiveConvId(null); setMessages([]); startNewConversation(); }}
+            onClick={() => { setActiveConvId(null); setMessages([]); startNewConversation(); setShowConvSidebar(false); }}
             size="sm"
-            className="w-full gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
+            className="flex-1 gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
           >
             <Plus size={14} /> NEUES GESPRÄCH
           </Button>
+          <button className="md:hidden text-muted-foreground hover:text-primary p-1" onClick={() => setShowConvSidebar(false)}>
+            <ChevronLeft size={18} />
+          </button>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
@@ -275,7 +293,7 @@ export default function JarvisChat() {
                     ? "bg-primary/20 text-primary jarvis-border"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}
-                onClick={() => setActiveConvId(conv.id)}
+                onClick={() => { setActiveConvId(conv.id); setShowConvSidebar(false); }}
               >
                 <span className="flex-1 truncate">{conv.title}</span>
                 <button
@@ -293,46 +311,54 @@ export default function JarvisChat() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
-          <JarvisOrb size={32} />
-          <div>
+        <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-border">
+          {/* Mobile: Gespräche-Button */}
+          <button
+            className="md:hidden text-muted-foreground hover:text-primary p-1 flex-shrink-0"
+            onClick={() => setShowConvSidebar(true)}
+            title="Gespräche"
+          >
+            <MessageSquare size={18} />
+          </button>
+          <JarvisOrb size={28} />
+          <div className="min-w-0">
             <h2 className="font-jarvis text-sm font-bold text-primary">JARVIS</h2>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground truncate">
               {isStreaming ? (
-                <span className="text-primary animate-pulse">Verarbeite Anfrage...</span>
+                <span className="text-primary animate-pulse">Verarbeite...</span>
               ) : isSearching ? (
-                <span className="text-primary animate-pulse">Suche im Web...</span>
+                <span className="text-primary animate-pulse">Suche...</span>
               ) : (
                 "Bereit"
               )}
             </p>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setSearchEnabled(!searchEnabled)}
-              className={cn("gap-1 text-xs", searchEnabled ? "text-primary" : "text-muted-foreground")}
+              className={cn("gap-1 text-xs px-2", searchEnabled ? "text-primary" : "text-muted-foreground")}
               title="Web-Suche"
             >
               <Globe size={14} />
-              {searchEnabled ? "Suche AN" : "Suche AUS"}
+              <span className="hidden sm:inline">{searchEnabled ? "Suche AN" : "Suche AUS"}</span>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => { if (isSpeaking) stopSpeaking(); else setTtsEnabled(!ttsEnabled); }}
-              className={cn("gap-1 text-xs", ttsEnabled ? "text-primary" : "text-muted-foreground")}
+              className={cn("gap-1 text-xs px-2", ttsEnabled ? "text-primary" : "text-muted-foreground")}
               title="Sprachausgabe"
             >
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              {isSpeaking ? "Stopp" : ttsEnabled ? "TTS AN" : "TTS AUS"}
+              <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsEnabled ? "TTS AN" : "TTS AUS"}</span>
             </Button>
           </div>
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 px-6 py-4" ref={scrollRef as React.RefObject<HTMLDivElement>}>
+        <ScrollArea className="flex-1 px-3 md:px-6 py-4" ref={scrollRef as React.RefObject<HTMLDivElement>}>
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-6 py-20">
               <JarvisOrb size={80} />
@@ -395,7 +421,7 @@ export default function JarvisChat() {
         </ScrollArea>
 
         {/* Input Area */}
-        <div className="px-6 py-4 border-t border-border">
+        <div className="px-3 md:px-6 py-3 border-t border-border">
           {uploadedFile && (
             <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary">
               <FileText size={12} />
@@ -451,4 +477,3 @@ export default function JarvisChat() {
     </div>
   );
 }
-
