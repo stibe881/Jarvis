@@ -518,16 +518,24 @@ ${calendarContext}${memoryContext}`;
       }
 
       // ── app_action-Blöcke ausführen ──────────────────────────────────────
+      // Robuster Parser: auch fullResponse prüfen falls cleanResponse den Block verloren hat
+      const appSource = cleanResponse.includes("<app_action>") ? cleanResponse : fullResponse;
+      console.log("[AppAction] Suche in:", appSource.includes("<app_action>") ? "gefunden" : "nicht gefunden", "| cleanResponse length:", cleanResponse.length);
       const appRx2 = /<app_action>([\s\S]*?)<\/app_action>/g;
       const appM2: RegExpExecArray[] = [];
       let ax: RegExpExecArray | null;
-      while ((ax = appRx2.exec(cleanResponse)) !== null) appM2.push(ax);
+      while ((ax = appRx2.exec(appSource)) !== null) appM2.push(ax);
+      console.log("[AppAction] Matches:", appM2.length);
       cleanResponse = cleanResponse.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
       for (const match of appM2) {
         try {
-          const ad2 = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
+          const rawJson = match[1].trim();
+          console.log("[AppAction] Raw JSON:", rawJson);
+          const ad2 = JSON.parse(rawJson) as { action: string; [k: string]: unknown };
           const { action: appAct, ...appParams } = ad2;
+          console.log("[AppAction] Executing:", appAct, appParams);
           const appResult = await executeAppAction(appAct, appParams);
+          console.log("[AppAction] Result:", appResult.slice(0, 200));
           cleanResponse = cleanResponse + "\n\n" + appResult;
         } catch (e) { console.error("[AppAction sendMessage]", e); }
       }
