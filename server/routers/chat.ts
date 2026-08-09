@@ -282,21 +282,44 @@ GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
-APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten und Leads.
-Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein:
+APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
+Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein.
+Verfügbare Aktionen (Beispiele):
+
+LESEN:
 <app_action>{"action":"dashboard"}</app_action>
 <app_action>{"action":"list_customers","search":"Muster"}</app_action>
-<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
 <app_action>{"action":"list_tickets","status":"open"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
-<app_action>{"action":"update_ticket_status","id":"123","status":"closed"}</app_action>
 <app_action>{"action":"list_quotes","status":"draft"}</app_action>
 <app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
 <app_action>{"action":"list_overdue_invoices"}</app_action>
 <app_action>{"action":"list_projects","status":"active"}</app_action>
 <app_action>{"action":"list_leads"}</app_action>
+<app_action>{"action":"list_contracts"}</app_action>
+<app_action>{"action":"list_expenses"}</app_action>
+<app_action>{"action":"list_products"}</app_action>
+<app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
+
+ERSTELLEN:
+<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
+<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
 <app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
-WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis.
+<app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
+<app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
+<app_action>{"action":"create_expense","description":"Büromaterial","amount":45.80,"category":"Büro","supplier":"Migros"}</app_action>
+<app_action>{"action":"create_quote","customer_id":"uuid","notes":"Angebot Webseite","items":[{"description":"Webseite Design","quantity":1,"unit_price":1500},{"description":"Hosting Setup","quantity":1,"unit_price":200}]}</app_action>
+<app_action>{"action":"create_invoice","customer_id":"uuid","items":[{"description":"IT-Support Mai","quantity":5,"unit_price":120,"unit":"Std."}]}</app_action>
+
+ÄNDERN:
+<app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
+<app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
+<app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
+<app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>
+<app_action>{"action":"update_lead_status","id":"uuid","status":"qualified"}</app_action>
+<app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
+
+WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
+Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
 ${profileContext}${calendarContext}${memoryContext}`;
 
           // LLM aufrufen mit Profil-Kontext
@@ -379,21 +402,44 @@ GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
-APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten und Leads.
-Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein:
+APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
+Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein.
+Verfügbare Aktionen (Beispiele):
+
+LESEN:
 <app_action>{"action":"dashboard"}</app_action>
 <app_action>{"action":"list_customers","search":"Muster"}</app_action>
-<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
 <app_action>{"action":"list_tickets","status":"open"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
-<app_action>{"action":"update_ticket_status","id":"123","status":"closed"}</app_action>
 <app_action>{"action":"list_quotes","status":"draft"}</app_action>
 <app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
 <app_action>{"action":"list_overdue_invoices"}</app_action>
 <app_action>{"action":"list_projects","status":"active"}</app_action>
 <app_action>{"action":"list_leads"}</app_action>
+<app_action>{"action":"list_contracts"}</app_action>
+<app_action>{"action":"list_expenses"}</app_action>
+<app_action>{"action":"list_products"}</app_action>
+<app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
+
+ERSTELLEN:
+<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
+<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
 <app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
-WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis.
+<app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
+<app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
+<app_action>{"action":"create_expense","description":"Büromaterial","amount":45.80,"category":"Büro","supplier":"Migros"}</app_action>
+<app_action>{"action":"create_quote","customer_id":"uuid","notes":"Angebot Webseite","items":[{"description":"Webseite Design","quantity":1,"unit_price":1500},{"description":"Hosting Setup","quantity":1,"unit_price":200}]}</app_action>
+<app_action>{"action":"create_invoice","customer_id":"uuid","items":[{"description":"IT-Support Mai","quantity":5,"unit_price":120,"unit":"Std."}]}</app_action>
+
+ÄNDERN:
+<app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
+<app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
+<app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
+<app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>
+<app_action>{"action":"update_lead_status","id":"uuid","status":"qualified"}</app_action>
+<app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
+
+WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
+Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
 ${calendarContext}${memoryContext}`;
 
       type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };

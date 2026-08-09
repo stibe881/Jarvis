@@ -11,6 +11,9 @@ type Quote = { id: string; quote_number: string; status: string; total?: number;
 type Invoice = { id: string; invoice_number: string; status: string; total?: number; _customer?: string; due_date?: string };
 type Project = { id: string; project_number: string; title: string; status: string; budget?: number };
 type Lead = { id: string; name: string; company?: string; status: string; value?: number };
+type Contract = { id: string; contract_number?: string; title: string; status: string; amount?: number; _customer?: string; end_date?: string; billing_cycle?: string };
+type Expense = { id: string; description: string; amount: number; category?: string; expense_date: string; supplier?: string };
+type Product = { id: string; name: string; price: number; unit?: string; category?: string; description?: string };
 
 const PRIORITY_ICON: Record<string, string> = { high: "🔴", medium: "🟡", low: "🟢" };
 const STATUS_COLOR: Record<string, string> = {
@@ -42,6 +45,9 @@ const TABS = [
   { id: "projects", label: "Projekte" },
   { id: "leads", label: "Leads" },
   { id: "customers", label: "Kunden" },
+  { id: "contracts", label: "Verträge" },
+  { id: "expenses", label: "Ausgaben" },
+  { id: "products", label: "Produkte" },
 ];
 
 export default function AppDashboard() {
@@ -56,6 +62,9 @@ export default function AppDashboard() {
   const projects = trpc.appDashboard.projects.useQuery({ status: undefined }, { enabled: activeTab === "projects" });
   const leads = trpc.appDashboard.leads.useQuery({ status: undefined }, { enabled: activeTab === "leads" });
   const customers = trpc.appDashboard.customers.useQuery({ search: customerSearch || undefined }, { enabled: activeTab === "customers" });
+  const contracts = trpc.appDashboard.contracts.useQuery({ status: undefined }, { enabled: activeTab === "contracts" });
+  const expenses = trpc.appDashboard.expenses.useQuery(undefined, { enabled: activeTab === "expenses" });
+  const products = trpc.appDashboard.products.useQuery(undefined, { enabled: activeTab === "products" });
 
   const s = summary.data;
 
@@ -235,6 +244,71 @@ export default function AppDashboard() {
                 </div>
               ))
             }
+          </div>
+        )}
+
+        {/* Verträge */}
+        {activeTab === "contracts" && (
+          <div className="space-y-2">
+            {contracts.isLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div> :
+              (contracts.data as Contract[] ?? []).map(c => (
+                <div key={c.id} className="jarvis-card rounded-xl p-3 border border-border">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-sm text-foreground">{c.title}</p>
+                      <p className="text-xs text-muted-foreground">{c._customer ?? "–"} · <span className={STATUS_COLOR[c.status] ?? ""}>{c.status}</span>{c.end_date ? ` · bis ${c.end_date}` : ""}</p>
+                    </div>
+                    {c.amount && <p className="text-sm font-medium">CHF {Number(c.amount).toLocaleString("de-CH")}{c.billing_cycle ? "/"+c.billing_cycle : ""}</p>}
+                  </div>
+                </div>
+              ))
+            }
+            {!contracts.isLoading && (contracts.data as Contract[] ?? []).length === 0 && <p className="text-center text-muted-foreground text-sm py-8">Keine Verträge gefunden.</p>}
+          </div>
+        )}
+
+        {/* Ausgaben */}
+        {activeTab === "expenses" && (
+          <div className="space-y-2">
+            {expenses.isLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div> : (() => {
+              const data = expenses.data as Expense[] ?? [];
+              const total = data.reduce((s, e) => s + (e.amount ?? 0), 0);
+              return <>
+                {data.length > 0 && <div className="jarvis-card rounded-xl p-3 border border-primary/20 bg-primary/5 text-center"><p className="text-sm font-medium text-primary">Total: CHF {total.toLocaleString("de-CH")}</p></div>}
+                {data.map(e => (
+                  <div key={e.id} className="jarvis-card rounded-xl p-3 border border-border">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-sm text-foreground">{e.description}</p>
+                        <p className="text-xs text-muted-foreground">{e.expense_date} · {e.category ?? "–"}{e.supplier ? ` · ${e.supplier}` : ""}</p>
+                      </div>
+                      <p className="text-sm font-medium">CHF {Number(e.amount).toLocaleString("de-CH")}</p>
+                    </div>
+                  </div>
+                ))}
+                {data.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">Keine Ausgaben gefunden.</p>}
+              </>;
+            })()}
+          </div>
+        )}
+
+        {/* Produkte */}
+        {activeTab === "products" && (
+          <div className="space-y-2">
+            {products.isLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div> :
+              (products.data as Product[] ?? []).map(p => (
+                <div key={p.id} className="jarvis-card rounded-xl p-3 border border-border">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-sm text-foreground">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.category ?? "–"}{p.description ? ` · ${p.description.slice(0, 60)}` : ""}</p>
+                    </div>
+                    <p className="text-sm font-medium text-right">CHF {Number(p.price).toLocaleString("de-CH")}<br/><span className="text-xs text-muted-foreground">/ {p.unit ?? "Stk."}</span></p>
+                  </div>
+                </div>
+              ))
+            }
+            {!products.isLoading && (products.data as Product[] ?? []).length === 0 && <p className="text-center text-muted-foreground text-sm py-8">Keine Produkte gefunden.</p>}
           </div>
         )}
 
