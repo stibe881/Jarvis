@@ -33,14 +33,20 @@ async function executeCalendarAction(userId: number, action: string, params: Rec
     if (action === "list_events") {
       const now = new Date(); const tMin = (params.timeMin as string) ?? now.toISOString(); const tMax = (params.timeMax as string) ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
       const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
-      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; location?: string }> };
+      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; location?: string; organizer?: { email?: string; displayName?: string; self?: boolean }; attendees?: Array<{ email?: string; displayName?: string; self?: boolean; organizer?: boolean; responseStatus?: string }> }> };
       if (!data.items || data.items.length === 0) return "Keine Termine in diesem Zeitraum.";
       const tz = "Europe/Zurich";
       return data.items.map(ev => {
         const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
         const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
         const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganztägig";
-        return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}`;
+        // Einladung erkennen: organizer ist nicht der Nutzer selbst
+        let inviteInfo = "";
+        if (ev.organizer && !ev.organizer.self) {
+          const organizerName = ev.organizer.displayName || ev.organizer.email?.split("@")[0] || "jemanden";
+          inviteInfo = ` [Einladung von ${organizerName}]`;
+        }
+        return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`;
       }).join("\n");
     }
     if (action === "create_event") {

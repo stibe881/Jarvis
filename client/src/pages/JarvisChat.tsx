@@ -77,19 +77,18 @@ export default function JarvisChat() {
     const utterance = new SpeechSynthesisUtterance(clean);
     // Sprache und Tonlage werden nach Stimmen-Auswahl unten gesetzt
     const voices = window.speechSynthesis.getVoices();
-    // Jarvis-Stimme: englisch-britisch männlich (wie Iron Man) bevorzugt
+    // Jarvis-Stimme: Deutsch, tiefe männliche Stimme bevorzugt
     const jarvisVoice =
-      voices.find(v => v.lang === "en-GB" && v.name.toLowerCase().includes("daniel")) ||
-      voices.find(v => v.lang === "en-GB" && !v.name.toLowerCase().includes("female") && !v.name.toLowerCase().includes("fiona")) ||
-      voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male")) ||
-      voices.find(v => v.lang.startsWith("en-GB")) ||
-      voices.find(v => v.lang.startsWith("en")) ||
+      voices.find(v => v.lang === "de-DE" && v.name.toLowerCase().includes("stefan")) ||
+      voices.find(v => v.lang === "de-DE" && v.name.toLowerCase().includes("markus")) ||
+      voices.find(v => v.lang === "de-DE" && !v.name.toLowerCase().includes("anna") && !v.name.toLowerCase().includes("female")) ||
+      voices.find(v => v.lang.startsWith("de")) ||
       voices.find(v => v.default);
     if (jarvisVoice) utterance.voice = jarvisVoice;
-    // Englisch-britischer Akzent, tiefe Stimme, leicht langsamer
-    utterance.lang = jarvisVoice?.lang || "en-GB";
-    utterance.rate = 0.88;
-    utterance.pitch = 0.75; // tiefer = männlicher
+    // Deutsch, tiefe Stimme, leicht langsamer
+    utterance.lang = jarvisVoice?.lang || "de-DE";
+    utterance.rate = 0.90;
+    utterance.pitch = 0.80; // tiefer = männlicher Klang
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
       setIsSpeaking(false);
