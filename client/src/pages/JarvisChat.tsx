@@ -30,8 +30,8 @@ export default function JarvisChat() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
-  const ttsEnabledRef = useRef(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true); // TTS standardmäßig AN
+  const ttsEnabledRef = useRef(true); // TTS standardmäßig AN
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string; name: string; mime: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -124,6 +124,39 @@ export default function JarvisChat() {
     }
   }, [messages]);
 
+  // sendMessageFromText: direkt mit Text aufrufen (für Voice-Auto-Send)
+  const sendMessageFromText = useCallback(async (text: string) => {
+    if (!text.trim() || isStreaming) return;
+    let convId = activeConvId;
+    if (!convId) {
+      const result = await createConvMutation.mutateAsync({});
+      convId = result?.id ?? null;
+      if (convId) setActiveConvId(convId);
+    }
+    if (!convId) return;
+    const userMsg: Message = { role: "user", content: text };
+    setMessages((prev) => [...prev, userMsg]);
+    setIsStreaming(true);
+    const assistantMsg: Message = { role: "assistant", content: "" };
+    setMessages((prev) => [...prev, assistantMsg]);
+    try {
+      const result = await sendMessageMutation.mutateAsync({ conversationId: convId, message: text });
+      const fullText = result.response;
+      utils.chat.listConversations.invalidate();
+      const words = fullText.split(" ");
+      let displayed = "";
+      const delay = Math.max(10, Math.min(40, 1500 / words.length));
+      for (let i = 0; i < words.length; i++) {
+        displayed += (i > 0 ? " " : "") + words[i];
+        const snap = displayed;
+        setMessages((prev) => { const updated = [...prev]; updated[updated.length - 1] = { ...updated[updated.length - 1], content: snap }; return updated; });
+        await new Promise(r => setTimeout(r, delay));
+      }
+      if (fullText) speakText(fullText);
+    } catch { toast.error("Fehler beim Senden"); setMessages((prev) => prev.slice(0, -1)); }
+    finally { setIsStreaming(false); utils.chat.getMessages.invalidate({ conversationId: convId }); }
+  }, [isStreaming, activeConvId, createConvMutation, sendMessageMutation, speakText, utils]);
+
   const startNewConversation = useCallback(async () => {
     const result = await createConvMutation.mutateAsync({});
     return result?.id;
@@ -179,14 +212,24 @@ export default function JarvisChat() {
       });
 
       const fullText = result.response;
-      setMessages((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
-        return updated;
-      });
       utils.chat.listConversations.invalidate();
 
-      // TTS
+      // Pseudo-Streaming: Wort für Wort einblenden
+      const words = fullText.split(" ");
+      let displayed = "";
+      const delay = Math.max(10, Math.min(40, 1500 / words.length));
+      for (let i = 0; i < words.length; i++) {
+        displayed += (i > 0 ? " " : "") + words[i];
+        const snap = displayed;
+        setMessages((prev) => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { ...updated[updated.length - 1], content: snap };
+          return updated;
+        });
+        await new Promise(r => setTimeout(r, delay));
+      }
+
+      // TTS nach vollständiger Anzeige
       if (fullText) speakText(fullText);
     } catch (err) {
       toast.error("Fehler beim Senden der Nachricht");
@@ -218,7 +261,11 @@ export default function JarvisChat() {
           const base64 = (reader.result as string).split(",")[1];
           try {
             const result = await transcribeMutation.mutateAsync({ audioBase64: base64 });
-            if (result.text) setInput((prev) => prev + (prev ? " " : "") + result.text);
+            if (result.text) {
+              const transcribed = result.text.trim();
+              // Automatisch senden (Voice-Auto-Send)
+              sendMessageFromText(transcribed);
+            }
           } catch {
             toast.error("Transkription fehlgeschlagen");
           }

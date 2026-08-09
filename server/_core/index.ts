@@ -40,16 +40,18 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Google Calendar OAuth Callback
   app.get("/api/oauth/google/callback", handleGoogleOAuthCallback);
-  // Jarvis Chat Streaming (SSE)
-  app.post("/api/chat/stream", async (req, res) => {
+  // Jarvis Chat Streaming (SSE) – beide Pfade registrieren
+  const streamHandler = async (req: express.Request, res: express.Response) => {
     const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
     if (!ctx.user) {
       res.status(401).json({ error: "Nicht authentifiziert" });
       return;
     }
-    (req as typeof req & { user: typeof ctx.user }).user = ctx.user;
-    await handleChatStream(req, res);
-  });
+    (req as express.Request & { user: typeof ctx.user }).user = ctx.user;
+    await handleChatStream(req as Parameters<typeof handleChatStream>[0], res as Parameters<typeof handleChatStream>[1]);
+  };
+  app.post("/api/chat/stream", streamHandler);
+  app.post("/api/stream", streamHandler);
   // tRPC API
   app.use(
     "/api/trpc",
