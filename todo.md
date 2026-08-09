@@ -58,7 +58,7 @@
 - [x] 19 Wöchentlicher Bericht (Freitag-Cron) – Handler bereit, Cron nach Deploy
 - [x] 20 Webhook-API für externe Integrationen (API-Keys)
 - [x] 8b Lernende Vorschläge im Chat-Frontend anzeigen
-- [ ] Wochenbericht-Cron nach Deployment anlegen
+- [x] Wochenbericht-Cron nach Deployment anlegen (Freitag 16:00 Zürich, task_uid QFvDg6RoXpcDWUCmp8nt6E)
 
 ## Phase 4 – Geräte- und Musiksteuerung
 - [ ] Spotify OAuth (Client ID/Secret, Refresh-Token-Speicherung)
