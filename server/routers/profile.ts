@@ -19,6 +19,7 @@ export const profileRouter = router({
       personalNotes: z.string().optional(),
       jarvisPersonality: z.string().optional(),
       language: z.enum(["de", "en", "auto"]).optional(),
+      elevenLabsVoiceId: z.string().max(64).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await upsertUserProfile(ctx.user.id, input);

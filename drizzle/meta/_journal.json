@@ -50,6 +50,13 @@
       "when": 1786303108421,
       "tag": "0006_rich_terror",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1786309485895,
+      "tag": "0007_late_bushwacker",
+      "breakpoints": true
     }
   ]
 }

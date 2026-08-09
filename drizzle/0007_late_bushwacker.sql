@@ -1,0 +1,1 @@
+ALTER TABLE `user_profiles` ADD `elevenLabsVoiceId` varchar(64) DEFAULT 'JBFqnCBsd6RMkjVDRZzb';
