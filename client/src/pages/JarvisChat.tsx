@@ -46,9 +46,13 @@ export default function JarvisChat() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const isListeningRef = useRef(false); // synchroner Guard für startListening
+  const [autoListen, setAutoListen] = useState(false); // kontinuierlicher Zuhör-Modus
+  const autoListenRef = useRef(false); // synchron für Callbacks
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicesLoadedRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const startListeningRef = useRef<(() => void) | null>(null); // Ref für Circular-Dep-Vermeidung
 
   // Stimmen vorladen
   useEffect(() => {
@@ -87,8 +91,23 @@ export default function JarvisChat() {
     utterance.rate = 0.88;
     utterance.pitch = 0.75; // tiefer = männlicher
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      // Kontinuierlicher Modus: nach Antwort automatisch wieder zuhören
+      if (autoListenRef.current) {
+        setTimeout(() => {
+          if (autoListenRef.current) startListeningRef.current?.();
+        }, 600); // 600ms Pause nach Antwort
+      }
+    };
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      if (autoListenRef.current) {
+        setTimeout(() => {
+          if (autoListenRef.current) startListeningRef.current?.();
+        }, 600);
+      }
+    };
     // iOS-Fix: speak in setTimeout(0) damit es auch nach async-Calls funktioniert
     setTimeout(() => window.speechSynthesis.speak(utterance), 0);
   }, []);
@@ -226,6 +245,11 @@ export default function JarvisChat() {
     await sendMessageFromText(text, file ?? undefined);
   }, [input, uploadedFile, sendMessageFromText]);
 
+  // startListeningRef aktuell halten (für speakText Callback)
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  });
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -328,6 +352,11 @@ export default function JarvisChat() {
   const stopListening = useCallback(() => {
     cleanupRecognition();
   }, [cleanupRecognition]);
+
+  // autoListenRef synchron mit autoListen halten
+  useEffect(() => {
+    autoListenRef.current = autoListen;
+  }, [autoListen]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -520,7 +549,7 @@ export default function JarvisChat() {
 
           {/* Großer Mikrofon-Button (Gemini-Style) wenn kein Text eingegeben */}
           {!input.trim() && !uploadedFile && (
-            <div className="flex justify-center mb-3">
+            <div className="flex flex-col items-center gap-2 mb-3">
               <button
                 onClick={isListening ? stopListening : startListening}
                 disabled={isStreaming}
@@ -528,12 +557,37 @@ export default function JarvisChat() {
                   "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg",
                   isListening
                     ? "bg-red-500/20 border-2 border-red-500 text-red-400 scale-110 animate-pulse"
+                    : isSpeaking
+                    ? "bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 scale-105"
                     : "bg-primary/20 border-2 border-primary/50 text-primary hover:bg-primary/30 hover:scale-105 active:scale-95",
                   isStreaming && "opacity-50 cursor-not-allowed"
                 )}
                 title={isListening ? "Aufnahme stoppen" : "Jarvis sprechen"}
               >
                 {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+              </button>
+              {/* Kontinuierlicher Zuhör-Modus Toggle */}
+              <button
+                onClick={() => {
+                  const next = !autoListen;
+                  setAutoListen(next);
+                  autoListenRef.current = next;
+                  if (next && !isListening && !isStreaming) {
+                    startListening();
+                  } else if (!next) {
+                    stopListening();
+                  }
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
+                  autoListen
+                    ? "bg-primary/20 border-primary/50 text-primary"
+                    : "bg-transparent border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
+                )}
+                title="Kontinuierlicher Zuhör-Modus"
+              >
+                <div className={cn("w-1.5 h-1.5 rounded-full", autoListen ? "bg-primary animate-pulse" : "bg-muted-foreground")} />
+                {autoListen ? "Hands-free AN" : "Hands-free"}
               </button>
             </div>
           )}
