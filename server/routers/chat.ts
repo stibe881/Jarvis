@@ -381,8 +381,22 @@ ${profileContext}${calendarContext}${memoryContext}`;
             } catch { /* ignorieren */ }
           }
           fullResponse2 = fullResponse2.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
-          const convTitle = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
-          if (history.length === 0) await updateConversationTitle(conversationId, convTitle || message.slice(0, 50));
+          // ── app_action-Blöcke ausführen (Profil-Pfad) ─────────────────────
+          const appRxP = /<app_action>([\s\S]*?)<\/app_action>/g;
+          const appMatchesP: RegExpExecArray[] = [];
+          let axP: RegExpExecArray | null;
+          while ((axP = appRxP.exec(fullResponse2)) !== null) appMatchesP.push(axP as RegExpExecArray);
+          fullResponse2 = fullResponse2.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
+          for (const match of appMatchesP) {
+            try {
+              const ad = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
+              const { action: appAct, ...appParams } = ad;
+              const appResult = await executeAppAction(appAct, appParams);
+              fullResponse2 = fullResponse2 + "\n\n" + appResult;
+            } catch (e) { console.error("[AppAction Profil-Pfad]", e); }
+          }
+          const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
+          if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
           await addMessage({ conversationId, role: "assistant", content: fullResponse2 });
           return { response: fullResponse2 };
         }
