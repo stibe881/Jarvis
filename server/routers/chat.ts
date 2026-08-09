@@ -1,4 +1,3 @@
-import Anthropic from "@anthropic-ai/sdk";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -13,27 +12,23 @@ import {
 import { protectedProcedure, router } from "../_core/trpc";
 import { storagePut } from "../storage";
 import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscription";
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { invokeLLM } from "../_core/llm";
+import { ENV } from "../_core/env";
 
 export const chatRouter = router({
-  // Gespräche abrufen
   listConversations: protectedProcedure.query(async ({ ctx }) => {
     return getConversationsByUser(ctx.user.id);
   }),
 
-  // Neues Gespräch erstellen
   createConversation: protectedProcedure
     .input(z.object({ title: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await createConversation({
+      return createConversation({
         userId: ctx.user.id,
         title: input.title ?? "Neues Gespräch",
       });
-      return result;
     }),
 
-  // Gespräch löschen
   deleteConversation: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
@@ -43,7 +38,6 @@ export const chatRouter = router({
       return { success: true };
     }),
 
-  // Nachrichten eines Gesprächs abrufen
   getMessages: protectedProcedure
     .input(z.object({ conversationId: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -52,7 +46,6 @@ export const chatRouter = router({
       return getMessagesByConversation(input.conversationId);
     }),
 
-  // Datei hochladen für Chat-Analyse
   uploadFile: protectedProcedure
     .input(z.object({
       fileName: z.string(),
@@ -66,20 +59,19 @@ export const chatRouter = router({
       return { url, key, fileName: input.fileName, mimeType: input.mimeType };
     }),
 
-  // Spracheingabe transkribieren
   transcribeAudio: protectedProcedure
     .input(z.object({ audioBase64: z.string(), mimeType: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.audioBase64, "base64");
       const key = `jarvis/${ctx.user.id}/audio/${Date.now()}.webm`;
       const { url } = await storagePut(key, buffer, input.mimeType ?? "audio/webm");
-      const fullUrl = `${process.env.BUILT_IN_FORGE_API_URL?.replace("/v1", "") ?? ""}${url}`;
+      const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+      const fullUrl = `${baseUrl}${url}`;
       const result = await transcribeAudio({ audioUrl: fullUrl, language: "de" });
       if ("error" in result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
       return { text: (result as WhisperResponse).text };
     }),
 
-  // Web-Suche
   webSearch: protectedProcedure
     .input(z.object({ query: z.string() }))
     .mutation(async ({ input }) => {
@@ -110,7 +102,7 @@ export const chatRouter = router({
     }),
 });
 
-// Streaming-Chat-Handler (Express-Route, kein tRPC wegen SSE)
+// ─── Streaming-Chat-Handler via Manus Forge LLM (SSE) ────────────────────────
 import type { Request, Response } from "express";
 
 export async function handleChatStream(req: Request, res: Response) {
@@ -123,8 +115,6 @@ export async function handleChatStream(req: Request, res: Response) {
       searchResults?: Array<{ title: string; snippet: string; url: string }>;
     };
 
-    // Nachrichten aus DB laden
-    // Sicherheitsprüfung: Gespräch muss dem Nutzer gehören
     const userId = (req as Request & { user?: { id: number } }).user?.id;
     const conv = await getConversationById(conversationId);
     if (!conv || conv.userId !== userId) {
@@ -143,105 +133,57 @@ export async function handleChatStream(req: Request, res: Response) {
       fileName: fileName ?? null,
     });
 
-    // Kontext aufbauen
-    const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent. 
+    const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
 Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen und Aufgaben verwalten und bei allen Alltagsaufgaben helfen.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
 
-    const anthropicMessages: Anthropic.MessageParam[] = history.map((m) => ({
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: m.content,
-    }));
+    // Nachrichten-History aufbauen
+    type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
+    const llmMessages: LLMMessage[] = [
+      { role: "system", content: systemPrompt },
+      ...history.map((m) => ({
+        role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
+        content: m.content,
+      })),
+    ];
 
-    // Aktuelle Nachricht mit optionalem Kontext aufbauen
-    const textParts: string[] = [message];
+    // Aktuelle Nachricht aufbauen
+    let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
+
     if (searchResults && searchResults.length > 0) {
-      const searchContext = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
-      textParts.push(`\n[Web-Suchergebnisse für Kontext:\n${searchContext}]`);
+      const ctx = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
+      userContent = `${message}\n\n[Web-Suchergebnisse:\n${ctx}]`;
     }
 
-    // Dateianalyse: Bilder als Vision-Input, PDFs als file_url, Text als Inhalt
     if (fileUrl && fileName) {
       const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
       const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
-      const isPdf = ext === "pdf";
-
-      // Absolute URL für Claude bauen (Storage-Proxy-URL)
-      const baseUrl = process.env.BUILT_IN_FORGE_API_URL?.replace("/v1", "") ?? "";
-      const absoluteFileUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+      const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+      const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
 
       if (isImage) {
-        // Bild direkt als Vision-Input an Claude senden
-        const userMsg: Anthropic.MessageParam = {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "url", url: absoluteFileUrl },
-            },
-            {
-              type: "text",
-              text: textParts.join("") || `Analysiere dieses Bild (${fileName}) und beschreibe, was du siehst.`,
-            },
-          ],
-        };
-        anthropicMessages.push(userMsg);
-      } else if (isPdf) {
-        // PDF als file_url an Claude senden (Claude 3.5+ unterstützt PDFs)
-        const userMsg: Anthropic.MessageParam = {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `${textParts.join("")}\n\n[Angehängte Datei: ${fileName}]`,
-            },
-          ],
-        };
-        // Versuche PDF-Inhalt zu laden und als base64 zu senden
-        try {
-          const pdfResponse = await fetch(absoluteFileUrl);
-          if (pdfResponse.ok) {
-            const pdfBuffer = await pdfResponse.arrayBuffer();
-            const base64 = Buffer.from(pdfBuffer).toString("base64");
-            const pdfMsg: Anthropic.MessageParam = {
-              role: "user",
-              content: [
-                {
-                  type: "document",
-                  source: { type: "base64", media_type: "application/pdf", data: base64 },
-                } as unknown as Anthropic.TextBlockParam,
-                {
-                  type: "text",
-                  text: textParts.join("") || `Analysiere dieses PDF-Dokument (${fileName}) und fasse den Inhalt zusammen.`,
-                },
-              ],
-            };
-            anthropicMessages.push(pdfMsg);
-          } else {
-            anthropicMessages.push(userMsg);
-          }
-        } catch {
-          anthropicMessages.push(userMsg);
-        }
+        userContent = [
+          { type: "image_url", image_url: { url: absUrl } },
+          { type: "text", text: typeof userContent === "string" ? userContent || `Analysiere dieses Bild: ${fileName}` : message },
+        ];
       } else {
-        // Andere Dateitypen: Inhalt laden und als Text senden
+        // Text/PDF: Inhalt laden
         let fileContent = "";
         try {
-          const fileResponse = await fetch(absoluteFileUrl);
-          if (fileResponse.ok) {
-            fileContent = await fileResponse.text();
-            if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[Inhalt gekürzt]";
+          const fr = await fetch(absUrl);
+          if (fr.ok) {
+            fileContent = await fr.text();
+            if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]";
           }
         } catch { /* ignorieren */ }
-        const textContent = fileContent
-          ? `${textParts.join("")}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
-          : `${textParts.join("")}\n\n[Datei hochgeladen: ${fileName}]`;
-        anthropicMessages.push({ role: "user", content: textContent });
+        userContent = fileContent
+          ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
+          : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
       }
-    } else {
-      anthropicMessages.push({ role: "user", content: textParts.join("") });
     }
+
+    llmMessages.push({ role: "user", content: userContent as string });
 
     // SSE-Header setzen
     res.setHeader("Content-Type", "text/event-stream");
@@ -249,24 +191,52 @@ Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: 
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
-    let fullResponse = "";
     let finished = false;
-
     res.on("close", () => { finished = true; });
 
-    const stream = await anthropic.messages.stream({
-      model: "claude-opus-4-5",
-      max_tokens: 4096,
-      system: systemPrompt,
-      messages: anthropicMessages,
+    // Streaming via Forge API (OpenAI-kompatibel)
+    const forgeUrl = `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
+    const streamResp = await fetch(forgeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${ENV.forgeApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-5",
+        messages: llmMessages,
+        max_tokens: 4096,
+        stream: true,
+      }),
     });
 
-    for await (const chunk of stream) {
+    if (!streamResp.ok || !streamResp.body) {
+      const errText = await streamResp.text();
+      throw new Error(`LLM Fehler: ${streamResp.status} ${errText}`);
+    }
+
+    const reader = streamResp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullResponse = "";
+
+    while (true) {
       if (finished) break;
-      if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
-        const text = chunk.delta.text;
-        fullResponse += text;
-        res.write(`data: ${JSON.stringify({ text })}\n\n`);
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value);
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(data);
+          const text = parsed.choices?.[0]?.delta?.content ?? "";
+          if (text) {
+            fullResponse += text;
+            res.write(`data: ${JSON.stringify({ text })}\n\n`);
+          }
+        } catch { /* ignorieren */ }
       }
     }
 
@@ -274,15 +244,18 @@ Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: 
       // Antwort in DB speichern
       await addMessage({ conversationId, role: "assistant", content: fullResponse });
 
-      // Gesprächstitel automatisch generieren (nur beim ersten Austausch)
+      // Gesprächstitel generieren (nur beim ersten Austausch)
       if (history.length === 0) {
-        const titleRes = await anthropic.messages.create({
-          model: "claude-haiku-4-5",
-          max_tokens: 30,
-          messages: [{ role: "user", content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter) für diese Frage: "${message}"` }],
-        });
-        const title = titleRes.content[0]?.type === "text" ? titleRes.content[0].text.trim() : message.slice(0, 40);
-        await updateConversationTitle(conversationId, title);
+        try {
+          const titleRes = await invokeLLM({
+            model: "claude-haiku-4-5",
+            max_tokens: 30,
+            messages: [{ role: "user", content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"` }],
+          });
+          const title = titleRes.choices[0]?.message?.content;
+          const titleText = typeof title === "string" ? title.trim() : message.slice(0, 40);
+          await updateConversationTitle(conversationId, titleText);
+        } catch { /* Titel-Generierung ist optional */ }
       }
 
       res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
