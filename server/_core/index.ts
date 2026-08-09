@@ -8,6 +8,7 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { handleChatStream } from "../routers/chat";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -36,6 +37,16 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Jarvis Chat Streaming (SSE)
+  app.post("/api/chat/stream", async (req, res) => {
+    const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
+    if (!ctx.user) {
+      res.status(401).json({ error: "Nicht authentifiziert" });
+      return;
+    }
+    (req as typeof req & { user: typeof ctx.user }).user = ctx.user;
+    await handleChatStream(req, res);
+  });
   // tRPC API
   app.use(
     "/api/trpc",

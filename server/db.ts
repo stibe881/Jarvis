@@ -1,6 +1,17 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, like, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import {
+  InsertConversation,
+  InsertMessage,
+  InsertNote,
+  InsertTask,
+  conversations,
+  messages,
+  notes,
+  tasks,
+  InsertUser,
+  users,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +100,121 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ─── Conversations ────────────────────────────────────────────────────────────
+
+export async function createConversation(data: InsertConversation) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [result] = await db.insert(conversations).values(data).$returningId();
+  return result;
+}
+
+export async function getConversationsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
+}
+
+export async function getConversationById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateConversationTitle(id: number, title: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set({ title }).where(eq(conversations.id, id));
+}
+
+export async function deleteConversation(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(messages).where(eq(messages.conversationId, id));
+  await db.delete(conversations).where(eq(conversations.id, id));
+}
+
+// ─── Messages ────────────────────────────────────────────────────────────────
+
+export async function addMessage(data: InsertMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [result] = await db.insert(messages).values(data).$returningId();
+  return result;
+}
+
+export async function getMessagesByConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+}
+
+// ─── Notes ────────────────────────────────────────────────────────────────────
+
+export async function createNote(data: InsertNote) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [result] = await db.insert(notes).values(data).$returningId();
+  return result;
+}
+
+export async function getNotesByUser(userId: number, search?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  if (search) {
+    return db.select().from(notes).where(
+      and(
+        eq(notes.userId, userId),
+        or(like(notes.title, `%${search}%`), like(notes.content, `%${search}%`))
+      )
+    ).orderBy(desc(notes.updatedAt));
+  }
+  return db.select().from(notes).where(eq(notes.userId, userId)).orderBy(desc(notes.updatedAt));
+}
+
+export async function getNoteById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId))).limit(1);
+  return result[0];
+}
+
+export async function updateNote(id: number, userId: number, data: Partial<InsertNote>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(notes).set(data).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+}
+
+export async function deleteNote(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(notes).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+}
+
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
+export async function createTask(data: InsertTask) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [result] = await db.insert(tasks).values(data).$returningId();
+  return result;
+}
+
+export async function getTasksByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(tasks.dueDate, desc(tasks.createdAt));
+}
+
+export async function updateTask(id: number, userId: number, data: Partial<InsertTask>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(tasks).set(data).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+}
+
+export async function deleteTask(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+}

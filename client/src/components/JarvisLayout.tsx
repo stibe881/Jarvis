@@ -1,0 +1,142 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { startLogin } from "@/const";
+import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const navItems = [
+  { href: "/", label: "Chat", icon: MessageSquare },
+  { href: "/notes", label: "Notizen", icon: StickyNote },
+  { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
+];
+
+export default function JarvisLayout({ children }: { children: React.ReactNode }) {
+  const { user, loading, isAuthenticated, logout } = useAuth();
+  const [location] = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <JarvisOrb size={80} />
+          <p className="font-jarvis text-primary text-sm tracking-widest animate-pulse">INITIALISIERUNG...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-8 p-8">
+          <JarvisOrb size={120} />
+          <div className="text-center">
+            <h1 className="font-jarvis text-4xl font-bold text-primary jarvis-glow-text mb-2">JARVIS</h1>
+            <p className="text-muted-foreground text-sm tracking-widest">PERSÖNLICHER KI-ASSISTENT</p>
+          </div>
+          <p className="text-foreground/70 text-center max-w-sm">
+            Dein intelligenter Assistent powered by Claude. Bitte melde dich an, um fortzufahren.
+          </p>
+          <Button
+            onClick={() => startLogin()}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-widest px-8 py-3 jarvis-glow-sm"
+          >
+            ANMELDEN
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex bg-background">
+      {/* Sidebar */}
+      <aside className="w-64 flex-shrink-0 flex flex-col border-r border-border bg-sidebar">
+        {/* Logo */}
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center gap-3">
+            <JarvisOrb size={36} />
+            <div>
+              <h1 className="font-jarvis text-lg font-bold text-primary jarvis-glow-text">JARVIS</h1>
+              <p className="text-xs text-muted-foreground tracking-widest">KI-ASSISTENT</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 p-4 space-y-1">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const isActive = location === href || (href === "/" && location === "/chat");
+            return (
+              <Link key={href} href={href}>
+                <div className={cn(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+                  isActive
+                    ? "bg-primary/20 text-primary jarvis-border"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                )}>
+                  <Icon size={18} className={isActive ? "text-primary" : ""} />
+                  {label}
+                  {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />}
+                </div>
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User */}
+        <div className="p-4 border-t border-border">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
+              <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => logout()}
+            className="w-full justify-start text-muted-foreground hover:text-foreground gap-2"
+          >
+            <LogOut size={14} />
+            Abmelden
+          </Button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {children}
+      </main>
+    </div>
+  );
+}
+
+export function JarvisOrb({ size = 48 }: { size?: number }) {
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      {/* Outer ring */}
+      <div
+        className="absolute inset-0 rounded-full border-2 border-primary/30 animate-jarvis-spin"
+        style={{ borderTopColor: "oklch(0.65 0.22 220)" }}
+      />
+      {/* Middle ring */}
+      <div
+        className="absolute rounded-full border border-primary/20 animate-jarvis-spin-reverse"
+        style={{ inset: size * 0.1, borderRightColor: "oklch(0.75 0.18 195)" }}
+      />
+      {/* Core */}
+      <div
+        className="relative rounded-full bg-primary/10 flex items-center justify-center animate-pulse-ring"
+        style={{ width: size * 0.55, height: size * 0.55 }}
+      >
+        <Cpu size={size * 0.28} className="text-primary" />
+      </div>
+    </div>
+  );
+}
+
