@@ -45,6 +45,7 @@ export default function JarvisChat() {
   const [showConvSidebar, setShowConvSidebar] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false); // synchroner Guard für startListening
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicesLoadedRef = useRef(false);
@@ -70,14 +71,21 @@ export default function JarvisChat() {
     const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
     if (!clean) return;
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = "de-DE";
-    utterance.rate = 0.95;
-    utterance.pitch = 0.9;
+    // Sprache und Tonlage werden nach Stimmen-Auswahl unten gesetzt
     const voices = window.speechSynthesis.getVoices();
-    const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google"))
-      || voices.find(v => v.lang.startsWith("de"))
-      || voices.find(v => v.default);
-    if (deVoice) utterance.voice = deVoice;
+    // Jarvis-Stimme: englisch-britisch männlich (wie Iron Man) bevorzugt
+    const jarvisVoice =
+      voices.find(v => v.lang === "en-GB" && v.name.toLowerCase().includes("daniel")) ||
+      voices.find(v => v.lang === "en-GB" && !v.name.toLowerCase().includes("female") && !v.name.toLowerCase().includes("fiona")) ||
+      voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male")) ||
+      voices.find(v => v.lang.startsWith("en-GB")) ||
+      voices.find(v => v.lang.startsWith("en")) ||
+      voices.find(v => v.default);
+    if (jarvisVoice) utterance.voice = jarvisVoice;
+    // Englisch-britischer Akzent, tiefe Stimme, leicht langsamer
+    utterance.lang = jarvisVoice?.lang || "en-GB";
+    utterance.rate = 0.88;
+    utterance.pitch = 0.75; // tiefer = männlicher
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
     utterance.onerror = () => setIsSpeaking(false);
@@ -227,6 +235,11 @@ export default function JarvisChat() {
 
   // Web Speech API – direkte Browser-Transkription (kein Upload!)
   const startListening = useCallback(() => {
+    // Guard: nicht starten wenn bereits aktiv
+    if (isListeningRef.current || recognitionRef.current) {
+      stopListening();
+      return;
+    }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
@@ -246,6 +259,7 @@ export default function JarvisChat() {
     recognition.interimResults = true;
 
     recognition.onstart = () => {
+      isListeningRef.current = true;
       setIsListening(true);
       setInterimText("");
     };
@@ -263,6 +277,7 @@ export default function JarvisChat() {
       setInterimText(interim);
       if (final) {
         setInterimText("");
+        isListeningRef.current = false;
         setIsListening(false);
         recognitionRef.current = null;
         recognition.abort();
@@ -272,6 +287,7 @@ export default function JarvisChat() {
     };
 
     recognition.onerror = (event: any) => {
+      isListeningRef.current = false;
       setIsListening(false);
       setInterimText("");
       if (event.error === "not-allowed") {
@@ -282,6 +298,7 @@ export default function JarvisChat() {
     };
 
     recognition.onend = () => {
+      isListeningRef.current = false;
       setIsListening(false);
       setInterimText("");
       recognitionRef.current = null;
@@ -292,8 +309,9 @@ export default function JarvisChat() {
   }, [sendMessageFromText]);
 
   const stopListening = useCallback(() => {
+    isListeningRef.current = false;
     if (recognitionRef.current) {
-      recognitionRef.current.stop();
+      try { recognitionRef.current.stop(); } catch { /* ignorieren */ }
       recognitionRef.current = null;
     }
     setIsListening(false);
