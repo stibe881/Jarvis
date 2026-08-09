@@ -107,6 +107,7 @@ export default function JarvisChat() {
   const uploadMutation = trpc.chat.uploadFile.useMutation();
   const transcribeMutation = trpc.chat.transcribeAudio.useMutation();
   const searchMutation = trpc.chat.webSearch.useMutation();
+  const sendMessageMutation = trpc.chat.sendMessage.useMutation();
 
   const { data: dbMessages } = trpc.chat.getMessages.useQuery(
     { conversationId: activeConvId! },
@@ -168,53 +169,24 @@ export default function JarvisChat() {
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      const response = await fetch("/api/chat/stream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          conversationId: convId,
-          message: sentInput,
-          fileUrl: userMsg.fileUrl,
-          fileName: userMsg.fileName,
-          searchResults,
-        }),
+      // tRPC-Mutation (funktioniert zuverlässig in Produktion)
+      const result = await sendMessageMutation.mutateAsync({
+        conversationId: convId,
+        message: sentInput,
+        fileUrl: userMsg.fileUrl ?? undefined,
+        fileName: userMsg.fileName ?? undefined,
+        searchResults,
       });
 
-      if (!response.ok || !response.body) {
-        throw new Error("Streaming fehlgeschlagen");
-      }
+      const fullText = result.response;
+      setMessages((prev) => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
+        return updated;
+      });
+      utils.chat.listConversations.invalidate();
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.text) {
-                fullText += data.text;
-                setMessages((prev) => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
-                  return updated;
-                });
-              }
-              if (data.done) {
-                utils.chat.listConversations.invalidate();
-              }
-            } catch { /* ignorieren */ }
-          }
-        }
-      }
-
-      // TTS – nach Streaming-Ende sprechen
+      // TTS
       if (fullText) speakText(fullText);
     } catch (err) {
       toast.error("Fehler beim Senden der Nachricht");
@@ -223,7 +195,7 @@ export default function JarvisChat() {
       setIsStreaming(false);
       utils.chat.getMessages.invalidate({ conversationId: convId });
     }
-  }, [input, uploadedFile, isStreaming, activeConvId, searchEnabled, ttsEnabled, createConvMutation, searchMutation, utils]);
+  }, [input, uploadedFile, isStreaming, activeConvId, searchEnabled, createConvMutation, searchMutation, sendMessageMutation, speakText, utils]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {

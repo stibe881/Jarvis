@@ -184,6 +184,144 @@ export const chatRouter = router({
         return { results: [], query: input.query };
       }
     }),
+
+  // ─── tRPC-basierte Chat-Mutation (kein SSE, funktioniert in Produktion) ──────
+  sendMessage: protectedProcedure
+    .input(z.object({
+      conversationId: z.number(),
+      message: z.string(),
+      fileUrl: z.string().optional(),
+      fileName: z.string().optional(),
+      searchResults: z.array(z.object({ title: z.string(), snippet: z.string(), url: z.string() })).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { conversationId, message, fileUrl, fileName, searchResults } = input;
+      const userId = ctx.user.id;
+
+      const conv = await getConversationById(conversationId);
+      if (!conv || conv.userId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
+
+      const history = await getMessagesByConversation(conversationId);
+
+      // Benutzer-Nachricht speichern
+      await addMessage({ conversationId, role: "user", content: message, fileUrl: fileUrl ?? null, fileName: fileName ?? null });
+
+      // Kalender-Kontext laden
+      let calendarContext = "";
+      try {
+        const upcoming = await executeCalendarAction(userId, "list_events", { timeMin: new Date().toISOString(), timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
+        if (!upcoming.includes("nicht verbunden") && !upcoming.includes("Keine Termine")) calendarContext = `\n\nDeine nächsten Termine (7 Tage):\n${upcoming}`;
+      } catch { /* ignorieren */ }
+
+      // Gedächtnis laden
+      let memoryContext = "";
+      try {
+        const mems = await getMemoriesByUser(userId);
+        if (mems.length > 0) {
+          const grouped: Record<string, string[]> = {};
+          for (const m of mems) {
+            if (!grouped[m.category]) grouped[m.category] = [];
+            grouped[m.category].push(`${m.key}: ${m.value}`);
+          }
+          const lines = Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join("\n")}`).join("\n\n");
+          memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
+        }
+      } catch { /* ignorieren */ }
+
+      const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
+Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
+Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+
+KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
+<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
+<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
+<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
+<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
+<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
+<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
+WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
+
+GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
+<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
+Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+${calendarContext}${memoryContext}`;
+
+      type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
+      const llmMessages: LLMMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...history.map((m) => ({ role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: m.content })),
+      ];
+
+      // Aktuelle Nachricht aufbauen
+      let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
+      if (searchResults && searchResults.length > 0) {
+        const ctxStr = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
+        userContent = `${message}\n\n[Web-Suchergebnisse:\n${ctxStr}]`;
+      }
+      if (fileUrl && fileName) {
+        const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+        const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+        const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+        const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+        if (isImage) {
+          userContent = [{ type: "image_url", image_url: { url: absUrl } }, { type: "text", text: typeof userContent === "string" ? userContent || `Analysiere dieses Bild: ${fileName}` : message }];
+        } else {
+          let fileContent = "";
+          try { const fr = await fetch(absUrl); if (fr.ok) { fileContent = await fr.text(); if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]"; } } catch { /* ignorieren */ }
+          userContent = fileContent ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]` : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
+        }
+      }
+      llmMessages.push({ role: "user", content: userContent as string });
+
+      // LLM aufrufen (nicht-streaming)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const llmResp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages as any });
+      let fullResponse = (llmResp.choices[0]?.message?.content as string) ?? "";
+
+      // calendar_action-Blöcke verarbeiten
+      const calMatches: RegExpExecArray[] = [];
+      let cm: RegExpExecArray | null;
+      const calRx = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
+      while ((cm = calRx.exec(fullResponse)) !== null) calMatches.push(cm);
+      let cleanResponse = fullResponse.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
+      const calendarResults: string[] = [];
+      for (const match of calMatches) {
+        try {
+          const ad = JSON.parse(match[1].trim()) as Record<string, unknown>;
+          const result = await executeCalendarAction(userId, ad.action as string, ad);
+          calendarResults.push(result);
+          cleanResponse += `\n\n**Kalender:** ${result}`;
+        } catch (e) { cleanResponse += `\n\n**Kalender-Fehler:** ${e instanceof Error ? e.message : String(e)}`; }
+      }
+
+      // memory_action-Blöcke verarbeiten
+      const memMatches: RegExpExecArray[] = [];
+      let mm2: RegExpExecArray | null;
+      const memRx = /<memory_action>([\s\S]*?)<\/memory_action>/g;
+      while ((mm2 = memRx.exec(cleanResponse)) !== null) memMatches.push(mm2);
+      cleanResponse = cleanResponse.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
+      for (const match of memMatches) {
+        try {
+          const md = JSON.parse(match[1].trim()) as { category?: string; key?: string; value?: string };
+          if (md.key && md.value) await upsertMemory(userId, md.category ?? "fact", md.key, md.value, "chat");
+        } catch { /* ignorieren */ }
+      }
+
+      // Antwort speichern
+      await addMessage({ conversationId, role: "assistant", content: cleanResponse });
+
+      // Gesprächstitel generieren (nur beim ersten Austausch)
+      if (history.length === 0) {
+        try {
+          const titleRes = await invokeLLM({ model: "claude-haiku-4-5", max_tokens: 30, messages: [{ role: "user", content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"` }] });
+          const title = titleRes.choices[0]?.message?.content;
+          await updateConversationTitle(conversationId, typeof title === "string" ? title.trim() : message.slice(0, 40));
+        } catch { /* optional */ }
+      }
+
+      return { response: cleanResponse, conversationId };
+    }),
 });
 
 // ─── Streaming-Chat-Handler via Manus Forge LLM (SSE) ────────────────────────
