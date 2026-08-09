@@ -34,3 +34,11 @@
 - [x] Bessere Dateianalyse: PDFs und Bilder als Claude Vision/File-Input senden
 - [x] Push-Benachrichtigungen für Aufgaben-Fälligkeiten (notifyOwner)
 - [x] Expo iOS-App: Chat, Notizen, Aufgaben (ZIP-Archiv)
+
+## Google Calendar-Integration
+- [x] Google OAuth-Secrets setzen (Client ID + Secret)
+- [x] DB-Schema: google_tokens Tabelle
+- [x] OAuth-Flow: /api/oauth/google/callback
+- [x] Google Calendar API: Termine lesen, erstellen, bearbeiten, löschen
+- [x] Kalender-UI: Monats-/Wochenansicht mit Terminen
+- [x] Chat-Integration: Jarvis versteht Kalender-Befehle

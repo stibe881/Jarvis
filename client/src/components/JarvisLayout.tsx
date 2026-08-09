@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -10,6 +10,7 @@ const navItems = [
   { href: "/", label: "Chat", icon: MessageSquare },
   { href: "/notes", label: "Notizen", icon: StickyNote },
   { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
+  { href: "/calendar", label: "Kalender", icon: CalendarDays },
 ];
 
 export default function JarvisLayout({ children }: { children: React.ReactNode }) {

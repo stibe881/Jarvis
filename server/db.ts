@@ -12,6 +12,7 @@ import {
   InsertUser,
   users,
 } from "../drizzle/schema";
+import { googleTokens } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -217,4 +218,40 @@ export async function deleteTask(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+}
+
+// ─── Google Token Helpers ─────────────────────────────────────────────────────
+
+export async function getGoogleToken(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(googleTokens).where(eq(googleTokens.userId, userId)).limit(1);
+  return rows[0];
+}
+
+export async function upsertGoogleToken(data: {
+  userId: number;
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt: number;
+  scope?: string | null;
+  email?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(googleTokens).values(data).onDuplicateKeyUpdate({
+    set: {
+      accessToken: data.accessToken,
+      ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+      expiresAt: data.expiresAt,
+      scope: data.scope ?? null,
+      email: data.email ?? null,
+    },
+  });
+}
+
+export async function deleteGoogleToken(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
 }

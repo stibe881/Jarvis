@@ -9,6 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleChatStream } from "../routers/chat";
+import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -37,6 +38,8 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Google Calendar OAuth Callback
+  app.get("/api/oauth/google/callback", handleGoogleOAuthCallback);
   // Jarvis Chat Streaming (SSE)
   app.post("/api/chat/stream", async (req, res) => {
     const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);

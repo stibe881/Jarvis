@@ -14,6 +14,41 @@ import { storagePut } from "../storage";
 import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscription";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import { getGoogleToken, upsertGoogleToken } from "../db";
+
+// Kalender-Aktionen direkt ausführen (für Chat-Integration)
+async function executeCalendarAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
+  try {
+    const token = await getGoogleToken(userId);
+    if (!token) return "Google Kalender ist nicht verbunden.";
+    let accessToken = token.accessToken;
+    if (token.expiresAt <= Math.floor(Date.now() / 1000) + 60 && token.refreshToken) {
+      const rr = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID!, client_secret: process.env.GOOGLE_CLIENT_SECRET!, refresh_token: token.refreshToken, grant_type: "refresh_token" }) });
+      const rd = await rr.json() as { access_token?: string; expires_in?: number };
+      if (rd.access_token) { accessToken = rd.access_token; await upsertGoogleToken({ userId, accessToken, expiresAt: Math.floor(Date.now() / 1000) + (rd.expires_in ?? 3600), refreshToken: token.refreshToken, email: token.email }); }
+    }
+    const headers: Record<string, string> = { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    const calId = (params.calendarId as string) ?? "primary";
+    if (action === "list_events") {
+      const now = new Date(); const tMin = (params.timeMin as string) ?? now.toISOString(); const tMax = (params.timeMax as string) ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
+      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; location?: string }> };
+      if (!data.items || data.items.length === 0) return "Keine Termine in diesem Zeitraum.";
+      return data.items.map(ev => { const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? ""); return `• ${d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })} ${ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "Ganztägig"}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}`; }).join("\n");
+    }
+    if (action === "create_event") {
+      const event = { summary: params.summary, description: params.description, location: params.location, start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" }, end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" } };
+      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, { method: "POST", headers, body: JSON.stringify(event) });
+      const data = await resp.json() as { summary?: string; htmlLink?: string };
+      return `Termin "${data.summary}" wurde erstellt.`;
+    }
+    if (action === "delete_event") {
+      await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "DELETE", headers });
+      return "Termin wurde gelöscht.";
+    }
+    return "Unbekannte Aktion.";
+  } catch (err) { return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`; }
+}
 
 export const chatRouter = router({
   listConversations: protectedProcedure.query(async ({ ctx }) => {
@@ -133,10 +168,25 @@ export async function handleChatStream(req: Request, res: Response) {
       fileName: fileName ?? null,
     });
 
+    // Kalender-Kontext laden
+    let calendarContext = "";
+    if (userId) {
+      try {
+        const upcoming = await executeCalendarAction(userId, "list_events", { timeMin: new Date().toISOString(), timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
+        if (!upcoming.includes("nicht verbunden") && !upcoming.includes("Keine Termine")) calendarContext = `\n\nDeine nächsten Termine (7 Tage):\n${upcoming}`;
+      } catch { /* ignorieren */ }
+    }
+
     const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
 Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
-Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen und Aufgaben verwalten und bei allen Alltagsaufgaben helfen.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten.
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+
+KALENDER: Wenn der Nutzer Termine abfragen, erstellen oder löschen möchte, füge am Ende deiner Antwort einen Aktionsblock ein:
+<calendar_action>{"action":"list_events","timeMin":"ISO","timeMax":"ISO"}</calendar_action>
+<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
+<calendar_action>{"action":"delete_event","eventId":"abc123"}</calendar_action>
+${calendarContext}` + "`";
 
     // Nachrichten-History aufbauen
     type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };

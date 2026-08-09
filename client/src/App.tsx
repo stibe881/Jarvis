@@ -8,6 +8,7 @@ import JarvisChat from "./pages/JarvisChat";
 import JarvisNotes from "./pages/JarvisNotes";
 import JarvisTasks from "./pages/JarvisTasks";
 import JarvisLayout from "./components/JarvisLayout";
+import JarvisCalendar from "./pages/JarvisCalendar";
 
 function Router() {
   return (
@@ -16,8 +17,9 @@ function Router() {
         <Route path={"/"} component={JarvisChat} />
         <Route path={"/chat"} component={JarvisChat} />
         <Route path={"/notes"} component={JarvisNotes} />
-        <Route path={"/tasks"} component={JarvisTasks} />
-        <Route path={"/404"} component={NotFound} />
+      <Route path={"/tasks"} component={JarvisTasks} />
+      <Route path={"/calendar"} component={JarvisCalendar} />
+      <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
     </JarvisLayout>
