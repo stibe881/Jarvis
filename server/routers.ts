@@ -13,6 +13,10 @@ import { grossIctRouter } from "./routers/grossIct";
 import { sonnenbergRouter } from "./routers/sonnenberg";
 import { appDashboardRouter } from "./routers/appDashboard";
 import { elevenLabsRouter } from "./routers/elevenlabs";
+import { templatesRouter } from "./routers/templates";
+import { delegationRouter } from "./routers/delegation";
+import { voiceNotesRouter } from "./routers/voiceNotes";
+import { webhooksRouter } from "./routers/webhooks";
 
 export const appRouter = router({
   system: systemRouter,
@@ -37,6 +41,10 @@ export const appRouter = router({
   sonnenberg: sonnenbergRouter,
   appDashboard: appDashboardRouter,
   elevenlabs: elevenLabsRouter,
+  templates: templatesRouter,
+  delegation: delegationRouter,
+  voiceNotes: voiceNotesRouter,
+  webhooks: webhooksRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -14,10 +14,16 @@ import JarvisProfile from "./pages/JarvisProfile";
 import GrossIct from "./pages/GrossIct";
 import SonnenbergIct from "./pages/SonnenbergIct";
 import AppDashboard from "./pages/AppDashboard";
+import JarvisTemplates from "./pages/JarvisTemplates";
+import JarvisVoiceNotes from "./pages/JarvisVoiceNotes";
+import JarvisDelegation from "./pages/JarvisDelegation";
+import JarvisIntegrations from "./pages/JarvisIntegrations";
+import OnboardingWizard from "./components/OnboardingWizard";
 
 function Router() {
   return (
     <JarvisLayout>
+      <OnboardingWizard />
       <Switch>
         <Route path={"/"} component={JarvisChat} />
         <Route path={"/chat"} component={JarvisChat} />
@@ -29,6 +35,10 @@ function Router() {
       <Route path={"/gross-ict"} component={GrossIct} />
       <Route path={"/sonnenberg"} component={SonnenbergIct} />
       <Route path={"/app"} component={AppDashboard} />
+      <Route path={"/templates"} component={JarvisTemplates} />
+      <Route path={"/voice-notes"} component={JarvisVoiceNotes} />
+      <Route path={"/delegation"} component={JarvisDelegation} />
+      <Route path={"/integrations"} component={JarvisIntegrations} />
       <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

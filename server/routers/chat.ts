@@ -16,7 +16,30 @@ import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
-import { getMemoriesByUser, upsertMemory, getUserProfile } from "../db";
+import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
+
+// ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
+const INTENT_RULES: Array<{ intent: string; label: string; test: RegExp }> = [
+  { intent: "offene_rechnungen", label: "Offene Rechnungen zeigen", test: /(offen|unbezahlt|ausstehend).{0,20}rechnung|rechnung.{0,20}(offen|unbezahlt)/i },
+  { intent: "ueberfaellige_rechnungen", label: "Überfällige Rechnungen zeigen", test: /überfällig|mahnung|verzug/i },
+  { intent: "tagesplanung", label: "Was steht heute an?", test: /(was steht|wie sieht).{0,20}(heute|tag)|tagesplan|prioritäten|was soll ich (zuerst|heute)/i },
+  { intent: "termine_heute", label: "Termine heute", test: /termin.{0,20}(heute|morgen)|(heute|morgen).{0,20}termin|kalender.{0,15}(heute|morgen)/i },
+  { intent: "offene_tickets", label: "Offene Tickets zeigen", test: /ticket/i },
+  { intent: "kunden_suche", label: "Kunde suchen", test: /kunde|kundin|kunden/i },
+  { intent: "angebot_erstellen", label: "Angebot erstellen", test: /angebot.{0,20}(erstell|schreib|mach)|erstell.{0,15}angebot/i },
+  { intent: "aufgaben_offen", label: "Offene Aufgaben zeigen", test: /aufgabe|pendenz|todo|to-do/i },
+  { intent: "wetter", label: "Wetter in Baar", test: /wetter/i },
+  { intent: "email_entwurf", label: "E-Mail entwerfen", test: /(e-?mail|mail).{0,25}(schreib|entwurf|formulier)|schreib.{0,15}(e-?mail|mail)/i },
+  { intent: "dashboard", label: "App-Übersicht zeigen", test: /dashboard|übersicht|umsatz|kennzahl/i },
+  { intent: "projekte", label: "Projekte zeigen", test: /projekt/i },
+];
+
+function detectIntent(message: string): { intent: string; label: string } | null {
+  for (const rule of INTENT_RULES) {
+    if (rule.test.test(message)) return { intent: rule.intent, label: rule.label };
+  }
+  return null;
+}
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
 async function executeCalendarAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
@@ -109,6 +132,25 @@ async function executeCalendarAction(userId: number, action: string, params: Rec
 export const chatRouter = router({
   listConversations: protectedProcedure.query(async ({ ctx }) => {
     return getConversationsByUser(ctx.user.id);
+  }),
+
+  // Lernende Quick-Action-Vorschläge auf Basis der Nutzungshäufigkeit
+  suggestions: protectedProcedure.query(async ({ ctx }) => {
+    const top = await getTopPrompts(ctx.user.id, 4);
+    const fallback = [
+      { label: "Was steht heute an?", promptText: "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung." },
+      { label: "Offene Rechnungen zeigen", promptText: "Zeige mir alle offenen Rechnungen." },
+      { label: "Offene Tickets zeigen", promptText: "Welche Tickets sind noch offen?" },
+      { label: "Termine diese Woche", promptText: "Welche Termine habe ich diese Woche?" },
+    ];
+    if (top.length === 0) return fallback;
+    const mapped = top.map(t => ({ label: t.label, promptText: t.promptText }));
+    // Auf vier Vorschläge auffüllen
+    for (const f of fallback) {
+      if (mapped.length >= 4) break;
+      if (!mapped.some(m => m.label === f.label)) mapped.push(f);
+    }
+    return mapped.slice(0, 4);
   }),
 
   createConversation: protectedProcedure
@@ -213,6 +255,12 @@ export const chatRouter = router({
       // Benutzer-Nachricht speichern
       await addMessage({ conversationId, role: "user", content: message, fileUrl: fileUrl ?? null, fileName: fileName ?? null });
 
+      // Intent für lernende Vorschläge erfassen
+      try {
+        const detected = detectIntent(message);
+        if (detected) await trackPrompt(userId, detected.intent, detected.label, message.slice(0, 400));
+      } catch (e) { console.error("[PromptStats]", e); }
+
       // Kalender-Kontext laden
       let calendarContext = "";
       try {
@@ -267,7 +315,35 @@ Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: 
 GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
 Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server – für KMU in der Zentralschweiz.
 Wenn Stefan Hilfe zu Gross ICT braucht (Angebote, Texte, Kundenprojekte), kannst du helfen. Verwende immer CHF (nicht €) und Schweizer Schreibweise (ss statt ß).`;
-          const fullSystemPrompt = systemPrompt + grossIctContext + `
+          const intelligenceContext = `
+
+ARBEITSWEISE (sehr wichtig):
+
+1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enthält, um sie korrekt auszuführen, stelle GEZIELTE Rückfragen anstatt zu raten oder eine leere Antwort zu geben.
+   Beispiel Termin: fehlen Datum, Uhrzeit, Dauer oder Titel, frage konkret: "Für wann? Wie lange? Mit wem?"
+   Beispiel Rechnung/Angebot: fehlen Kunde, Positionen oder Betrag, frage genau danach.
+   Stelle maximal drei Rückfragen auf einmal und nummeriere sie. Wenn du bereits 80 % der Informationen hast, mache einen konkreten Vorschlag und bitte nur um Bestätigung.
+   Wenn du eine Rückfrage stellst, führe KEINE Aktion aus.
+
+2. PROAKTIVE TAGESPLANUNG: Wenn Stefan nach dem Tag, dem Plan, den Prioritäten oder einer Übersicht fragt ("Was steht heute an?", "Wie sieht mein Tag aus?", "Was soll ich zuerst machen?"), erstelle eine priorisierte Tagesplanung:
+   - Fasse Termine und Aufgaben in einer knappen Liste zusammen
+   - Setze eine klare Reihenfolge mit Begründung (Fristen, Termine, Aufwand)
+   - Nenne höchstens drei Punkte als "heute wirklich wichtig"
+   - Weise auf Konflikte hin (z.B. Aufgabe fällig, aber ganzer Tag verplant)
+   - Schliesse mit einer kurzen Frage, ob du Aufgaben verschieben oder Prioritäten anpassen sollst
+
+3. DOKUMENT-ZUSAMMENFASSUNG: Wenn eine Datei angehängt ist, strukturiere deine Antwort so:
+   **Kurzfazit** (zwei bis drei Sätze) · **Die wichtigsten Punkte** (Stichworte) · **Zahlen und Fristen** (falls vorhanden) · **Handlungsempfehlung** (konkrete nächste Schritte für Stefan) · **Offene Fragen** (falls etwas unklar bleibt)
+
+4. E-MAIL-ENTWÜRFE: Wenn Stefan eine E-Mail, Mahnung, Zahlungserinnerung oder Nachfrage braucht, schreibe einen vollständigen, versandfertigen Entwurf:
+   - Beginne mit "Betreff: ..."
+   - Passende Anrede und Grussformel mit Stefans Namen
+   - Sachlich, freundlich, maximal 200 Wörter
+   - Wenn es um einen Kunden aus der App geht, hole zuerst die Daten mit einem app_action-Block (Kunde, Rechnungsnummer, Betrag, Fälligkeit) und schreibe die E-Mail dann mit den echten Werten
+   - Erfinde NIE Rechnungsnummern, Beträge oder Daten. Fehlt eine Angabe, frage nach oder markiere sie klar als [Platzhalter]
+
+5. VORLAGEN: Für wiederkehrende Dokumente (Angebot, IT-Konzept, Beschaffungsantrag, Protokoll, Statusbericht) gibt es im Bereich "Vorlagen" fertige Muster mit Platzhaltern. Weise Stefan darauf hin, wenn eine Vorlage schneller wäre.`;
+          const fullSystemPrompt = systemPrompt + grossIctContext + intelligenceContext + `
 
 KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
 <calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>

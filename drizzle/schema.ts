@@ -189,3 +189,96 @@ export const grossIctQuotes = mysqlTable("gross_ict_quotes", {
 });
 export type GrossIctQuote = typeof grossIctQuotes.$inferSelect;
 export type InsertGrossIctQuote = typeof grossIctQuotes.$inferInsert;
+
+// ── Dokumenten-Vorlagen ───────────────────────────────────────────────────────
+export const documentTemplates = mysqlTable("document_templates", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: mysqlEnum("category", ["quote", "invoice", "concept", "report", "email", "procurement", "minutes", "other"]).default("other").notNull(),
+  context: mysqlEnum("context", ["gross_ict", "sonnenberg", "general"]).default("general").notNull(),
+  description: text("description"),
+  content: text("content").notNull(), // Markdown mit {{platzhaltern}}
+  placeholders: text("placeholders"), // JSON-Array der Platzhalter-Namen
+  isFavorite: boolean("isFavorite").default(false).notNull(),
+  usageCount: int("usageCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DocumentTemplate = typeof documentTemplates.$inferSelect;
+export type InsertDocumentTemplate = typeof documentTemplates.$inferInsert;
+
+// ── Aufgaben-Delegation ───────────────────────────────────────────────────────
+export const delegations = mysqlTable("delegations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  taskId: int("taskId"), // optional: Verweis auf tasks
+  assigneeName: varchar("assigneeName", { length: 128 }).notNull(),
+  assigneeEmail: varchar("assigneeEmail", { length: 320 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  details: text("details"),
+  dueDate: bigint("dueDate", { mode: "number" }),
+  status: mysqlEnum("status", ["open", "in_progress", "done", "cancelled"]).default("open").notNull(),
+  emailDraft: text("emailDraft"), // von Jarvis generierter E-Mail-Text
+  emailSentAt: bigint("emailSentAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Delegation = typeof delegations.$inferSelect;
+export type InsertDelegation = typeof delegations.$inferInsert;
+
+// ── Sprachnotizen ─────────────────────────────────────────────────────────────
+export const voiceNotes = mysqlTable("voice_notes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  transcript: text("transcript").notNull(),
+  summary: text("summary"),
+  category: varchar("category", { length: 64 }).default("allgemein"),
+  audioUrl: varchar("audioUrl", { length: 1024 }),
+  durationSec: int("durationSec"),
+  noteId: int("noteId"), // wenn als Notiz gespeichert
+  taskId: int("taskId"), // wenn als Aufgabe erkannt
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type VoiceNote = typeof voiceNotes.$inferSelect;
+export type InsertVoiceNote = typeof voiceNotes.$inferInsert;
+
+// ── Lernende Vorschläge (Nutzungsstatistik von Chat-Intents) ─────────────────
+export const promptStats = mysqlTable("prompt_stats", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  intent: varchar("intent", { length: 128 }).notNull(), // z.B. "offene_rechnungen"
+  label: varchar("label", { length: 255 }).notNull(),   // Anzeigetext für Quick-Action
+  promptText: text("promptText").notNull(),             // was gesendet wird
+  count: int("count").default(1).notNull(),
+  lastUsedAt: bigint("lastUsedAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PromptStat = typeof promptStats.$inferSelect;
+export type InsertPromptStat = typeof promptStats.$inferInsert;
+
+// ── Webhook-API-Schlüssel und Eingänge ───────────────────────────────────────
+export const webhookKeys = mysqlTable("webhook_keys", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  label: varchar("label", { length: 128 }).notNull(),
+  apiKey: varchar("apiKey", { length: 96 }).notNull().unique(),
+  isActive: boolean("isActive").default(true).notNull(),
+  lastUsedAt: bigint("lastUsedAt", { mode: "number" }),
+  callCount: int("callCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WebhookKey = typeof webhookKeys.$inferSelect;
+export type InsertWebhookKey = typeof webhookKeys.$inferInsert;
+
+export const webhookEvents = mysqlTable("webhook_events", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  source: varchar("source", { length: 128 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  notified: boolean("notified").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type InsertWebhookEvent = typeof webhookEvents.$inferInsert;

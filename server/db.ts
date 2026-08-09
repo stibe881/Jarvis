@@ -13,6 +13,13 @@ import {
   users,
 } from "../drizzle/schema";
 import { googleTokens, memories, userProfiles, InsertUserProfile } from "../drizzle/schema";
+import {
+  documentTemplates, InsertDocumentTemplate,
+  delegations, InsertDelegation,
+  voiceNotes, InsertVoiceNote,
+  promptStats,
+  webhookKeys, webhookEvents,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -297,4 +304,179 @@ export async function upsertUserProfile(userId: number, data: Partial<Omit<Inser
   await db.insert(userProfiles)
     .values({ userId, ...data })
     .onDuplicateKeyUpdate({ set: { ...data, updatedAt: new Date() } });
+}
+
+// ─── Dokumenten-Vorlagen ──────────────────────────────────────────────────────
+
+export async function createTemplate(data: InsertDocumentTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Keine Datenbankverbindung");
+  const [result] = await db.insert(documentTemplates).values(data).$returningId();
+  return result;
+}
+
+export async function getTemplatesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(documentTemplates)
+    .where(eq(documentTemplates.userId, userId))
+    .orderBy(desc(documentTemplates.isFavorite), desc(documentTemplates.usageCount));
+}
+
+export async function getTemplateById(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const r = await db.select().from(documentTemplates)
+    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))).limit(1);
+  return r[0] ?? null;
+}
+
+export async function updateTemplate(id: number, userId: number, data: Partial<InsertDocumentTemplate>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(documentTemplates).set(data)
+    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+}
+
+export async function deleteTemplate(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(documentTemplates)
+    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+}
+
+export async function incrementTemplateUsage(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  const tpl = await getTemplateById(id, userId);
+  if (!tpl) return;
+  await db.update(documentTemplates).set({ usageCount: tpl.usageCount + 1 })
+    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+}
+
+// ─── Delegationen ─────────────────────────────────────────────────────────────
+
+export async function createDelegation(data: InsertDelegation) {
+  const db = await getDb();
+  if (!db) throw new Error("Keine Datenbankverbindung");
+  const [result] = await db.insert(delegations).values(data).$returningId();
+  return result;
+}
+
+export async function getDelegationsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(delegations)
+    .where(eq(delegations.userId, userId)).orderBy(desc(delegations.createdAt));
+}
+
+export async function updateDelegation(id: number, userId: number, data: Partial<InsertDelegation>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(delegations).set(data)
+    .where(and(eq(delegations.id, id), eq(delegations.userId, userId)));
+}
+
+export async function deleteDelegation(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(delegations)
+    .where(and(eq(delegations.id, id), eq(delegations.userId, userId)));
+}
+
+// ─── Sprachnotizen ────────────────────────────────────────────────────────────
+
+export async function createVoiceNote(data: InsertVoiceNote) {
+  const db = await getDb();
+  if (!db) throw new Error("Keine Datenbankverbindung");
+  const [result] = await db.insert(voiceNotes).values(data).$returningId();
+  return result;
+}
+
+export async function getVoiceNotesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(voiceNotes)
+    .where(eq(voiceNotes.userId, userId)).orderBy(desc(voiceNotes.createdAt)).limit(100);
+}
+
+export async function deleteVoiceNote(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(voiceNotes).where(and(eq(voiceNotes.id, id), eq(voiceNotes.userId, userId)));
+}
+
+// ─── Lernende Vorschläge ──────────────────────────────────────────────────────
+
+export async function trackPrompt(userId: number, intent: string, label: string, promptText: string) {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(promptStats)
+    .where(and(eq(promptStats.userId, userId), eq(promptStats.intent, intent))).limit(1);
+  if (existing[0]) {
+    await db.update(promptStats)
+      .set({ count: existing[0].count + 1, lastUsedAt: Date.now(), label, promptText })
+      .where(eq(promptStats.id, existing[0].id));
+  } else {
+    await db.insert(promptStats).values({ userId, intent, label, promptText, count: 1, lastUsedAt: Date.now() });
+  }
+}
+
+export async function getTopPrompts(userId: number, limit = 4) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(promptStats)
+    .where(eq(promptStats.userId, userId))
+    .orderBy(desc(promptStats.count), desc(promptStats.lastUsedAt))
+    .limit(limit);
+}
+
+// ─── Webhook-Schlüssel und Ereignisse ─────────────────────────────────────────
+
+export async function createWebhookKey(userId: number, label: string, apiKey: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Keine Datenbankverbindung");
+  const [result] = await db.insert(webhookKeys).values({ userId, label, apiKey }).$returningId();
+  return { id: result.id, apiKey };
+}
+
+export async function getWebhookKeysByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(webhookKeys)
+    .where(eq(webhookKeys.userId, userId)).orderBy(desc(webhookKeys.createdAt));
+}
+
+export async function findWebhookKey(apiKey: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const r = await db.select().from(webhookKeys).where(eq(webhookKeys.apiKey, apiKey)).limit(1);
+  return r[0] ?? null;
+}
+
+export async function touchWebhookKey(id: number, currentCount: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(webhookKeys)
+    .set({ lastUsedAt: Date.now(), callCount: currentCount + 1 })
+    .where(eq(webhookKeys.id, id));
+}
+
+export async function deleteWebhookKey(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(webhookKeys).where(and(eq(webhookKeys.id, id), eq(webhookKeys.userId, userId)));
+}
+
+export async function createWebhookEvent(userId: number, source: string, title: string, body: string | null, notified: boolean) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(webhookEvents).values({ userId, source, title, body, notified });
+}
+
+export async function getWebhookEventsByUser(userId: number, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(webhookEvents)
+    .where(eq(webhookEvents.userId, userId)).orderBy(desc(webhookEvents.createdAt)).limit(limit);
 }

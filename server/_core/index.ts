@@ -11,6 +11,8 @@ import { serveStatic, setupVite } from "./vite";
 import { handleChatStream } from "../routers/chat";
 import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
 import { handleMorningBriefing } from "../routers/morningBriefing";
+import { handleWeeklyReport } from "../routers/weeklyReport";
+import { handleJarvisWebhook } from "../routers/webhookEndpoint";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -55,6 +57,10 @@ async function startServer() {
   app.post("/api/stream", streamHandler);
   // Heartbeat-Cron: Tägliche Morgen-Zusammenfassung
   app.post("/api/scheduled/morning-briefing", handleMorningBriefing);
+  // Heartbeat-Cron: Wöchentlicher Bericht (Freitag)
+  app.post("/api/scheduled/weekly-report", handleWeeklyReport);
+  // Öffentlicher Webhook-Eingang für externe Dienste (API-Key-geschützt)
+  app.post("/api/webhook/jarvis", handleJarvisWebhook);
   // tRPC API
   app.use(
     "/api/trpc",

@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal, FileText, Mic, UserPlus, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 
@@ -20,10 +20,14 @@ const navItems = [
   { href: "/notes", label: "Notizen", icon: StickyNote },
   { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
   { href: "/calendar", label: "Kalender", icon: CalendarDays },
+  { href: "/voice-notes", label: "Sprachnotizen", icon: Mic },
+  { href: "/templates", label: "Vorlagen", icon: FileText },
+  { href: "/delegation", label: "Delegation", icon: UserPlus },
   { href: "/memory", label: "Gedächtnis", icon: Brain },
   { href: "/gross-ict", label: "Gross ICT", icon: Briefcase },
   { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
   { href: "/app", label: "Meine App", icon: LayoutDashboard },
+  { href: "/integrations", label: "Verbindungen", icon: Plug },
   { href: "/profile", label: "Profil", icon: Settings },
 ];
 

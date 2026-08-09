@@ -57,6 +57,13 @@
       "when": 1786309485895,
       "tag": "0007_late_bushwacker",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1786311812847,
+      "tag": "0008_salty_mephistopheles",
+      "breakpoints": true
     }
   ]
 }
