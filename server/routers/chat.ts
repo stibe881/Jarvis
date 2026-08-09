@@ -15,7 +15,7 @@ import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscripti
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
-import { getMemoriesByUser, upsertMemory } from "../db";
+import { getMemoriesByUser, upsertMemory, getUserProfile } from "../db";
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
 async function executeCalendarAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
@@ -228,6 +228,111 @@ export const chatRouter = router({
         }
       } catch { /* ignorieren */ }
 
+      // Nutzerprofil laden
+      let profileContext = "";
+      try {
+        const profile = await getUserProfile(userId);
+        if (profile) {
+          const parts: string[] = [];
+          if (profile.displayName) parts.push(`Name des Nutzers: ${profile.displayName}`);
+          if (profile.occupation) parts.push(`Beruf: ${profile.occupation}`);
+          if (profile.location) parts.push(`Standort: ${profile.location}`);
+          if (profile.interests) parts.push(`Interessen/Hobbys: ${profile.interests}`);
+          if (profile.workContext) parts.push(`Beruflicher Kontext: ${profile.workContext}`);
+          if (profile.personalNotes) parts.push(`Persönliche Notizen: ${profile.personalNotes}`);
+          if (parts.length > 0) profileContext = `
+
+Nutzerprofil:
+${parts.join("\n")}`;
+          // Anredeform und Jarvis-Name
+          const jarvisName = profile.jarvisName ?? "Jarvis";
+          const addressForm = profile.addressForm ?? "sir";
+          const addressStr = addressForm === "sir" ? "Spreche den Nutzer mit 'Sir' an" : addressForm === "du" ? `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an` : `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an`;
+          const personalityStr = profile.jarvisPersonality ? `\n\nPersönlichkeit: ${profile.jarvisPersonality}` : "";
+          const langStr = profile.language === "en" ? "Antworte auf Englisch." : profile.language === "auto" ? "Antworte in der Sprache des Nutzers." : "Antworte auf Deutsch.";
+          const systemPrompt = `Du bist ${jarvisName}, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent. ${addressStr}.
+${langStr} Präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
+Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+          // Weiter mit dem Rest des System-Prompts (Kalender/Gedächtnis-Aktionen)
+          const fullSystemPrompt = systemPrompt + `
+
+KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
+<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
+<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
+<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
+<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
+<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
+<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
+WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
+
+GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
+<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
+Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+${profileContext}${calendarContext}${memoryContext}`;
+
+          // LLM aufrufen mit Profil-Kontext
+          type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
+          const llmMessages2: LLMMessage[] = [
+            { role: "system", content: fullSystemPrompt },
+            ...history.map((m) => ({ role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: m.content })),
+          ];
+          let userContent2: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
+          if (searchResults && searchResults.length > 0) {
+            const ctxStr = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
+            userContent2 = `${message}\n\n[Web-Suchergebnisse:\n${ctxStr}]`;
+          }
+          if (fileUrl && fileName) {
+            const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+            const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+            const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+            const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+            if (isImage) {
+              userContent2 = [{ type: "image_url", image_url: { url: absUrl } }, { type: "text", text: typeof userContent2 === "string" ? userContent2 || `Analysiere dieses Bild: ${fileName}` : message }];
+            } else {
+              let fileContent = "";
+              try { const fr = await fetch(absUrl); if (fr.ok) { fileContent = await fr.text(); if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]"; } } catch { /* ignorieren */ }
+              userContent2 = fileContent ? `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]` : `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Datei: ${fileName}]`;
+            }
+          }
+          llmMessages2.push({ role: "user", content: userContent2 as string });
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const llmResp2 = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages2 as any });
+          let fullResponse2 = (llmResp2.choices[0]?.message?.content as string) ?? "";
+          // calendar_action und memory_action verarbeiten
+          const calActionRegex = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
+          let calMatch2;
+          let calResults2 = "";
+          while ((calMatch2 = calActionRegex.exec(fullResponse2)) !== null) {
+            try {
+              const calParams = JSON.parse(calMatch2[1]);
+              const calResult = await executeCalendarAction(userId, calParams.action, calParams);
+              calResults2 += `
+
+**Kalender:** ${calResult}`;
+            } catch { /* ignorieren */ }
+          }
+          fullResponse2 = fullResponse2.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
+          if (calResults2) fullResponse2 += calResults2;
+          const memActionRegex = /<memory_action>([\s\S]*?)<\/memory_action>/g;
+          let memMatch2;
+          while ((memMatch2 = memActionRegex.exec(fullResponse2)) !== null) {
+            try {
+              const memParams = JSON.parse(memMatch2[1]);
+              if (memParams.key && memParams.value) await upsertMemory(userId, memParams.category ?? "fact", memParams.key, memParams.value, "chat");
+            } catch { /* ignorieren */ }
+          }
+          fullResponse2 = fullResponse2.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
+          const convTitle = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
+          if (history.length === 0) await updateConversationTitle(conversationId, convTitle || message.slice(0, 50));
+          await addMessage({ conversationId, role: "assistant", content: fullResponse2 });
+          return { response: fullResponse2 };
+        }
+      } catch (e) {
+        console.error("[Profile] Fehler beim Laden:", e);
+      }
+
+      // Fallback ohne Profil
       const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
 Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.

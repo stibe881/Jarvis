@@ -127,3 +127,28 @@ export const memories = mysqlTable("memories", {
 
 export type Memory = typeof memories.$inferSelect;
 export type InsertMemory = typeof memories.$inferInsert;
+
+// Nutzerprofil für Jarvis-Persönlichkeit
+export const userProfiles = mysqlTable("user_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  // Persönliche Infos
+  displayName: varchar("displayName", { length: 128 }),
+  occupation: varchar("occupation", { length: 255 }),
+  location: varchar("location", { length: 255 }),
+  // Jarvis-Verhalten
+  jarvisName: varchar("jarvisName", { length: 64 }).default("Jarvis"),
+  addressForm: mysqlEnum("addressForm", ["sir", "du", "name"]).default("sir"),
+  // Freitext-Felder
+  interests: text("interests"),       // Hobbys und Interessen
+  workContext: text("workContext"),    // Beruflicher Kontext
+  personalNotes: text("personalNotes"), // Weitere persönliche Infos
+  // Jarvis-Persönlichkeit
+  jarvisPersonality: text("jarvisPersonality"), // Eigene Beschreibung wie Jarvis sich verhalten soll
+  language: mysqlEnum("language", ["de", "en", "auto"]).default("de"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type UserProfile = typeof userProfiles.$inferSelect;
+export type InsertUserProfile = typeof userProfiles.$inferInsert;

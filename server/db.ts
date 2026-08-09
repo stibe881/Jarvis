@@ -12,7 +12,7 @@ import {
   InsertUser,
   users,
 } from "../drizzle/schema";
-import { googleTokens, memories } from "../drizzle/schema";
+import { googleTokens, memories, userProfiles, InsertUserProfile } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -280,4 +280,21 @@ export async function deleteMemory(userId: number, id: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(memories).where(and(eq(memories.id, id), eq(memories.userId, userId)));
+}
+
+// ─── User Profile ─────────────────────────────────────────────────────────────
+
+export async function getUserProfile(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function upsertUserProfile(userId: number, data: Partial<Omit<InsertUserProfile, "id" | "userId" | "createdAt" | "updatedAt">>) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(userProfiles)
+    .values({ userId, ...data })
+    .onDuplicateKeyUpdate({ set: { ...data, updatedAt: new Date() } });
 }

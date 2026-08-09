@@ -10,6 +10,7 @@ import JarvisTasks from "./pages/JarvisTasks";
 import JarvisLayout from "./components/JarvisLayout";
 import JarvisCalendar from "./pages/JarvisCalendar";
 import JarvisMemory from "./pages/JarvisMemory";
+import JarvisProfile from "./pages/JarvisProfile";
 
 function Router() {
   return (
@@ -21,6 +22,7 @@ function Router() {
       <Route path={"/tasks"} component={JarvisTasks} />
       <Route path={"/calendar"} component={JarvisCalendar} />
       <Route path={"/memory"} component={JarvisMemory} />
+      <Route path={"/profile"} component={JarvisProfile} />
       <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
