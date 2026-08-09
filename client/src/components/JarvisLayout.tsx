@@ -2,10 +2,19 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
+// Primäre Bottom-Nav (max 4 + Mehr-Button)
+const primaryNav = [
+  { href: "/", label: "Chat", icon: MessageSquare },
+  { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
+  { href: "/calendar", label: "Kalender", icon: CalendarDays },
+  { href: "/app", label: "Meine App", icon: LayoutDashboard },
+];
+
+// Alle Nav-Items (für Desktop-Sidebar und Mehr-Menü)
 const navItems = [
   { href: "/", label: "Chat", icon: MessageSquare },
   { href: "/notes", label: "Notizen", icon: StickyNote },
@@ -22,6 +31,19 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+
+  // Mehr-Menü schliessen wenn ausserhalb geklickt
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   if (loading) {
     return (
@@ -177,19 +199,61 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
       </div>
 
       {/* ── Mobile Bottom-Navigation ── */}
-      <nav className="md:hidden flex-shrink-0 flex items-center justify-around border-t border-border bg-sidebar py-2 px-4">
-        {navItems.map(({ href, label, icon: Icon }) => (
+      <nav className="md:hidden flex-shrink-0 flex items-center justify-around border-t border-border bg-sidebar py-1 px-2 safe-area-bottom">
+        {primaryNav.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href}>
             <div className={cn(
-              "flex flex-col items-center gap-1 px-4 py-1.5 rounded-lg transition-all",
+              "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all min-w-[56px]",
               isActive(href) ? "text-primary" : "text-muted-foreground"
             )}>
-              <Icon size={22} />
-              <span className="text-[10px] font-medium tracking-wide">{label}</span>
+              <Icon size={20} />
+              <span className="text-[9px] font-medium tracking-wide leading-tight">{label}</span>
               {isActive(href) && <span className="w-1 h-1 rounded-full bg-primary" />}
             </div>
           </Link>
         ))}
+        {/* Mehr-Button */}
+        <div className="relative" ref={moreMenuRef}>
+          <button
+            onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+            className={cn(
+              "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all min-w-[56px]",
+              moreMenuOpen ? "text-primary" : "text-muted-foreground"
+            )}
+          >
+            <MoreHorizontal size={20} />
+            <span className="text-[9px] font-medium tracking-wide leading-tight">Mehr</span>
+          </button>
+          {/* Mehr-Menü Popup */}
+          {moreMenuOpen && (
+            <div className="absolute bottom-full right-0 mb-2 w-52 bg-sidebar border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
+              {navItems.filter(n => !primaryNav.some(p => p.href === n.href)).map(({ href, label, icon: Icon }) => (
+                <Link key={href} href={href}>
+                  <div
+                    onClick={() => setMoreMenuOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all",
+                      isActive(href) ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    )}
+                  >
+                    <Icon size={16} />
+                    {label}
+                    {isActive(href) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
+                  </div>
+                </Link>
+              ))}
+              <div className="border-t border-border px-4 py-3 flex items-center gap-3">
+                <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0">
+                  <span className="text-primary text-[10px] font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+                </div>
+                <span className="text-xs text-muted-foreground truncate flex-1">{user?.name ?? "Nutzer"}</span>
+                <button onClick={() => logout()} className="text-muted-foreground hover:text-destructive">
+                  <LogOut size={14} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </nav>
     </div>
   );

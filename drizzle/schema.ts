@@ -146,6 +146,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   // Jarvis-Persönlichkeit
   jarvisPersonality: text("jarvisPersonality"), // Eigene Beschreibung wie Jarvis sich verhalten soll
   language: mysqlEnum("language", ["de", "en", "auto"]).default("de"),
+  elevenLabsVoiceId: varchar("elevenLabsVoiceId", { length: 64 }).default("JBFqnCBsd6RMkjVDRZzb"), // George (britisch, männlich)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

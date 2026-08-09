@@ -503,7 +503,7 @@ export default function JarvisChat() {
                 </h3>
                 <p className="text-muted-foreground">Wie kann ich dir heute helfen?</p>
               </div>
-              <div className="grid grid-cols-2 gap-3 max-w-lg w-full">
+              <div className="grid grid-cols-2 gap-3 w-full px-4">
                 {["Erkläre mir Quantencomputing", "Schreibe eine E-Mail", "Analysiere diese Datei", "Suche aktuelle Neuigkeiten"].map((s) => (
                   <button key={s} onClick={() => setInput(s)}
                     className="text-left p-3 rounded-lg jarvis-card text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all">
