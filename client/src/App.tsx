@@ -12,6 +12,7 @@ import JarvisCalendar from "./pages/JarvisCalendar";
 import JarvisMemory from "./pages/JarvisMemory";
 import JarvisProfile from "./pages/JarvisProfile";
 import GrossIct from "./pages/GrossIct";
+import SonnenbergIct from "./pages/SonnenbergIct";
 
 function Router() {
   return (
@@ -25,6 +26,7 @@ function Router() {
       <Route path={"/memory"} component={JarvisMemory} />
       <Route path={"/profile"} component={JarvisProfile} />
       <Route path={"/gross-ict"} component={GrossIct} />
+      <Route path={"/sonnenberg"} component={SonnenbergIct} />
       <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

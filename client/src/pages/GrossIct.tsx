@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
-import { Briefcase, FileText, PenTool, Plus, Trash2, CheckCircle, Clock, XCircle, Send, Loader2, ChevronDown, ChevronUp, Copy } from "lucide-react";
+import { Briefcase, FileText, PenTool, Plus, Trash2, CheckCircle, Clock, XCircle, Send, Loader2, ChevronDown, ChevronUp, Copy, Download } from "lucide-react";
+import { exportQuotePdf } from "@/lib/pdfExport";
 
 // ── Projekte ──────────────────────────────────────────────────────────────────
 const SERVICE_LABELS: Record<string, string> = {
@@ -177,6 +178,9 @@ function QuotesTab() {
                 <div className="flex gap-2 flex-wrap">
                   <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => { navigator.clipboard.writeText(q.content); toast.success("Kopiert!"); }}>
                     <Copy size={12} /> Kopieren
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-primary hover:text-primary" onClick={() => exportQuotePdf({ title: q.title, customerName: q.customerName, customerEmail: q.customerEmail, content: q.content, totalAmount: q.totalAmount, createdAt: q.createdAt })}>
+                    <Download size={12} /> PDF
                   </Button>
                   <Select value={q.status} onValueChange={v => updateStatusMutation.mutate({ id: q.id, status: v as typeof q.status })}>
                     <SelectTrigger className="h-7 text-xs bg-input border-border w-36"><SelectValue /></SelectTrigger>
