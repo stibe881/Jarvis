@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleChatStream } from "../routers/chat";
 import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
+import { handleMorningBriefing } from "../routers/morningBriefing";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -52,6 +53,8 @@ async function startServer() {
   };
   app.post("/api/chat/stream", streamHandler);
   app.post("/api/stream", streamHandler);
+  // Heartbeat-Cron: Tägliche Morgen-Zusammenfassung
+  app.post("/api/scheduled/morning-briefing", handleMorningBriefing);
   // tRPC API
   app.use(
     "/api/trpc",
