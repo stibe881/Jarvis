@@ -7,6 +7,7 @@ import { notesRouter } from "./routers/notes";
 import { tasksRouter } from "./routers/tasks";
 import { notificationsRouter } from "./routers/notifications";
 import { calendarRouter } from "./routers/calendar";
+import { memoryRouter } from "./routers/memory";
 
 export const appRouter = router({
   system: systemRouter,
@@ -25,6 +26,7 @@ export const appRouter = router({
   tasks: tasksRouter,
   notifications: notificationsRouter,
   calendar: calendarRouter,
+  memory: memoryRouter,
 });
 
 export type AppRouter = typeof appRouter;

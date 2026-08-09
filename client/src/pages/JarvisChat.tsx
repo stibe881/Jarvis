@@ -31,6 +31,7 @@ export default function JarvisChat() {
   const [isRecording, setIsRecording] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(false);
+  const ttsEnabledRef = useRef(false);
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string; name: string; mime: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -40,6 +41,57 @@ export default function JarvisChat() {
   const audioChunksRef = useRef<Blob[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const voicesLoadedRef = useRef(false);
+
+  // TTS-Toggle: ref synchron halten damit sendMessage immer aktuellen Wert sieht
+  const toggleTts = useCallback(() => {
+    if (isSpeaking) {
+      window.speechSynthesis?.cancel();
+      setIsSpeaking(false);
+    } else {
+      const next = !ttsEnabled;
+      setTtsEnabled(next);
+      ttsEnabledRef.current = next;
+      // Stimmen vorladen (iOS braucht das im User-Gesture-Kontext)
+      if (next && "speechSynthesis" in window && !voicesLoadedRef.current) {
+        window.speechSynthesis.getVoices();
+        voicesLoadedRef.current = true;
+      }
+    }
+  }, [ttsEnabled, isSpeaking]);
+
+  // Stimmen beim Mount vorladen
+  useEffect(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = () => { voicesLoadedRef.current = true; };
+      }
+    }
+  }, []);
+
+  // TTS-Funktion
+  const speakText = useCallback((text: string) => {
+    if (!ttsEnabledRef.current || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    // Markdown-Zeichen entfernen, auf 600 Zeichen kürzen
+    const clean = text.replace(/[#*`_~>]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
+    if (!clean) return;
+    const utterance = new SpeechSynthesisUtterance(clean);
+    utterance.lang = "de-DE";
+    utterance.rate = 0.92;
+    utterance.pitch = 0.9;
+    // Deutsche Stimme bevorzugen
+    const voices = window.speechSynthesis.getVoices();
+    const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google")) ||
+                    voices.find(v => v.lang.startsWith("de")) ||
+                    voices.find(v => v.default);
+    if (deVoice) utterance.voice = deVoice;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  }, []);
 
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
@@ -162,15 +214,8 @@ export default function JarvisChat() {
         }
       }
 
-      // TTS
-      if (ttsEnabled && fullText && "speechSynthesis" in window) {
-        const utterance = new SpeechSynthesisUtterance(fullText.replace(/[#*`]/g, "").slice(0, 500));
-        utterance.lang = "de-DE";
-        utterance.rate = 0.95;
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => setIsSpeaking(false);
-        window.speechSynthesis.speak(utterance);
-      }
+      // TTS – nach Streaming-Ende sprechen
+      if (fullText) speakText(fullText);
     } catch (err) {
       toast.error("Fehler beim Senden der Nachricht");
       setMessages((prev) => prev.slice(0, -1));
@@ -347,7 +392,7 @@ export default function JarvisChat() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { if (isSpeaking) stopSpeaking(); else setTtsEnabled(!ttsEnabled); }}
+              onClick={toggleTts}
               className={cn("gap-1 text-xs px-2", ttsEnabled ? "text-primary" : "text-muted-foreground")}
               title="Sprachausgabe"
             >

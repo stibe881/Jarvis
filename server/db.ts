@@ -12,7 +12,7 @@ import {
   InsertUser,
   users,
 } from "../drizzle/schema";
-import { googleTokens } from "../drizzle/schema";
+import { googleTokens, memories } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -254,4 +254,30 @@ export async function deleteGoogleToken(userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
+}
+
+// ─── Memory Helpers ───────────────────────────────────────────────────────────
+
+export async function getMemoriesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(memories).where(eq(memories.userId, userId)).orderBy(memories.category, memories.key);
+}
+
+export async function upsertMemory(userId: number, category: string, key: string, value: string, source = "chat") {
+  const db = await getDb();
+  if (!db) return;
+  // Prüfen ob bereits vorhanden (gleicher key)
+  const existing = await db.select().from(memories).where(and(eq(memories.userId, userId), eq(memories.key, key))).limit(1);
+  if (existing.length > 0) {
+    await db.update(memories).set({ value, category, source, updatedAt: new Date() }).where(and(eq(memories.userId, userId), eq(memories.key, key)));
+  } else {
+    await db.insert(memories).values({ userId, category, key, value, source });
+  }
+}
+
+export async function deleteMemory(userId: number, id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(memories).where(and(eq(memories.id, id), eq(memories.userId, userId)));
 }

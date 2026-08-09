@@ -15,6 +15,7 @@ import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscripti
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
+import { getMemoriesByUser, upsertMemory } from "../db";
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
 async function executeCalendarAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
@@ -46,7 +47,49 @@ async function executeCalendarAction(userId: number, action: string, params: Rec
       await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "DELETE", headers });
       return "Termin wurde gelöscht.";
     }
-    return "Unbekannte Aktion.";
+    if (action === "update_event" || action === "invite_attendee") {
+      // Aktuellen Termin laden
+      const getResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { headers });
+      if (!getResp.ok) return `Termin nicht gefunden (ID: ${params.eventId}).`;
+      const current = await getResp.json() as Record<string, unknown>;
+
+      if (action === "invite_attendee") {
+        // Gast hinzufügen
+        const existingAttendees = (current.attendees as Array<{ email: string }> | undefined) ?? [];
+        const newEmail = params.email as string;
+        if (!newEmail) return "Bitte eine E-Mail-Adresse angeben.";
+        if (existingAttendees.some(a => a.email === newEmail)) return `${newEmail} ist bereits eingeladen.`;
+        const updatedEvent = { ...current, attendees: [...existingAttendees, { email: newEmail }] };
+        const putResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "PUT", headers, body: JSON.stringify(updatedEvent) });
+        const putData = await putResp.json() as { summary?: string };
+        return `${newEmail} wurde zum Termin "${putData.summary}" eingeladen.`;
+      }
+
+      if (action === "update_event") {
+        const patch: Record<string, unknown> = { ...current };
+        if (params.summary) patch.summary = params.summary;
+        if (params.description !== undefined) patch.description = params.description;
+        if (params.location !== undefined) patch.location = params.location;
+        if (params.startDateTime) patch.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
+        if (params.endDateTime) patch.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
+        const putResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "PUT", headers, body: JSON.stringify(patch) });
+        const putData = await putResp.json() as { summary?: string };
+        return `Termin "${putData.summary}" wurde aktualisiert.`;
+      }
+    }
+    if (action === "get_event") {
+      // Termin-ID aus Kontext suchen (letzter Termin aus list_events)
+      const tMin = (params.timeMin as string) ?? new Date().toISOString();
+      const tMax = (params.timeMax as string) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=50&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
+      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; attendees?: Array<{ email: string; displayName?: string }> }> };
+      const keyword = (params.keyword as string ?? "").toLowerCase();
+      const found = data.items?.find(ev => (ev.summary ?? "").toLowerCase().includes(keyword));
+      if (!found) return `Kein Termin mit "${params.keyword}" gefunden.`;
+      const attendees = found.attendees?.map(a => a.displayName ?? a.email).join(", ") ?? "keine";
+      return `Termin gefunden: "${found.summary}" (ID: ${found.id})\nTeilnehmer: ${attendees}`;
+    }
+    return `Unbekannte Aktion: "${action}". Verfügbar: list_events, create_event, update_event, delete_event, invite_attendee, get_event.`;
   } catch (err) { return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`; }
 }
 
@@ -177,16 +220,42 @@ export async function handleChatStream(req: Request, res: Response) {
       } catch { /* ignorieren */ }
     }
 
+    // Gedächtnis laden
+    let memoryContext = "";
+    if (userId) {
+      try {
+        const mems = await getMemoriesByUser(userId);
+        if (mems.length > 0) {
+          const grouped: Record<string, string[]> = {};
+          for (const m of mems) {
+            if (!grouped[m.category]) grouped[m.category] = [];
+            grouped[m.category].push(`${m.key}: ${m.value}`);
+          }
+          const lines = Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join("\n")}`).join("\n\n");
+          memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
+        }
+      } catch { /* ignorieren */ }
+    }
+
     const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
 Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 
-KALENDER: Wenn der Nutzer Termine abfragen, erstellen oder löschen möchte, füge am Ende deiner Antwort einen Aktionsblock ein:
-<calendar_action>{"action":"list_events","timeMin":"ISO","timeMax":"ISO"}</calendar_action>
+KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein (kein sichtbarer XML-Block für den Nutzer):
+<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
 <calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
-<calendar_action>{"action":"delete_event","eventId":"abc123"}</calendar_action>
-${calendarContext}` + "`";
+<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel","startDateTime":"ISO","endDateTime":"ISO"}</calendar_action>
+<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
+<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
+<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
+WICHTIG: Wenn du eine eventId brauchst (für update/delete/invite), nutze zuerst get_event um die ID zu finden, dann führe die gewünschte Aktion aus. Zeige dem Nutzer NIE den rohen Aktionsblock.
+
+GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt (Namen, E-Mail, Telefon, Präferenzen, Fakten über Personen oder Projekte), speichere sie mit einem memory_action-Block am Ende deiner Antwort:
+<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
+<memory_action>{"category":"preference","key":"Lieblingsfarbe","value":"Blau"}</memory_action>
+Kategorien: person, contact, preference, project, fact. Speichere NUR wenn der Nutzer explizit eine Information mitteilt. Zeige dem Nutzer NIE den rohen memory_action-Block.
+${calendarContext}${memoryContext}`;
 
     // Nachrichten-History aufbauen
     type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
@@ -316,7 +385,25 @@ ${calendarContext}` + "`";
         }
       }
 
-      // Antwort in DB speichern (ohne calendar_action-Blöcke)
+      // ── memory_action-Blöcke herausfiltern und speichern ─────────────────────
+      const memActionRegex = /<memory_action>([\s\S]*?)<\/memory_action>/g;
+      const memMatches: RegExpExecArray[] = [];
+      let mm: RegExpExecArray | null;
+      while ((mm = memActionRegex.exec(cleanResponse)) !== null) memMatches.push(mm);
+      cleanResponse = cleanResponse.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
+
+      if (memMatches.length > 0 && userId) {
+        for (const match of memMatches) {
+          try {
+            const memData = JSON.parse(match[1].trim()) as { category?: string; key?: string; value?: string };
+            if (memData.key && memData.value) {
+              await upsertMemory(userId, memData.category ?? "fact", memData.key, memData.value, "chat");
+            }
+          } catch { /* ignorieren */ }
+        }
+      }
+
+      // Antwort in DB speichern (ohne action-Blöcke)
       await addMessage({ conversationId, role: "assistant", content: cleanResponse });
 
       // Gesprächstitel generieren (nur beim ersten Austausch)

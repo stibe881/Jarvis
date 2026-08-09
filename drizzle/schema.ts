@@ -110,3 +110,20 @@ export const googleTokens = mysqlTable("google_tokens", {
 
 export type GoogleToken = typeof googleTokens.$inferSelect;
 export type InsertGoogleToken = typeof googleTokens.$inferInsert;
+
+// Jarvis Gedächtnis
+export const memories = mysqlTable("memories", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  category: varchar("category", { length: 64 }).notNull().default("fact"),
+  // Kategorien: person, preference, fact, contact, project, other
+  key: varchar("key", { length: 255 }).notNull(),
+  value: text("value").notNull(),
+  source: varchar("source", { length: 64 }).default("chat"),
+  // source: chat = aus Gespräch gelernt, manual = manuell eingetragen
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Memory = typeof memories.$inferSelect;
+export type InsertMemory = typeof memories.$inferInsert;
