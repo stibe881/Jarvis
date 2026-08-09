@@ -291,8 +291,33 @@ ${calendarContext}` + "`";
     }
 
     if (!finished) {
-      // Antwort in DB speichern
-      await addMessage({ conversationId, role: "assistant", content: fullResponse });
+      // ── calendar_action-Blöcke aus Antwort herausfiltern und ausführen ──────
+      const calActionRegex = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
+      const calMatches: RegExpExecArray[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = calActionRegex.exec(fullResponse)) !== null) calMatches.push(m);
+      let cleanResponse = fullResponse.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
+
+      if (calMatches.length > 0 && userId) {
+        for (const match of calMatches) {
+          try {
+            const actionData = JSON.parse(match[1].trim()) as Record<string, unknown>;
+            const action = actionData.action as string;
+            const result = await executeCalendarAction(userId, action, actionData);
+            // Ergebnis als Extra-Chunk senden
+            const resultText = `\n\n**Kalender:** ${result}`;
+            cleanResponse += resultText;
+            res.write(`data: ${JSON.stringify({ text: resultText })}\n\n`);
+          } catch (e) {
+            const errText = `\n\n**Kalender-Fehler:** ${e instanceof Error ? e.message : String(e)}`;
+            cleanResponse += errText;
+            res.write(`data: ${JSON.stringify({ text: errText })}\n\n`);
+          }
+        }
+      }
+
+      // Antwort in DB speichern (ohne calendar_action-Blöcke)
+      await addMessage({ conversationId, role: "assistant", content: cleanResponse });
 
       // Gesprächstitel generieren (nur beim ersten Austausch)
       if (history.length === 0) {
