@@ -257,101 +257,118 @@ export default function JarvisChat() {
     }
   };
 
-  // Hilfsfunktion: Spracherkennung sauber aufräumen
-  const cleanupRecognition = useCallback(() => {
-    isListeningRef.current = false;
-    if (recognitionRef.current) {
-      // Alle Handler entfernen damit keine alten Events feuern
-      recognitionRef.current.onstart = null;
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onend = null;
-      try { recognitionRef.current.abort(); } catch { /* ignorieren */ }
-      recognitionRef.current = null;
-    }
-    setIsListening(false);
-    setInterimText("");
-  }, []);
-
-  // Web Speech API – direkte Browser-Transkription (kein Upload!)
-  const startListening = useCallback(() => {
+  // Neue Recognition-Instanz erstellen und starten
+  const createAndStartRecognition = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      toast.error("Spracherkennung wird von diesem Browser nicht unterstützt. Bitte Chrome oder Safari verwenden.");
+    if (!SpeechRecognitionAPI) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition: SpeechRecognitionInstance = new SpeechRecognitionAPI();
+    recognition.lang = "de-DE";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      isListeningRef.current = true;
+      setIsListening(true);
+      setInterimText("");
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = 0; i < event.results.length; i++) {
+        if (event.results[i].isFinal) {
+          final += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setInterimText(interim);
+      if (final) {
+        // Finales Ergebnis: State sofort zurücksetzen
+        isListeningRef.current = false;
+        setIsListening(false);
+        setInterimText("");
+        recognitionRef.current = null;
+        // KEIN abort() – recognition endet natürlich
+        sendMessageFromText(final.trim());
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      isListeningRef.current = false;
+      setIsListening(false);
+      setInterimText("");
+      recognitionRef.current = null;
+      if (event.error === "not-allowed") {
+        toast.error("Mikrofon-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben.");
+      } else if (event.error === "no-speech") {
+        // Kein Fehler bei Stille – einfach ignorieren
+      } else if (event.error !== "aborted") {
+        toast.error(`Sprachfehler: ${event.error}`);
+      }
+    };
+
+    recognition.onend = () => {
+      // Immer aufräumen wenn recognition endet
+      isListeningRef.current = false;
+      setIsListening(false);
+      setInterimText("");
+      if (recognitionRef.current === recognition) {
+        recognitionRef.current = null;
+      }
+    };
+
+    recognitionRef.current = recognition;
+    try {
+      recognition.start();
+    } catch {
+      isListeningRef.current = false;
+      setIsListening(false);
+      recognitionRef.current = null;
+    }
+  }, [sendMessageFromText]);
+
+  // Web Speech API – direkte Browser-Transkription
+  const startListening = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    if (!w.SpeechRecognition && !w.webkitSpeechRecognition) {
+      toast.error("Spracherkennung wird von diesem Browser nicht unterstützt.");
       return;
     }
-
-    // Immer zuerst sauber aufräumen (egal ob aktiv oder nicht)
-    cleanupRecognition();
 
     // TTS stoppen während Aufnahme
     window.speechSynthesis?.cancel();
     setIsSpeaking(false);
 
-    // Kurze Pause damit der Browser die alte Instanz freigeben kann
-    setTimeout(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const recognition: SpeechRecognitionInstance = new SpeechRecognitionAPI();
-      recognition.lang = "de-DE";
-      recognition.continuous = false;
-      recognition.interimResults = true;
+    // Falls noch aktiv: stoppen (KEIN abort – stop() lässt onend feuern)
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ignorieren */ }
+      recognitionRef.current = null;
+      isListeningRef.current = false;
+      // Kurze Pause damit onend feuern kann, dann neu starten
+      setTimeout(() => createAndStartRecognition(), 300);
+      return;
+    }
 
-      recognition.onstart = () => {
-        isListeningRef.current = true;
-        setIsListening(true);
-        setInterimText("");
-      };
-
-      recognition.onresult = (event: any) => {
-        let interim = "";
-        let final = "";
-        for (let i = 0; i < event.results.length; i++) {
-          if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript;
-          } else {
-            interim += event.results[i][0].transcript;
-          }
-        }
-        setInterimText(interim);
-        if (final) {
-          setInterimText("");
-          cleanupRecognition();
-          // Automatisch senden
-          sendMessageFromText(final.trim());
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        cleanupRecognition();
-        if (event.error === "not-allowed") {
-          toast.error("Mikrofon-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben.");
-        } else if (event.error !== "aborted" && event.error !== "no-speech") {
-          toast.error(`Sprachfehler: ${event.error}`);
-        }
-      };
-
-      recognition.onend = () => {
-        // Nur aufräumen wenn wir noch aktiv sind (nicht wenn bereits durch onresult beendet)
-        if (recognitionRef.current === recognition) {
-          cleanupRecognition();
-        }
-      };
-
-      recognitionRef.current = recognition;
-      try {
-        recognition.start();
-      } catch (e) {
-        cleanupRecognition();
-        toast.error("Spracherkennung konnte nicht gestartet werden.");
-      }
-    }, 150); // 150ms Pause für Browser-Freigabe
-  }, [sendMessageFromText, cleanupRecognition]);
+    // Direkt starten (keine Pause nötig wenn keine aktive Instanz)
+    createAndStartRecognition();
+  }, [createAndStartRecognition]);
 
   const stopListening = useCallback(() => {
-    cleanupRecognition();
-  }, [cleanupRecognition]);
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch { /* ignorieren */ }
+      recognitionRef.current = null;
+    }
+    isListeningRef.current = false;
+    setIsListening(false);
+    setInterimText("");
+  }, []);
 
   // autoListenRef synchron mit autoListen halten
   useEffect(() => {
