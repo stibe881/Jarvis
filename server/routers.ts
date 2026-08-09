@@ -9,6 +9,7 @@ import { notificationsRouter } from "./routers/notifications";
 import { calendarRouter } from "./routers/calendar";
 import { memoryRouter } from "./routers/memory";
 import { profileRouter } from "./routers/profile";
+import { grossIctRouter } from "./routers/grossIct";
 
 export const appRouter = router({
   system: systemRouter,
@@ -29,6 +30,7 @@ export const appRouter = router({
   calendar: calendarRouter,
   memory: memoryRouter,
   profile: profileRouter,
+  grossIct: grossIctRouter,
 });
 
 export type AppRouter = typeof appRouter;

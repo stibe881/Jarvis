@@ -261,7 +261,12 @@ ${langStr} Präzise, hilfreich und mit einem leicht professionellen Ton – ähn
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
           // Weiter mit dem Rest des System-Prompts (Kalender/Gedächtnis-Aktionen)
-          const fullSystemPrompt = systemPrompt + `
+          const grossIctContext = `
+
+GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
+Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server – für KMU in der Zentralschweiz.
+Wenn Stefan Hilfe zu Gross ICT braucht (Angebote, Texte, Kundenprojekte), kannst du helfen. Verwende immer CHF (nicht €) und Schweizer Schreibweise (ss statt ß).`;
+          const fullSystemPrompt = systemPrompt + grossIctContext + `
 
 KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
 <calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>

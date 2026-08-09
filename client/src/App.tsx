@@ -11,6 +11,7 @@ import JarvisLayout from "./components/JarvisLayout";
 import JarvisCalendar from "./pages/JarvisCalendar";
 import JarvisMemory from "./pages/JarvisMemory";
 import JarvisProfile from "./pages/JarvisProfile";
+import GrossIct from "./pages/GrossIct";
 
 function Router() {
   return (
@@ -23,6 +24,7 @@ function Router() {
       <Route path={"/calendar"} component={JarvisCalendar} />
       <Route path={"/memory"} component={JarvisMemory} />
       <Route path={"/profile"} component={JarvisProfile} />
+      <Route path={"/gross-ict"} component={GrossIct} />
       <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

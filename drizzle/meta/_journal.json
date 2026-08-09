@@ -43,6 +43,13 @@
       "when": 1786300781275,
       "tag": "0005_mighty_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1786303108421,
+      "tag": "0006_rich_terror",
+      "breakpoints": true
     }
   ]
 }

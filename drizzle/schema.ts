@@ -152,3 +152,39 @@ export const userProfiles = mysqlTable("user_profiles", {
 
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+// ── Gross ICT Kundenprojekte ──────────────────────────────────────────────────
+export const grossIctProjects = mysqlTable("gross_ict_projects", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }),
+  customerPhone: varchar("customerPhone", { length: 64 }),
+  projectTitle: varchar("projectTitle", { length: 255 }).notNull(),
+  description: text("description"),
+  service: mysqlEnum("service", ["website", "webapp", "app", "support", "security", "network", "server", "other"]).default("other").notNull(),
+  status: mysqlEnum("status", ["lead", "offer", "active", "completed", "cancelled"]).default("lead").notNull(),
+  budget: int("budget"), // CHF
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GrossIctProject = typeof grossIctProjects.$inferSelect;
+export type InsertGrossIctProject = typeof grossIctProjects.$inferInsert;
+
+// ── Gross ICT Angebote ────────────────────────────────────────────────────────
+export const grossIctQuotes = mysqlTable("gross_ict_quotes", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  projectId: int("projectId"),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(), // Markdown-Angebot
+  totalAmount: int("totalAmount"), // CHF
+  status: mysqlEnum("status", ["draft", "sent", "accepted", "rejected"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type GrossIctQuote = typeof grossIctQuotes.$inferSelect;
+export type InsertGrossIctQuote = typeof grossIctQuotes.$inferInsert;
