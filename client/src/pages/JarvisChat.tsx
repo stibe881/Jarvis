@@ -36,6 +36,8 @@ export default function JarvisChat() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const ttsEnabledRef = useRef(true);
+  const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
+  const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string; name: string; mime: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -60,22 +62,31 @@ export default function JarvisChat() {
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
     if (!ttsEnabledRef.current || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const clean = text.replace(/[#*`_~>[\]]/g, "").replace(/\n+/g, " ").trim().slice(0, 800);
-    if (!clean) return;
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = "de-DE";
-    utterance.rate = 0.95;
-    utterance.pitch = 0.9;
-    const voices = window.speechSynthesis.getVoices();
-    const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google"))
-      || voices.find(v => v.lang.startsWith("de"))
-      || voices.find(v => v.default);
-    if (deVoice) utterance.voice = deVoice;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
+    const doSpeak = () => {
+      window.speechSynthesis.cancel();
+      const clean = text.replace(/[#*`_~>[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
+      if (!clean) return;
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.lang = "de-DE";
+      utterance.rate = 0.95;
+      utterance.pitch = 0.9;
+      const voices = window.speechSynthesis.getVoices();
+      const deVoice = voices.find(v => v.lang.startsWith("de") && !v.name.includes("Google"))
+        || voices.find(v => v.lang.startsWith("de"))
+        || voices.find(v => v.default);
+      if (deVoice) utterance.voice = deVoice;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+      // iOS-Fix: speak in setTimeout(0) damit es auch nach async-Calls funktioniert
+      setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+    };
+    if (ttsUnlockedRef.current) {
+      doSpeak();
+    } else {
+      // Noch nicht entsperrt – Text merken und nach nächster User-Geste sprechen
+      console.warn("[TTS] Noch nicht entsperrt – bitte TTS-Button einmal antippen");
+    }
   }, []);
 
   const toggleTts = useCallback(() => {
@@ -86,9 +97,14 @@ export default function JarvisChat() {
       const next = !ttsEnabled;
       setTtsEnabled(next);
       ttsEnabledRef.current = next;
-      if (next && "speechSynthesis" in window && !voicesLoadedRef.current) {
-        window.speechSynthesis.getVoices();
+      if ("speechSynthesis" in window) {
+        // iOS entsperren: leere Utterance sprechen (User-Gesture-Kontext!)
+        const unlock = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(unlock);
+        ttsUnlockedRef.current = true;
+        setTtsUnlocked(true);
         voicesLoadedRef.current = true;
+        window.speechSynthesis.getVoices();
       }
     }
   }, [ttsEnabled, isSpeaking]);
@@ -369,15 +385,32 @@ export default function JarvisChat() {
               <span className="hidden sm:inline">{searchEnabled ? "Suche AN" : "Suche AUS"}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={isSpeaking ? stopSpeaking : toggleTts}
-              className={cn("gap-1 text-xs px-2", ttsEnabled ? "text-primary" : "text-muted-foreground")} title="Sprachausgabe">
+              className={cn("gap-1 text-xs px-2 border", ttsUnlocked && ttsEnabled ? "text-primary border-primary/30 bg-primary/10" : "text-muted-foreground border-transparent")} title="Sprachausgabe">
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsEnabled ? "TTS AN" : "TTS AUS"}</span>
+              <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsUnlocked && ttsEnabled ? "🔊 AN" : "🔇 AUS"}</span>
             </Button>
           </div>
         </div>
 
         {/* Messages */}
         <ScrollArea className="flex-1 px-3 md:px-6 py-4" ref={scrollRef as React.RefObject<HTMLDivElement>}>
+          {/* TTS-Unlock-Banner */}
+          {!ttsUnlocked && (
+            <div className="mx-auto max-w-sm mb-4 mt-2">
+              <button
+                onClick={toggleTts}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all group"
+              >
+                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/30">
+                  <Volume2 size={16} className="text-primary" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-primary">Sprachausgabe aktivieren</p>
+                  <p className="text-xs text-muted-foreground">Tippe hier damit Jarvis mit dir sprechen kann</p>
+                </div>
+              </button>
+            </div>
+          )}
           {messages.length === 0 && !isListening ? (
             <div className="flex flex-col items-center justify-center h-full gap-6 py-20">
               <JarvisOrb size={80} />
