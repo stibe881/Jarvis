@@ -11,6 +11,7 @@ import { memoryRouter } from "./routers/memory";
 import { profileRouter } from "./routers/profile";
 import { grossIctRouter } from "./routers/grossIct";
 import { sonnenbergRouter } from "./routers/sonnenberg";
+import { appDashboardRouter } from "./routers/appDashboard";
 
 export const appRouter = router({
   system: systemRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   profile: profileRouter,
   grossIct: grossIctRouter,
   sonnenberg: sonnenbergRouter,
+  appDashboard: appDashboardRouter,
 });
 
 export type AppRouter = typeof appRouter;

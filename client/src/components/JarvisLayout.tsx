@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2 } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 
@@ -14,6 +14,7 @@ const navItems = [
   { href: "/memory", label: "Gedächtnis", icon: Brain },
   { href: "/gross-ict", label: "Gross ICT", icon: Briefcase },
   { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
+  { href: "/app", label: "Meine App", icon: LayoutDashboard },
   { href: "/profile", label: "Profil", icon: Settings },
 ];
 

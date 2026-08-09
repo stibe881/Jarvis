@@ -15,6 +15,7 @@ import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscripti
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
+import { executeAppAction } from "./appIntegration";
 import { getMemoriesByUser, upsertMemory, getUserProfile } from "../db";
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
@@ -280,6 +281,22 @@ WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
 GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+
+APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten und Leads.
+Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein:
+<app_action>{"action":"dashboard"}</app_action>
+<app_action>{"action":"list_customers","search":"Muster"}</app_action>
+<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
+<app_action>{"action":"list_tickets","status":"open"}</app_action>
+<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
+<app_action>{"action":"update_ticket_status","id":"123","status":"closed"}</app_action>
+<app_action>{"action":"list_quotes","status":"draft"}</app_action>
+<app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
+<app_action>{"action":"list_overdue_invoices"}</app_action>
+<app_action>{"action":"list_projects","status":"active"}</app_action>
+<app_action>{"action":"list_leads"}</app_action>
+<app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
+WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis.
 ${profileContext}${calendarContext}${memoryContext}`;
 
           // LLM aufrufen mit Profil-Kontext
@@ -361,6 +378,22 @@ WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
 GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+
+APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten und Leads.
+Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein:
+<app_action>{"action":"dashboard"}</app_action>
+<app_action>{"action":"list_customers","search":"Muster"}</app_action>
+<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
+<app_action>{"action":"list_tickets","status":"open"}</app_action>
+<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
+<app_action>{"action":"update_ticket_status","id":"123","status":"closed"}</app_action>
+<app_action>{"action":"list_quotes","status":"draft"}</app_action>
+<app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
+<app_action>{"action":"list_overdue_invoices"}</app_action>
+<app_action>{"action":"list_projects","status":"active"}</app_action>
+<app_action>{"action":"list_leads"}</app_action>
+<app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
+WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis.
 ${calendarContext}${memoryContext}`;
 
       type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
@@ -660,6 +693,26 @@ ${calendarContext}${memoryContext}`;
               await upsertMemory(userId, memData.category ?? "fact", memData.key, memData.value, "chat");
             }
           } catch { /* ignorieren */ }
+        }
+      }
+
+      // ── app_action-Blöcke ausführen und Ergebnis einfügen ─────────────────
+      const appActionRegex = /<app_action>([\s\S]*?)<\/app_action>/g;
+      const appMatches: RegExpExecArray[] = [];
+      let am: RegExpExecArray | null;
+      while ((am = appActionRegex.exec(cleanResponse)) !== null) appMatches.push(am);
+      cleanResponse = cleanResponse.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
+
+      if (appMatches.length > 0) {
+        for (const match of appMatches) {
+          try {
+            const actionData = JSON.parse(match[1].trim()) as { action: string; [key: string]: unknown };
+            const { action, ...params } = actionData;
+            const result = await executeAppAction(action, params);
+            cleanResponse = cleanResponse + "\n\n" + result;
+          } catch (e) {
+            console.error("[AppAction] Fehler:", e);
+          }
         }
       }
 
