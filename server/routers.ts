@@ -12,6 +12,7 @@ import { profileRouter } from "./routers/profile";
 import { grossIctRouter } from "./routers/grossIct";
 import { sonnenbergRouter } from "./routers/sonnenberg";
 import { appDashboardRouter } from "./routers/appDashboard";
+import { elevenLabsRouter } from "./routers/elevenlabs";
 
 export const appRouter = router({
   system: systemRouter,
@@ -35,6 +36,7 @@ export const appRouter = router({
   grossIct: grossIctRouter,
   sonnenberg: sonnenbergRouter,
   appDashboard: appDashboardRouter,
+  elevenlabs: elevenLabsRouter,
 });
 
 export type AppRouter = typeof appRouter;

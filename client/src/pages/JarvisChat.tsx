@@ -54,6 +54,33 @@ export default function JarvisChat() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const startListeningRef = useRef<(() => void) | null>(null); // Ref für Circular-Dep-Vermeidung
 
+  // ── ElevenLabs ────────────────────────────────────────────────────────────
+  const elTtsMutation = trpc.elevenlabs.tts.useMutation();
+  const elSttMutation = trpc.elevenlabs.stt.useMutation();
+  const elAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const playElevenLabsAudio = useCallback((base64: string) => {
+    try {
+      if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      elAudioRef.current = audio;
+      setIsSpeaking(true);
+      audio.onended = () => {
+        setIsSpeaking(false);
+        URL.revokeObjectURL(url);
+        elAudioRef.current = null;
+        if (autoListenRef.current) setTimeout(() => { if (autoListenRef.current) startListeningRef.current?.(); }, 600);
+      };
+      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); elAudioRef.current = null; };
+      audio.play().catch(console.error);
+    } catch (e) { console.error("[ElevenLabs Audio]", e); }
+  }, []);
+
   // Stimmen vorladen
   useEffect(() => {
     if ("speechSynthesis" in window) {
@@ -66,50 +93,24 @@ export default function JarvisChat() {
 
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
-    if (!("speechSynthesis" in window)) return;
-    if (!ttsUnlockedRef.current) {
-      console.warn("[TTS] Noch nicht entsperrt – bitte Sprachausgabe-Banner antippen");
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 600);
+    if (!ttsEnabledRef.current) return;
+    const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 2500);
     if (!clean) return;
-    const utterance = new SpeechSynthesisUtterance(clean);
-    // Sprache und Tonlage werden nach Stimmen-Auswahl unten gesetzt
-    const voices = window.speechSynthesis.getVoices();
-    // Jarvis-Stimme: Deutsch, tiefe männliche Stimme bevorzugt
-    const jarvisVoice =
-      voices.find(v => v.lang === "de-DE" && v.name.toLowerCase().includes("stefan")) ||
-      voices.find(v => v.lang === "de-DE" && v.name.toLowerCase().includes("markus")) ||
-      voices.find(v => v.lang === "de-DE" && !v.name.toLowerCase().includes("anna") && !v.name.toLowerCase().includes("female")) ||
-      voices.find(v => v.lang.startsWith("de")) ||
-      voices.find(v => v.default);
-    if (jarvisVoice) utterance.voice = jarvisVoice;
-    // Deutsch, tiefe Stimme, leicht langsamer
-    utterance.lang = jarvisVoice?.lang || "de-DE";
-    utterance.rate = 0.90;
-    utterance.pitch = 0.80; // tiefer = männlicher Klang
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      // Kontinuierlicher Modus: nach Antwort automatisch wieder zuhören
-      if (autoListenRef.current) {
-        setTimeout(() => {
-          if (autoListenRef.current) startListeningRef.current?.();
-        }, 600); // 600ms Pause nach Antwort
-      }
-    };
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      if (autoListenRef.current) {
-        setTimeout(() => {
-          if (autoListenRef.current) startListeningRef.current?.();
-        }, 600);
-      }
-    };
-    // iOS-Fix: speak in setTimeout(0) damit es auch nach async-Calls funktioniert
-    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
-  }, []);
+    // ElevenLabs TTS bevorzugen
+    elTtsMutation.mutate({ text: clean }, {
+      onSuccess: (data) => playElevenLabsAudio(data.audio),
+      onError: () => {
+        // Fallback: Web Speech API
+        if (!("speechSynthesis" in window) || !ttsUnlockedRef.current) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
+        utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80;
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => { setIsSpeaking(false); if (autoListenRef.current) setTimeout(() => { if (autoListenRef.current) startListeningRef.current?.(); }, 600); };
+        setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+      },
+    });
+  }, [elTtsMutation, playElevenLabsAudio]);
 
   // TTS einmalig entsperren (per User-Gesture)
   const unlockTts = useCallback(() => {

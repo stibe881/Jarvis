@@ -503,6 +503,21 @@ ${calendarContext}${memoryContext}`;
         } catch { /* ignorieren */ }
       }
 
+      // ── app_action-Blöcke ausführen ──────────────────────────────────────
+      const appRx2 = /<app_action>([\s\S]*?)<\/app_action>/g;
+      const appM2: RegExpExecArray[] = [];
+      let ax: RegExpExecArray | null;
+      while ((ax = appRx2.exec(cleanResponse)) !== null) appM2.push(ax);
+      cleanResponse = cleanResponse.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
+      for (const match of appM2) {
+        try {
+          const ad2 = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
+          const { action: appAct, ...appParams } = ad2;
+          const appResult = await executeAppAction(appAct, appParams);
+          cleanResponse = cleanResponse + "\n\n" + appResult;
+        } catch (e) { console.error("[AppAction sendMessage]", e); }
+      }
+
       // Antwort speichern
       await addMessage({ conversationId, role: "assistant", content: cleanResponse });
 
