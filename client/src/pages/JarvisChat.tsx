@@ -29,6 +29,10 @@ type SpeechRecognitionInstance = any;
 export default function JarvisChat() {
   const { data: profile } = trpc.profile.get.useQuery();
   const { user } = useAuth();
+  // Widget-Modus (?widget=1): kompakte Ansicht ohne Gesprächsliste
+  const [isWidget] = useState(() =>
+    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("widget") === "1"
+  );
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -144,6 +148,7 @@ export default function JarvisChat() {
 
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
+  const { data: suggestions } = trpc.chat.suggestions.useQuery();
   const createConvMutation = trpc.chat.createConversation.useMutation({
     onSuccess: (data) => {
       utils.chat.listConversations.invalidate();
@@ -401,7 +406,7 @@ export default function JarvisChat() {
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Mobile Overlay */}
-      {showConvSidebar && (
+      {showConvSidebar && !isWidget && (
         <div className="md:hidden fixed inset-0 z-30 bg-black/60" onClick={() => setShowConvSidebar(false)} />
       )}
 
@@ -410,7 +415,8 @@ export default function JarvisChat() {
         "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
         "md:w-52 md:flex-shrink-0 md:relative md:translate-x-0",
         "fixed top-0 bottom-0 left-0 z-40 w-72",
-        showConvSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0"
+        showConvSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0",
+        isWidget && "hidden"
       )}>
         <div className="p-3 border-b border-border flex items-center gap-2">
           <Button
@@ -451,13 +457,27 @@ export default function JarvisChat() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-border">
-          <button className="md:hidden text-muted-foreground hover:text-primary p-1 flex-shrink-0" onClick={() => setShowConvSidebar(true)}>
-            <MessageSquare size={18} />
-          </button>
-          <JarvisOrb size={28} />
+        <div className={cn("flex items-center gap-2 border-b border-border", isWidget ? "px-3 py-2" : "px-3 md:px-6 py-3")}>
+          {!isWidget && (
+            <button className="md:hidden text-muted-foreground hover:text-primary p-1 flex-shrink-0" onClick={() => setShowConvSidebar(true)}>
+              <MessageSquare size={18} />
+            </button>
+          )}
+          {isWidget ? (
+            <Button
+              onClick={() => { setActiveConvId(null); setMessages([]); createConvMutation.mutate({}); }}
+              size="sm"
+              variant="ghost"
+              className="gap-1 text-primary hover:bg-primary/20 px-2"
+              title="Neues Gespräch"
+            >
+              <Plus size={14} />
+            </Button>
+          ) : (
+            <JarvisOrb size={28} />
+          )}
           <div className="min-w-0">
-            <h2 className="font-jarvis text-sm font-bold text-primary">JARVIS</h2>
+            {!isWidget && <h2 className="font-jarvis text-sm font-bold text-primary">JARVIS</h2>}
             <p className="text-xs text-muted-foreground truncate">
               {isStreaming ? <span className="text-primary animate-pulse">Denkt nach...</span>
                : isListening ? <span className="text-green-400 animate-pulse">Hört zu...</span>
@@ -508,10 +528,15 @@ export default function JarvisChat() {
                 <p className="text-muted-foreground">Wie kann ich dir heute helfen?</p>
               </div>
               <div className="grid grid-cols-2 gap-3 w-full px-4">
-                {["Erkläre mir Quantencomputing", "Schreibe eine E-Mail", "Analysiere diese Datei", "Suche aktuelle Neuigkeiten"].map((s) => (
-                  <button key={s} onClick={() => setInput(s)}
+                {(suggestions ?? [
+                  { label: "Was steht heute an?", promptText: "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung." },
+                  { label: "Offene Rechnungen zeigen", promptText: "Zeige mir alle offenen Rechnungen." },
+                  { label: "Offene Tickets zeigen", promptText: "Welche Tickets sind noch offen?" },
+                  { label: "Termine diese Woche", promptText: "Welche Termine habe ich diese Woche?" },
+                ]).map((s) => (
+                  <button key={s.label} onClick={() => setInput(s.promptText)}
                     className="text-left p-3 rounded-lg jarvis-card text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all">
-                    {s}
+                    {s.label}
                   </button>
                 ))}
               </div>

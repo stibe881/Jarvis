@@ -5,6 +5,22 @@ import { Link, useLocation } from "wouter";
 import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal, FileText, Mic, UserPlus, Plug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
+import { useAppBadge } from "@/hooks/useAppBadge";
+
+/** Widget-Modus: kompakte Ansicht ohne Navigation, aktiviert per ?widget=1 */
+function useWidgetMode() {
+  const [isWidget, setIsWidget] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const params = new URLSearchParams(window.location.search);
+      setIsWidget(params.get("widget") === "1");
+    };
+    check();
+    window.addEventListener("popstate", check);
+    return () => window.removeEventListener("popstate", check);
+  }, []);
+  return isWidget;
+}
 
 // Primäre Bottom-Nav (max 4 + Mehr-Button)
 const primaryNav = [
@@ -37,6 +53,8 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreMenuRef = useRef<HTMLDivElement>(null);
+  const isWidget = useWidgetMode();
+  useAppBadge();
 
   // Mehr-Menü schliessen wenn ausserhalb geklickt
   useEffect(() => {
@@ -85,6 +103,28 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
 
   const isActive = (href: string) =>
     location === href || (href === "/" && (location === "/chat" || location === "/"));
+
+  // ── Widget-Modus: nur Chat, ohne Sidebar und Bottom-Nav ──
+  if (isWidget) {
+    return (
+      <div className="h-screen flex flex-col bg-background overflow-hidden">
+        <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-sidebar flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <JarvisOrb size={22} />
+            <span className="font-jarvis text-sm font-bold text-primary jarvis-glow-text">JARVIS</span>
+          </div>
+          <a
+            href="/"
+            className="text-[10px] text-muted-foreground hover:text-primary tracking-wide"
+            title="Vollansicht öffnen"
+          >
+            VOLLANSICHT
+          </a>
+        </header>
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">{children}</main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">

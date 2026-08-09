@@ -45,19 +45,20 @@
 
 ## Phase 3 – 13 Verbesserungen
 - [x] 1 Onboarding-Wizard beim ersten Start (Profil, Kalender, Sprachausgabe)
-- [ ] 4 PWA mit Benachrichtigungs-Badge (offene Aufgaben + Tickets)
+- [x] 4 PWA mit Benachrichtigungs-Badge (offene Aufgaben + Tickets)
 - [x] 6 Kontextbewusstes Nachfragen bei unklaren Anfragen
 - [x] 7 Proaktive Tagesplanung (Prioritäten-Vorschlag)
 - [x] 8 Lernende Quick-Action-Vorschläge (prompt_stats) – Backend
 - [x] 9 Dokument-Zusammenfassung mit Handlungsempfehlungen
 - [x] 10 E-Mail-Entwurf aus App-Kontext (Mahnung, Angebot, Nachfrage)
 - [x] 14 Dokumenten-Vorlagen mit Platzhaltern und PDF-Export
-- [ ] 16 Desktop-Widget als installierbare PWA im Kompaktmodus
+- [x] 16 Desktop-Widget als installierbare PWA im Kompaktmodus
 - [x] 17 Aufgaben-Delegation mit E-Mail-Entwurf und Frist
 - [x] 18 Sprachnotizen mit Transkription und Kategorisierung
 - [x] 19 Wöchentlicher Bericht (Freitag-Cron) – Handler bereit, Cron nach Deploy
 - [x] 20 Webhook-API für externe Integrationen (API-Keys)
-- [ ] 8b Lernende Vorschläge im Chat-Frontend anzeigen
+- [x] 8b Lernende Vorschläge im Chat-Frontend anzeigen
+- [ ] Wochenbericht-Cron nach Deployment anlegen
 
 ## Phase 4 – Geräte- und Musiksteuerung
 - [ ] Spotify OAuth (Client ID/Secret, Refresh-Token-Speicherung)

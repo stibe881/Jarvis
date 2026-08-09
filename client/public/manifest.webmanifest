@@ -1,0 +1,39 @@
+{
+  "name": "Jarvis – Dein persönlicher KI-Assistent",
+  "short_name": "Jarvis",
+  "description": "Persönlicher KI-Assistent für Termine, Aufgaben, Tickets, Angebote und Rechnungen.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#05080f",
+  "theme_color": "#05080f",
+  "categories": ["productivity", "business", "utilities"],
+  "lang": "de-CH",
+  "icons": [
+    {
+      "src": "/manus-storage/jarvis-icon-512_46b72ed1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/manus-storage/jarvis-icon-512_46b72ed1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/manus-storage/jarvis-icon-512_46b72ed1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "Neues Gespräch", "short_name": "Chat", "url": "/chat" },
+    { "name": "Widget-Modus", "short_name": "Widget", "url": "/?widget=1" },
+    { "name": "Sprachnotiz", "short_name": "Sprachnotiz", "url": "/voice-notes" },
+    { "name": "Aufgaben", "short_name": "Aufgaben", "url": "/tasks" }
+  ]
+}
