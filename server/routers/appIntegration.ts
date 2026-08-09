@@ -150,7 +150,7 @@ export async function getAppDashboard() {
     sbFetch("/customers?select=id&limit=1000"),
     sbFetch("/tickets?status=eq.open&select=id&limit=1000"),
     sbFetch("/quotes?status=eq.draft&select=id&limit=1000"),
-    sbFetch(`/invoices?status=neq.paid&due_date=lt.${new Date().toISOString().split("T")[0]}&select=id,total&limit=1000`),
+    sbFetch(`/invoices?status=in.(open,sent)&select=id,total&limit=1000`),
     sbFetch("/projects?status=eq.active&select=id&limit=1000"),
     sbFetch("/leads?status=eq.new&select=id&limit=1000"),
   ]);

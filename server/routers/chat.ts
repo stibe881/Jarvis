@@ -291,7 +291,7 @@ LESEN:
 <app_action>{"action":"list_customers","search":"Muster"}</app_action>
 <app_action>{"action":"list_tickets","status":"open"}</app_action>
 <app_action>{"action":"list_quotes","status":"draft"}</app_action>
-<app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
+<app_action>{"action":"list_invoices","status":"open"}</app_action>  // offen = open + sent
 <app_action>{"action":"list_overdue_invoices"}</app_action>
 <app_action>{"action":"list_projects","status":"active"}</app_action>
 <app_action>{"action":"list_leads"}</app_action>
@@ -319,6 +319,13 @@ ERSTELLEN:
 <app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
 
 WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
+STATUS-WERTE in der App:
+- Rechnungen: open (offen), sent (gesendet), paid (bezahlt), draft (Entwurf)
+- Offene/unbezahlte Rechnungen = status "open" (der Filter deckt open+sent ab)
+- Tickets: open, in_progress, resolved, closed
+- Angebote: draft, sent, accepted, rejected
+- Projekte: active, completed, on_hold, cancelled
+- Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
 ${profileContext}${calendarContext}${memoryContext}`;
 
@@ -411,7 +418,7 @@ LESEN:
 <app_action>{"action":"list_customers","search":"Muster"}</app_action>
 <app_action>{"action":"list_tickets","status":"open"}</app_action>
 <app_action>{"action":"list_quotes","status":"draft"}</app_action>
-<app_action>{"action":"list_invoices","status":"unpaid"}</app_action>
+<app_action>{"action":"list_invoices","status":"open"}</app_action>  // offen = open + sent
 <app_action>{"action":"list_overdue_invoices"}</app_action>
 <app_action>{"action":"list_projects","status":"active"}</app_action>
 <app_action>{"action":"list_leads"}</app_action>
@@ -439,6 +446,13 @@ ERSTELLEN:
 <app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
 
 WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
+STATUS-WERTE in der App:
+- Rechnungen: open (offen), sent (gesendet), paid (bezahlt), draft (Entwurf)
+- Offene/unbezahlte Rechnungen = status "open" (der Filter deckt open+sent ab)
+- Tickets: open, in_progress, resolved, closed
+- Angebote: draft, sent, accepted, rejected
+- Projekte: active, completed, on_hold, cancelled
+- Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
 ${calendarContext}${memoryContext}`;
 
