@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { User, Briefcase, MapPin, Heart, Brain, MessageSquare, Globe, Save, Loader2, Bot } from "lucide-react";
+import { User, Briefcase, MapPin, Heart, Brain, MessageSquare, Globe, Save, Loader2, Bot, Volume2, Play } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +29,28 @@ export default function JarvisProfile() {
     onError: () => toast.error("Fehler beim Speichern"),
   });
   const utils = trpc.useUtils();
+  const { data: voicesData } = trpc.elevenlabs.voices.useQuery();
+  const ttsMutation = trpc.elevenlabs.tts.useMutation();
+  const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null);
+
+  const previewVoice = (voiceId: string, name: string) => {
+    setPreviewVoiceId(voiceId);
+    ttsMutation.mutate({ text: `Hallo, ich bin ${name}. Wie kann ich Ihnen helfen, Sir?`, voiceId }, {
+      onSuccess: (data) => {
+        try {
+          const binary = atob(data.audio);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: "audio/mpeg" });
+          const url = URL.createObjectURL(blob);
+          const audio = new Audio(url);
+          audio.onended = () => { URL.revokeObjectURL(url); setPreviewVoiceId(null); };
+          audio.play().catch(() => setPreviewVoiceId(null));
+        } catch { setPreviewVoiceId(null); }
+      },
+      onError: () => { setPreviewVoiceId(null); toast.error("Vorschau fehlgeschlagen"); },
+    });
+  };
 
   const [form, setForm] = useState({
     displayName: "",
@@ -41,6 +63,7 @@ export default function JarvisProfile() {
     personalNotes: "",
     jarvisPersonality: "",
     language: "de" as "de" | "en" | "auto",
+    elevenLabsVoiceId: "JBFqnCBsd6RMkjVDRZzb",
   });
 
   useEffect(() => {
@@ -56,6 +79,7 @@ export default function JarvisProfile() {
         personalNotes: profile.personalNotes ?? "",
         jarvisPersonality: profile.jarvisPersonality ?? "",
         language: (profile.language as "de" | "en" | "auto") ?? "de",
+        elevenLabsVoiceId: profile.elevenLabsVoiceId ?? "JBFqnCBsd6RMkjVDRZzb",
       });
     } else if (!isLoading && user) {
       // Standardwerte aus OAuth-Profil
@@ -209,6 +233,50 @@ export default function JarvisProfile() {
             />
             <p className="text-xs text-muted-foreground">Beschreibe in eigenen Worten wie Jarvis sich verhalten soll</p>
           </div>
+        </section>
+
+
+        {/* ElevenLabs Stimmen-Auswahl */}
+        <section className="jarvis-card rounded-xl p-5 space-y-4">
+          <h2 className="font-jarvis text-sm font-bold text-primary flex items-center gap-2">
+            <Volume2 size={14} /> JARVIS-STIMME (ELEVENLABS)
+          </h2>
+          <p className="text-xs text-muted-foreground">Wähle die Stimme mit der Jarvis mit dir spricht. Klicke auf ▶ um eine Vorschau zu hören.</p>
+          {!voicesData || voicesData.length === 0 ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-xs"><Loader2 size={12} className="animate-spin" /> Stimmen werden geladen...</div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+              {voicesData.map((v: { id: string; name: string; gender: string; accent: string; useCase: string }) => (
+                <div
+                  key={v.id}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-all",
+                    form.elevenLabsVoiceId === v.id
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border hover:border-primary/40 text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setForm(f => ({ ...f, elevenLabsVoiceId: v.id }))}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{v.name}</p>
+                    <p className="text-xs opacity-60">{v.accent ?? ""} {v.gender ?? ""} {v.useCase ? `· ${v.useCase}` : ""}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); previewVoice(v.id, v.name); }}
+                    disabled={ttsMutation.isPending}
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-all disabled:opacity-50"
+                    title={`${v.name} anhören`}
+                  >
+                    {previewVoiceId === v.id ? <Loader2 size={12} className="animate-spin text-primary" /> : <Play size={11} className="text-primary ml-0.5" />}
+                  </button>
+                  {form.elevenLabsVoiceId === v.id && (
+                    <span className="text-[10px] font-bold text-primary tracking-wider">AKTIV</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Speichern */}

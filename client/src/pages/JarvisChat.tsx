@@ -27,6 +27,7 @@ type Message = {
 type SpeechRecognitionInstance = any;
 
 export default function JarvisChat() {
+  const { data: profile } = trpc.profile.get.useQuery();
   const { user } = useAuth();
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,7 +98,8 @@ export default function JarvisChat() {
     const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 2500);
     if (!clean) return;
     // ElevenLabs TTS bevorzugen
-    elTtsMutation.mutate({ text: clean }, {
+    const voiceId = profile?.elevenLabsVoiceId ?? undefined;
+    elTtsMutation.mutate({ text: clean, voiceId }, {
       onSuccess: (data) => playElevenLabsAudio(data.audio),
       onError: () => {
         // Fallback: Web Speech API
@@ -227,8 +229,10 @@ export default function JarvisChat() {
 
       // TTS
       if (fullText) speakText(fullText);
-    } catch {
-      toast.error("Fehler beim Senden der Nachricht");
+    } catch (err) {
+      console.error("[sendMessage] Fehler:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Fehler: ${msg.slice(0, 120)}`);
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsStreaming(false);

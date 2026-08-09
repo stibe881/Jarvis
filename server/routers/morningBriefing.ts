@@ -105,6 +105,29 @@ async function getTodayTasks(userId: number): Promise<string[]> {
 }
 
 // Express Handler für den Heartbeat-Cron
+
+async function getWeatherBaar(): Promise<string> {
+  try {
+    // Open-Meteo API – kostenlos, kein API-Key nötig
+    // Baar, Kanton Zug: lat=47.1959, lon=8.5295
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=47.1959&longitude=8.5295&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weather_code&timezone=Europe%2FZurich&forecast_days=1";
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const data = await resp.json() as {
+      current: { temperature_2m: number; apparent_temperature: number; precipitation: number; weather_code: number; wind_speed_10m: number };
+      daily: { temperature_2m_max: number[]; temperature_2m_min: number[]; precipitation_sum: number[]; weather_code: number[] };
+    };
+    const wc = data.current.weather_code;
+    const desc = wc <= 1 ? "☀️ Klar" : wc <= 3 ? "⛅ Bewölkt" : wc <= 49 ? "🌫️ Nebel" : wc <= 67 ? "🌧️ Regen" : wc <= 77 ? "❄️ Schnee" : wc <= 82 ? "🌦️ Schauer" : "⛈️ Gewitter";
+    const t = data.current.temperature_2m.toFixed(1);
+    const tMax = data.daily.temperature_2m_max[0]?.toFixed(1) ?? "?";
+    const tMin = data.daily.temperature_2m_min[0]?.toFixed(1) ?? "?";
+    const wind = data.current.wind_speed_10m.toFixed(0);
+    const rain = data.daily.precipitation_sum[0]?.toFixed(1) ?? "0";
+    return `🌤️ **Wetter Baar:** ${desc}, ${t}°C (Min ${tMin}°C / Max ${tMax}°C), Wind ${wind} km/h${parseFloat(rain) > 0 ? `, Niederschlag ${rain} mm` : ""}`;
+  } catch { return ""; }
+}
+
 export async function handleMorningBriefing(req: Request, res: Response) {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
