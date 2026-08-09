@@ -39,6 +39,7 @@ export default function JarvisChat() {
   const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
   const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
+  const [pendingText, setPendingText] = useState<string | null>(null); // Text warten auf Bestätigung
   const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string; name: string; mime: string } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false);
@@ -265,10 +266,10 @@ export default function JarvisChat() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognition: SpeechRecognitionInstance = new SpeechRecognitionAPI();
-    recognition.lang = "de-DE";
+    recognition.lang = "de-CH"; // Schweizerdeutsch bevorzugt, fällt auf Hochdeutsch zurück
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
+    recognition.maxAlternatives = 3; // Mehr Alternativen für bessere Schweizerdeutsch-Erkennung
 
     recognition.onstart = () => {
       isListeningRef.current = true;
@@ -288,13 +289,13 @@ export default function JarvisChat() {
       }
       setInterimText(interim);
       if (final) {
-        // Finales Ergebnis: State sofort zurücksetzen
+        // Finales Ergebnis: State zurücksetzen und zur Bestätigung anzeigen
         isListeningRef.current = false;
         setIsListening(false);
         setInterimText("");
         recognitionRef.current = null;
-        // KEIN abort() – recognition endet natürlich
-        sendMessageFromText(final.trim());
+        // Kurz anzeigen damit Nutzer korrigieren kann
+        setPendingText(final.trim());
       }
     };
 
@@ -546,6 +547,35 @@ export default function JarvisChat() {
                 <div className="flex gap-3 justify-end">
                   <div className="max-w-[80%] rounded-xl px-4 py-3 text-sm bg-primary/10 border border-primary/20 text-primary/70 italic">
                     {interimText || "Höre zu..."}
+                  </div>
+                </div>
+              )}
+              {/* Bestätigungs-UI: erkannter Text vor dem Senden */}
+              {pendingText && (
+                <div className="flex gap-3 justify-end">
+                  <div className="max-w-[85%] rounded-xl px-4 py-3 text-sm bg-amber-500/10 border border-amber-500/30">
+                    <p className="text-xs text-amber-400 mb-1 font-medium">Erkannt – senden?</p>
+                    <p className="text-foreground">{pendingText}</p>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => { sendMessageFromText(pendingText); setPendingText(null); }}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs font-medium hover:bg-primary/30 transition-all"
+                      >
+                        ✓ Senden
+                      </button>
+                      <button
+                        onClick={() => { setPendingText(null); startListening(); }}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-transparent border border-border text-muted-foreground text-xs hover:border-primary/30 transition-all"
+                      >
+                        ↺ Nochmal
+                      </button>
+                      <button
+                        onClick={() => setPendingText(null)}
+                        className="px-3 py-1.5 rounded-lg bg-transparent border border-border text-muted-foreground text-xs hover:text-destructive hover:border-destructive/30 transition-all"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
