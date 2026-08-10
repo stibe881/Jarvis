@@ -42,6 +42,56 @@ export function isWritingAction(action: string): boolean {
   return WRITING_ACTIONS.includes(action);
 }
 
+/**
+ * Aktionen, die nicht einfach rückgängig zu machen sind und deshalb erst nach
+ * ausdrücklicher Freigabe ausgeführt werden. Sie werden vorgemerkt, Jarvis
+ * fragt nach, und ein "Ja" von Stefan löst die Ausführung aus.
+ */
+const CRITICAL_ACTIONS = [
+  // Geld und Buchhaltung
+  "mark_invoice_paid", "create_invoice",
+  // Nach aussen wirksam
+  "update_quote_status", "invite_attendee", "whatsapp",
+  // Löschen und Verwerfen
+  "delete_event", "update_ticket_status",
+];
+
+export function isCriticalAction(action: string): boolean {
+  return CRITICAL_ACTIONS.includes(action);
+}
+
+/** Eine vorgemerkte Aktion, die auf Freigabe wartet. */
+export type PendingAction = {
+  tag: ActionTag;
+  action: string;
+  payload: Record<string, unknown>;
+  /** Verständliche Beschreibung für die Rückfrage. */
+  description: string;
+};
+
+/** Formuliert eine kurze, verständliche Beschreibung einer kritischen Aktion. */
+export function describeCritical(tag: ActionTag, action: string, payload: Record<string, unknown>): string {
+  const val = (k: string) => (payload[k] === undefined || payload[k] === null ? "" : String(payload[k]));
+  switch (action) {
+    case "mark_invoice_paid":
+      return `Rechnung ${val("id") || val("number") || "(unbekannt)"} als bezahlt markieren`;
+    case "create_invoice":
+      return `Neue Rechnung für Kunde ${val("customer_id") || val("customer") || "(unbekannt)"} erstellen`;
+    case "update_quote_status":
+      return `Angebotsstatus auf «${val("status")}» ändern`;
+    case "invite_attendee":
+      return `${val("email")} zum Termin einladen`;
+    case "whatsapp":
+      return `WhatsApp an ${val("recipient")}: «${val("message").slice(0, 80)}»`;
+    case "delete_event":
+      return `Termin ${val("eventId") || val("summary")} löschen`;
+    case "update_ticket_status":
+      return `Ticket-Status auf «${val("status")}» ändern`;
+    default:
+      return `${tag}/${action}`;
+  }
+}
+
 /** Alle unterstützten Aktionsblöcke mit ihrem XML-Tag. */
 export const ACTION_TAGS = [
   "app_action", "calendar_action", "memory_action",
@@ -288,6 +338,11 @@ export type RunAgentLoopOptions = {
   runAction: (parsed: ParsedAction) => Promise<AgentStep>;
   /** Maximale Anzahl Runden. */
   maxRounds?: number;
+  /**
+   * Wenn true, werden auch kritische Aktionen sofort ausgeführt. Das setzt der
+   * Chat, sobald Stefan eine vorgemerkte Aktion ausdrücklich freigegeben hat.
+   */
+  approved?: boolean;
 };
 
 /**
@@ -298,9 +353,12 @@ export type RunAgentLoopOptions = {
  * Dadurch kann Jarvis fehlende Daten selbst beschaffen: erst den Kunden
  * suchen, dann mit der erhaltenen ID die nächste Aktion ausführen.
  */
-export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{ text: string; steps: AgentStep[]; rounds: number }> {
+export async function runAgentLoop(
+  opts: RunAgentLoopOptions
+): Promise<{ text: string; steps: AgentStep[]; rounds: number; pending: PendingAction[] }> {
   const maxRounds = opts.maxRounds ?? MAX_AGENT_ROUNDS;
   const steps: AgentStep[] = [];
+  const pending: PendingAction[] = [];
   let current = opts.firstResponse;
   let rounds = 0;
 
@@ -311,6 +369,17 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{ text: s
     rounds++;
     const roundSteps: AgentStep[] = [];
     for (const parsed of actions) {
+      const actionName = String(parsed.payload.action ?? parsed.payload.type ?? "");
+      // Kritische Aktionen nur nach ausdrücklicher Freigabe ausführen
+      if (!opts.approved && isCriticalAction(actionName)) {
+        const description = describeCritical(parsed.tag, actionName, parsed.payload);
+        pending.push({ tag: parsed.tag, action: actionName, payload: parsed.payload, description });
+        roundSteps.push({
+          kind: parsed.tag, action: actionName, label: `Freigabe nötig · ${actionName}`,
+          result: `NICHT AUSGEFÜHRT – diese Aktion braucht die ausdrückliche Freigabe von Stefan: ${description}. Frage ihn in einem Satz, ob du sie ausführen darfst, und führe sie erst nach einem klaren Ja aus.`,
+        });
+        continue;
+      }
       const step = await opts.runAction(parsed);
       roundSteps.push(step);
       steps.push(step);
@@ -327,7 +396,13 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{ text: s
     if (round === maxRounds - 1) current = parseActions(current).text;
   }
 
-  return { text: ensureNextStep(current.trim(), steps), steps, rounds };
+  let finalText = ensureNextStep(current.trim(), steps);
+  // Sicherheitsnetz: Fragt Jarvis nicht selbst nach, ergänzen wir die Rückfrage
+  if (pending.length > 0 && !hasNextStep(finalText)) {
+    const list = pending.map((p) => `• ${p.description}`).join("\n");
+    finalText = `${finalText}\n\nDafür brauche ich deine Freigabe:\n${list}\n\nSoll ich das ausführen?`;
+  }
+  return { text: finalText, steps, rounds, pending };
 }
 
 export function formatStepLog(steps: AgentStep[]): string {

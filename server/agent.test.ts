@@ -142,12 +142,12 @@ describe("Mehrstufige Werkzeugnutzung", () => {
     return { kind: parsed.tag, action, result: results[action] ?? "ok", label: `${parsed.tag} · ${action}` };
   };
 
-  it("beschafft fehlende Daten selbst: erst Kunde suchen, dann Rechnung erstellen", async () => {
+  it("beschafft fehlende Daten selbst: erst Kunde suchen, dann Ticket erstellen", async () => {
     const modelAnswers = [
       // Runde 2: nutzt die gefundene ID
-      '<app_action>{"action":"create_invoice","customer_id":"cust-77"}</app_action>',
+      '<app_action>{"action":"create_ticket","customer_id":"cust-77","title":"Drucker defekt"}</app_action>',
       // Runde 3: fertige Antwort
-      "Die Rechnung für Muster AG wurde erstellt. Soll ich sie gleich versenden?",
+      "Das Ticket für Muster AG wurde erstellt. Soll ich es priorisieren?",
     ];
     let call = 0;
     const messages: LoopMessage[] = [{ role: "system", content: "prompt" }];
@@ -157,14 +157,14 @@ describe("Mehrstufige Werkzeugnutzung", () => {
       messages,
       runAction: fakeRunner({
         list_customers: "Muster AG (id: cust-77)",
-        create_invoice: "Rechnung R-2026-014 erstellt",
+        create_ticket: "Ticket T-118 erstellt",
       }),
       callModel: async () => modelAnswers[call++],
     });
 
     expect(result.rounds).toBe(2);
-    expect(result.steps.map((s) => s.action)).toEqual(["list_customers", "create_invoice"]);
-    expect(result.text).toContain("Rechnung für Muster AG");
+    expect(result.steps.map((s) => s.action)).toEqual(["list_customers", "create_ticket"]);
+    expect(result.text).toContain("Ticket für Muster AG");
     // Die Kunden-ID wurde nie beim Nutzer erfragt, sondern selbst beschafft
     expect(result.text).not.toContain("welche ID");
   });

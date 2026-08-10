@@ -83,4 +83,4 @@
 - [x] Jarvis beschafft fehlende Daten selbstständig statt nachzufragen
 - [x] Proaktive Handlungsvorschläge nach jeder Antwort (erzwungen via ensureNextStep + Tests)
 - [x] Ausgeführte Schritte im Chat sichtbar machen (Aktionsprotokoll)
-- [ ] Bestätigung bei kritischen Aktionen (Rechnung bezahlt, Löschen, Versand)
+- [x] Bestätigung bei kritischen Aktionen (Rechnung bezahlt/erstellt, Termin löschen, Einladung, WhatsApp, Status-Änderungen) – werden vorgemerkt und erst nach klarem «Ja» ausgeführt

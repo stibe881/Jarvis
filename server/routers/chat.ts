@@ -18,6 +18,7 @@ import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
 import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
 import { runAgentLoop, executeAction, formatStepLog, type LoopMessage } from "../agent";
+import { rememberPending, takePending, isApproval, isRejection, hasPending, clearPending } from "../pendingApproval";
 
 // ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
 const INTENT_RULES: Array<{ intent: string; label: string; test: RegExp }> = [
@@ -256,6 +257,34 @@ export const chatRouter = router({
       // Benutzer-Nachricht speichern
       await addMessage({ conversationId, role: "user", content: message, fileUrl: fileUrl ?? null, fileName: fileName ?? null });
 
+      // ── Freigabe für kritische Aktionen prüfen ──────────────────────────
+      // Kritische Aktionen werden vorgemerkt. Sagt Stefan "Ja", führen wir sie
+      // hier direkt aus – deterministisch, ohne das Modell erneut zu fragen.
+      // Sagt er "Nein", verwerfen wir sie. Bei allen anderen Nachrichten
+      // (z.B. Rückfragen) bleibt die Vormerkung erhalten.
+      const wasPending = hasPending(conversationId);
+      const approvedNow = wasPending && isApproval(message);
+      const rejectedNow = wasPending && !approvedNow && isRejection(message);
+      if (rejectedNow) clearPending(conversationId);
+
+      let approvalContext = "";
+      if (approvedNow) {
+        const approvedActions = takePending(conversationId);
+        const executed: string[] = [];
+        for (const p of approvedActions) {
+          const step = await executeAction(
+            { userId, runCalendar: executeCalendarAction },
+            { tag: p.tag, payload: p.payload }
+          );
+          executed.push(`- ${p.description}: ${step.result}`);
+        }
+        approvalContext = executed.length > 0
+          ? `\n\nFREIGEGEBEN UND BEREITS AUSGEFÜHRT: Stefan hat zugestimmt, die folgenden Aktionen wurden gerade ausgeführt. Bestätige das kurz mit den echten Ergebnissen und führe sie NICHT erneut aus:\n${executed.join("\n")}`
+          : "";
+      } else if (rejectedNow) {
+        approvalContext = "\n\nABGELEHNT: Stefan hat die vorgemerkte Aktion abgelehnt. Bestätige kurz, dass du sie nicht ausgeführt hast, und frage nach der gewünschten Alternative.";
+      }
+
       // Intent für lernende Vorschläge erfassen
       try {
         const detected = detectIntent(message);
@@ -364,6 +393,16 @@ Daraus folgt:
 - ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
   Stefans Nachricht stammen.
 - Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
+
+BESTÄTIGUNG BEI KRITISCHEN AKTIONEN:
+Folgende Aktionen werden NICHT sofort ausgeführt, sondern erst nach Stefans ausdrücklicher Zustimmung:
+Rechnung als bezahlt markieren, Rechnung erstellen, Angebotsstatus ändern, Ticket-Status ändern,
+Termin löschen, jemanden zu einem Termin einladen, WhatsApp-Nachricht senden.
+Wenn du so eine Aktion für nötig hältst, nutze den Aktionsblock trotzdem – das System merkt sie vor
+und meldet dir "NICHT AUSGEFÜHRT". Frage Stefan dann in EINEM Satz konkret nach der Freigabe und nenne
+dabei die betroffenen Daten (Rechnungsnummer, Kunde, Betrag, Empfänger). Sagt er "Ja", wird die Aktion
+im nächsten Zug ausgeführt. Alles Lesende und harmlos Schreibende (Notizen, Aufgaben, Kommentare,
+Kunden/Leads/Projekte anlegen, Musik) führst du ohne Rückfrage aus.
 
 PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
 
@@ -487,7 +526,7 @@ Diese Befehle landen in einer Warteschlange, die sein iPhone abholt. Füge GENAU
 <device_action>{"type":"timer","minutes":15,"label":"Pause"}</device_action>
 <device_action>{"type":"reminder","message":"Rechnung Muster AG prüfen","time":"14:00"}</device_action>
 Wenn Angaben fehlen (Empfänger, Text, Uhrzeit), frage zuerst nach. Zeige NIE den rohen device_action-Block.
-${profileContext}${calendarContext}${memoryContext}`;
+${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
 
           // LLM aufrufen mit Profil-Kontext
           type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
@@ -530,8 +569,10 @@ ${profileContext}${calendarContext}${memoryContext}`;
               const next = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: msgs as any });
               return (next.choices[0]?.message?.content as string) ?? "";
             },
+            // Hat Stefan im vorherigen Zug zugestimmt, dürfen kritische Aktionen laufen
           });
           fullResponse2 = loopP.text + formatStepLog(loopP.steps);
+          rememberPending(conversationId, loopP.pending);
           const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
           if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
           await addMessage({ conversationId, role: "assistant", content: fullResponse2 });
@@ -565,6 +606,16 @@ Daraus folgt:
 - ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
   Stefans Nachricht stammen.
 - Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
+
+BESTÄTIGUNG BEI KRITISCHEN AKTIONEN:
+Folgende Aktionen werden NICHT sofort ausgeführt, sondern erst nach Stefans ausdrücklicher Zustimmung:
+Rechnung als bezahlt markieren, Rechnung erstellen, Angebotsstatus ändern, Ticket-Status ändern,
+Termin löschen, jemanden zu einem Termin einladen, WhatsApp-Nachricht senden.
+Wenn du so eine Aktion für nötig hältst, nutze den Aktionsblock trotzdem – das System merkt sie vor
+und meldet dir "NICHT AUSGEFÜHRT". Frage Stefan dann in EINEM Satz konkret nach der Freigabe und nenne
+dabei die betroffenen Daten (Rechnungsnummer, Kunde, Betrag, Empfänger). Sagt er "Ja", wird die Aktion
+im nächsten Zug ausgeführt. Alles Lesende und harmlos Schreibende (Notizen, Aufgaben, Kommentare,
+Kunden/Leads/Projekte anlegen, Musik) führst du ohne Rückfrage aus.
 
 PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
 
@@ -678,7 +729,7 @@ IPHONE (Kurzbefehle): Für WhatsApp-Nachrichten, Wecker und Timer GENAU EINEN de
 <device_action>{"type":"alarm","time":"06:30","label":"Aufstehen"}</device_action>
 <device_action>{"type":"timer","minutes":15}</device_action>
 Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
-${calendarContext}${memoryContext}`;
+${calendarContext}${memoryContext}${approvalContext}`;
 
       type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
       const llmMessages: LLMMessage[] = [
@@ -725,6 +776,7 @@ ${calendarContext}${memoryContext}`;
         },
       });
       let cleanResponse = loopFb.text + formatStepLog(loopFb.steps);
+      rememberPending(conversationId, loopFb.pending);
 
 
       // Antwort speichern
