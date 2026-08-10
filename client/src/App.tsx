@@ -18,6 +18,7 @@ import JarvisTemplates from "./pages/JarvisTemplates";
 import JarvisVoiceNotes from "./pages/JarvisVoiceNotes";
 import JarvisDelegation from "./pages/JarvisDelegation";
 import JarvisIntegrations from "./pages/JarvisIntegrations";
+import JarvisShortcuts from "./pages/JarvisShortcuts";
 import OnboardingWizard from "./components/OnboardingWizard";
 
 function Router() {
@@ -39,6 +40,7 @@ function Router() {
       <Route path={"/voice-notes"} component={JarvisVoiceNotes} />
       <Route path={"/delegation"} component={JarvisDelegation} />
       <Route path={"/integrations"} component={JarvisIntegrations} />
+      <Route path={"/shortcuts"} component={JarvisShortcuts} />
       <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>

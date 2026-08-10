@@ -2,7 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal, FileText, Mic, UserPlus, Plug } from "lucide-react";
+import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal, FileText, Mic, UserPlus, Plug, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import { useAppBadge } from "@/hooks/useAppBadge";
@@ -44,6 +44,7 @@ const navItems = [
   { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
   { href: "/app", label: "Meine App", icon: LayoutDashboard },
   { href: "/integrations", label: "Verbindungen", icon: Plug },
+  { href: "/shortcuts", label: "iPhone-Setup", icon: Smartphone },
   { href: "/profile", label: "Profil", icon: Settings },
 ];
 

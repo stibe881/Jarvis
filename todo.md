@@ -67,4 +67,4 @@
 - [x] iPhone-Anbindung über Kurzbefehle: Befehls-Queue-Endpoint
 - [x] WhatsApp-Nachricht senden über Kurzbefehl-Automation
 - [x] Wecker/Timer stellen über Kurzbefehl-Automation
-- [ ] Einrichtungsanleitung für iOS-Kurzbefehle
+- [x] Einrichtungsanleitung für iOS-Kurzbefehle (Seite /shortcuts mit Schritt-für-Schritt-Anleitung)

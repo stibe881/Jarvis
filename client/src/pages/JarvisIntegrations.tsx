@@ -196,9 +196,11 @@ export default function JarvisIntegrations() {
         </div>
         <p className="text-xs text-muted-foreground">
           Jarvis legt Befehle wie WhatsApp-Nachrichten, Wecker oder Timer in eine Warteschlange.
-          Ein Kurzbefehl auf dem iPhone holt sie ab und führt sie aus. Die Einrichtung ist in der
-          Anleitung beschrieben, die du im Chat erhalten hast.
+          Ein Kurzbefehl auf dem iPhone holt sie ab und führt sie aus.
         </p>
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => { window.location.href = "/shortcuts"; }}>
+          <Smartphone size={13} /> Schritt-für-Schritt-Anleitung öffnen
+        </Button>
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Abruf-URL (GET, mit API-Schlüssel)</p>
           <div className="flex gap-2">
