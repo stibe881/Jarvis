@@ -18,6 +18,7 @@ import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
 import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
 import { runAgentLoop, executeAction, formatStepLog, type LoopMessage } from "../agent";
+import { JARVIS_PERSONA } from "../persona";
 import { rememberPending, takePending, isApproval, isRejection, hasPending, clearPending } from "../pendingApproval";
 
 // ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
@@ -335,8 +336,11 @@ ${parts.join("\n")}`;
           const addressStr = addressForm === "sir" ? "Spreche den Nutzer mit 'Sir' an" : addressForm === "du" ? `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an` : `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an`;
           const personalityStr = profile.jarvisPersonality ? `\n\nPersönlichkeit: ${profile.jarvisPersonality}` : "";
           const langStr = profile.language === "en" ? "Antworte auf Englisch." : profile.language === "auto" ? "Antworte in der Sprache des Nutzers." : "Antworte auf Deutsch.";
-          const systemPrompt = `Du bist ${jarvisName}, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent. ${addressStr}.
-${langStr} Präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
+          const systemPrompt = `Du bist ${jarvisName}, der persönliche Assistent von Stefan Gross. ${addressStr}.
+${langStr}
+
+${JARVIS_PERSONA}
+
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
           // Weiter mit dem Rest des System-Prompts (Kalender/Gedächtnis-Aktionen)
@@ -583,8 +587,10 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
       }
 
       // Fallback ohne Profil
-      const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
-Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
+      const systemPrompt = `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
+
+${JARVIS_PERSONA}
+
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 
@@ -852,8 +858,10 @@ export async function handleChatStream(req: Request, res: Response) {
       } catch { /* ignorieren */ }
     }
 
-    const systemPrompt = `Du bist Jarvis, ein hochintelligenter, freundlicher und äußerst kompetenter persönlicher KI-Assistent.
-Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht professionellen Ton – ähnlich wie der Jarvis aus Iron Man.
+    const systemPrompt = `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
+
+${JARVIS_PERSONA}
+
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 

@@ -162,23 +162,27 @@ export async function handleMorningBriefing(req: Request, res: Response) {
       timeZone: "Europe/Zurich",
     });
 
-    let body = `Guten Morgen, ${ownerName}! Hier ist deine Zusammenfassung für heute, ${today}:\n\n`;
+    // Anrede im Jarvis-Ton (kultiviert, britisch, «Sir»)
+    let body = `Guten Morgen, Sir. Ihre Lagebeurteilung für ${today}:\n\n`;
 
     if (events.length > 0) {
-      body += `📅 **Heutige Termine (${events.length}):**\n${events.map(e => `• ${e}`).join("\n")}\n\n`;
+      const kommentar = events.length >= 6
+        ? "Ein durchaus ambitionierter Tagesplan."
+        : events.length >= 4 ? "Gut gefüllt, aber beherrschbar." : "";
+      body += `📅 **Termine heute (${events.length}):** ${kommentar}\n${events.map(e => `• ${e}`).join("\n")}\n\n`;
     } else {
-      body += `📅 Heute keine Termine.\n\n`;
+      body += `📅 Keine Termine heute, Sir. Eine Seltenheit, die man nutzen sollte.\n\n`;
     }
 
     if (todayTasks.length > 0) {
       body += `✅ **Offene Aufgaben (${todayTasks.length}):**\n${todayTasks.map(t => `• ${t}`).join("\n")}`;
     } else {
-      body += `✅ Keine offenen Aufgaben für heute.`;
+      body += `✅ Keine offenen Aufgaben für heute. Meinen Aufzeichnungen zufolge ein tadelloser Zustand.`;
     }
 
     // Benachrichtigung senden
     await notifyOwner({
-      title: `☀️ Jarvis Morgen-Briefing – ${today}`,
+      title: `☀️ Morgen-Briefing, Sir – ${today}`,
       content: body,
     });
 

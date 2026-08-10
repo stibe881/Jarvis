@@ -24,6 +24,8 @@ export const elevenLabsRouter = router({
       voiceId: z.string().optional(),
       /** false = vollständigen Text sprechen (z.B. Stimmen-Vorschau) */
       shorten: z.boolean().default(true),
+      /** true = schnelles Turbo-Modell (kürzere Wartezeit bis zum ersten Ton) */
+      fast: z.boolean().default(true),
     }))
     .mutation(async ({ ctx, input }) => {
       const voiceId = input.voiceId ?? JARVIS_VOICE_ID;

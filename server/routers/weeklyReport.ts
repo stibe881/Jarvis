@@ -5,6 +5,7 @@ import { tasks, users, notes, voiceNotes, delegations } from "../../drizzle/sche
 import { and, eq, gte } from "drizzle-orm";
 import { notifyOwner } from "../_core/notification";
 import { invokeLLM } from "../_core/llm";
+import { JARVIS_PERSONA_SHORT } from "../persona";
 import { executeAppAction } from "./appIntegration";
 
 /**
@@ -90,7 +91,9 @@ Struktur:
 3. "Offen und dringend" – was nächste Woche Priorität hat
 4. "Empfehlung" – zwei bis drei konkrete Vorschläge für nächste Woche
 
-Maximal 250 Wörter, sachlich und motivierend, keine erfundenen Zahlen. Nutze nur die folgenden Fakten:
+${JARVIS_PERSONA_SHORT}
+
+Maximal 250 Wörter, keine erfundenen Zahlen. Nutze nur die folgenden Fakten:
 
 ${facts}`;
       const resp = await invokeLLM({

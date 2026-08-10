@@ -298,14 +298,70 @@ function JarvisChatInner() {
     }
   }, []);
 
+  // Verbrauchsabfrage per Ref, da die Abfrage weiter unten deklariert wird.
+  const refetchUsageRef = useRef<(() => void) | null>(null);
+
+  // Ausweichweg (tRPC-Mutation) per Ref, damit speakText ihn nutzen kann,
+  // ohne dass eine Abhängigkeitsschleife entsteht.
+  const speakViaMutationRef = useRef<((clean: string, voiceId: string | undefined) => void) | null>(null);
+
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
     if (!ttsEnabledRef.current) return;
     // Nur grob vorreinigen – das Server-Modul kürzt satzweise und rechnet das Budget ab
     const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/\n+/g, " ").trim().slice(0, 2500);
     if (!clean) return;
-    // ElevenLabs TTS bevorzugen
     const voiceId = profile?.elevenLabsVoiceId ?? undefined;
+
+    // Schnellster Weg: das Audio-Element lädt direkt von der Stream-Adresse.
+    // Der Browser beginnt zu spielen, sobald genug Daten da sind – die Datei
+    // muss nicht erst vollständig geladen werden. Vorher wurde die komplette
+    // MP3 erzeugt, base64-kodiert und übertragen (gemessen rund 4 Sekunden).
+    const el = getAudioEl();
+    const finish = () => { setIsSpeaking(false); elAudioRef.current = null; resumeListeningAfterSpeech(); };
+    try { el.pause(); } catch { /* ignorieren */ }
+    el.onended = finish;
+    el.onerror = null;
+    el.muted = false;
+    elAudioRef.current = el;
+    setIsSpeaking(true);
+
+    void (async () => {
+      try {
+        // Adresse mit Text als Abfrageparameter: dadurch kann das
+        // Audio-Element selbst laden und fortschreitend abspielen.
+        const params = new URLSearchParams({ text: clean, shorten: "true" });
+        if (voiceId) params.set("voiceId", voiceId);
+        const streamUrl = `/api/tts/stream?${params.toString()}`;
+
+        let fehlerBehandelt = false;
+        const beiFehler = () => {
+          if (fehlerBehandelt) return;
+          fehlerBehandelt = true;
+          console.warn("[TTS-Stream] Wiedergabe fehlgeschlagen, nutze Ausweichweg");
+          finish();
+          speakViaMutationRef.current?.(clean, voiceId);
+        };
+
+        el.src = streamUrl;
+        el.onended = finish;
+        el.onerror = beiFehler;
+        await el.play();
+        audioUnlockedRef.current = true;
+        // Verbrauchsanzeige nachziehen: der Server hat die Zeichen gebucht.
+        // Kopfzeilen sind bei `audio.src` nicht lesbar, daher kurz nachfragen.
+        setTimeout(() => { refetchUsageRef.current?.(); }, 900);
+      } catch (e) {
+        console.error("[TTS-Stream]", e);
+        finish();
+        // Ausweichweg: klassischer Weg über tRPC (erzeugt komplette Datei)
+        speakViaMutationRef.current?.(clean, voiceId);
+      }
+    })();
+  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId]);
+
+  /** Ausweichweg über die tRPC-Mutation (langsamer, aber robust). */
+  const speakViaMutation = useCallback((clean: string, voiceId: string | undefined) => {
     elTtsMutation.mutate({ text: clean, voiceId, shorten: true }, {
       onSuccess: (data) => {
         playElevenLabsAudio(data.audio);
@@ -338,6 +394,11 @@ function JarvisChatInner() {
     });
   }, [elTtsMutation, playElevenLabsAudio, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId]);
 
+  // Ausweichweg per Ref bereitstellen (wird in speakText genutzt)
+  useEffect(() => {
+    speakViaMutationRef.current = speakViaMutation;
+  });
+
   // TTS einmalig entsperren (per User-Gesture)
   const unlockTts = useCallback(async () => {
     // Wichtigster Teil: das HTML-Audio-Element freigeben, damit ElevenLabs
@@ -355,12 +416,9 @@ function JarvisChatInner() {
     ttsEnabledRef.current = true;
     setTtsUnlocked(true);
     setTtsEnabled(true);
-    // Kurze Probeansage, damit Stefan sofort hört, dass es funktioniert
-    elTtsMutation.mutate({ text: "Sprachausgabe aktiv. Ich bin bereit.", voiceId: profile?.elevenLabsVoiceId ?? undefined, shorten: false }, {
-      onSuccess: (data) => { playElevenLabsAudio(data.audio); if (data.usage) setTtsUsage(data.usage); },
-      onError: (err) => { console.error("[Probeansage]", err); toast.success("Sprachausgabe aktiviert."); },
-    });
-  }, [unlockAudio, elTtsMutation, playElevenLabsAudio, profile?.elevenLabsVoiceId]);
+    // Kurze Probeansage im Jarvis-Ton, damit sofort hörbar ist, dass es klappt
+    speakText("Sehr wohl, Sir. Systeme bereit, ich stehe zu Ihrer Verfügung.");
+  }, [unlockAudio, speakText]);
 
   const toggleTts = useCallback(() => {
     if (!ttsUnlockedRef.current) {
@@ -401,7 +459,8 @@ function JarvisChatInner() {
   );
 
   // Zeichen-Budget der Sprachausgabe laden
-  const { data: usageData } = trpc.elevenlabs.usage.useQuery();
+  const { data: usageData, refetch: refetchUsage } = trpc.elevenlabs.usage.useQuery();
+  useEffect(() => { refetchUsageRef.current = () => { void refetchUsage(); }; }, [refetchUsage]);
   useEffect(() => {
     if (usageData) setTtsUsage(usageData);
   }, [usageData]);
@@ -471,6 +530,11 @@ function JarvisChatInner() {
       const fullText = result.response;
       utils.chat.listConversations.invalidate();
 
+      // Sprachausgabe SOFORT anstossen – parallel zum Einblenden des Textes.
+      // Vorher wurde erst der ganze Text eingeblendet und danach die Tondatei
+      // erzeugt; dadurch entstand eine spürbare Pause bis zum Sprechen.
+      if (fullText) speakText(fullText);
+
       // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
       // Abbrechbar, damit eine neue Anfrage nicht warten muss.
       const runId = ++streamRunIdRef.current;
@@ -496,9 +560,6 @@ function JarvisChatInner() {
         updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
         return updated;
       });
-
-      // TTS
-      if (fullText) speakText(fullText);
     } catch (err) {
       console.error("[sendMessage] Fehler:", err);
       const msg = err instanceof Error ? err.message : String(err);

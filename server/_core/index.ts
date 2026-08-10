@@ -15,6 +15,7 @@ import { handleWeeklyReport } from "../routers/weeklyReport";
 import { handleJarvisWebhook } from "../routers/webhookEndpoint";
 import { handleSpotifyOAuthCallback } from "../routers/spotify";
 import { handleDeviceCommandsFetch, handleDeviceCommandDone } from "../routers/deviceEndpoint";
+import { handleTtsStream } from "../routers/ttsStream";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -59,6 +60,25 @@ async function startServer() {
   };
   app.post("/api/chat/stream", streamHandler);
   app.post("/api/stream", streamHandler);
+  // Gestreamte Sprachausgabe: das Audio beginnt zu spielen, während es noch lädt
+  app.post("/api/tts/stream", async (req: express.Request, res: express.Response) => {
+    const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
+    if (!ctx.user) {
+      res.status(401).json({ error: "Nicht authentifiziert" });
+      return;
+    }
+    await handleTtsStream(req, res, ctx.user.id);
+  });
+  // Gleiche Funktion als GET: erlaubt `audio.src = "/api/tts/stream?text=…"`,
+  // damit der Browser die Wiedergabe startet, bevor alles geladen ist.
+  app.get("/api/tts/stream", async (req: express.Request, res: express.Response) => {
+    const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
+    if (!ctx.user) {
+      res.status(401).json({ error: "Nicht authentifiziert" });
+      return;
+    }
+    await handleTtsStream(req, res, ctx.user.id);
+  });
   // Heartbeat-Cron: Tägliche Morgen-Zusammenfassung
   app.post("/api/scheduled/morning-briefing", handleMorningBriefing);
   // Heartbeat-Cron: Wöchentlicher Bericht (Freitag)
