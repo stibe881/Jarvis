@@ -11,126 +11,314 @@ import {
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { storagePut } from "../storage";
-import { transcribeAudio, type WhisperResponse } from "../_core/voiceTranscription";
+import {
+  transcribeAudio,
+  type WhisperResponse,
+} from "../_core/voiceTranscription";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
-import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
+import {
+  getMemoriesByUser,
+  upsertMemory,
+  getUserProfile,
+  trackPrompt,
+  getTopPrompts,
+} from "../db";
 import { removeInternalTags } from "../cleanResponse";
-import { runAgentLoop, executeAction, formatStepLog, type LoopMessage } from "../agent";
+import {
+  runAgentLoop,
+  executeAction,
+  formatStepLog,
+  type LoopMessage,
+} from "../agent";
 import { JARVIS_PERSONA } from "../persona";
-import { rememberPending, takePending, isApproval, isRejection, hasPending, clearPending } from "../pendingApproval";
+import { CORE_AGENT_INSTRUCTIONS } from "./chatPrompt";
+import { fetchWithTimeout } from "../_core/http";
+import {
+  rememberPending,
+  takePending,
+  isApproval,
+  isRejection,
+  hasPending,
+  clearPending,
+} from "../pendingApproval";
 
 // ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
 const INTENT_RULES: Array<{ intent: string; label: string; test: RegExp }> = [
-  { intent: "offene_rechnungen", label: "Offene Rechnungen zeigen", test: /(offen|unbezahlt|ausstehend).{0,20}rechnung|rechnung.{0,20}(offen|unbezahlt)/i },
-  { intent: "ueberfaellige_rechnungen", label: "Überfällige Rechnungen zeigen", test: /überfällig|mahnung|verzug/i },
-  { intent: "tagesplanung", label: "Was steht heute an?", test: /(was steht|wie sieht).{0,20}(heute|tag)|tagesplan|prioritäten|was soll ich (zuerst|heute)/i },
-  { intent: "termine_heute", label: "Termine heute", test: /termin.{0,20}(heute|morgen)|(heute|morgen).{0,20}termin|kalender.{0,15}(heute|morgen)/i },
+  {
+    intent: "offene_rechnungen",
+    label: "Offene Rechnungen zeigen",
+    test: /(offen|unbezahlt|ausstehend).{0,20}rechnung|rechnung.{0,20}(offen|unbezahlt)/i,
+  },
+  {
+    intent: "ueberfaellige_rechnungen",
+    label: "Überfällige Rechnungen zeigen",
+    test: /überfällig|mahnung|verzug/i,
+  },
+  {
+    intent: "tagesplanung",
+    label: "Was steht heute an?",
+    test: /(was steht|wie sieht).{0,20}(heute|tag)|tagesplan|prioritäten|was soll ich (zuerst|heute)/i,
+  },
+  {
+    intent: "termine_heute",
+    label: "Termine heute",
+    test: /termin.{0,20}(heute|morgen)|(heute|morgen).{0,20}termin|kalender.{0,15}(heute|morgen)/i,
+  },
   { intent: "offene_tickets", label: "Offene Tickets zeigen", test: /ticket/i },
-  { intent: "kunden_suche", label: "Kunde suchen", test: /kunde|kundin|kunden/i },
-  { intent: "angebot_erstellen", label: "Angebot erstellen", test: /angebot.{0,20}(erstell|schreib|mach)|erstell.{0,15}angebot/i },
-  { intent: "aufgaben_offen", label: "Offene Aufgaben zeigen", test: /aufgabe|pendenz|todo|to-do/i },
+  {
+    intent: "kunden_suche",
+    label: "Kunde suchen",
+    test: /kunde|kundin|kunden/i,
+  },
+  {
+    intent: "angebot_erstellen",
+    label: "Angebot erstellen",
+    test: /angebot.{0,20}(erstell|schreib|mach)|erstell.{0,15}angebot/i,
+  },
+  {
+    intent: "aufgaben_offen",
+    label: "Offene Aufgaben zeigen",
+    test: /aufgabe|pendenz|todo|to-do/i,
+  },
   { intent: "wetter", label: "Wetter in Baar", test: /wetter/i },
-  { intent: "email_entwurf", label: "E-Mail entwerfen", test: /(e-?mail|mail).{0,25}(schreib|entwurf|formulier)|schreib.{0,15}(e-?mail|mail)/i },
-  { intent: "dashboard", label: "App-Übersicht zeigen", test: /dashboard|übersicht|umsatz|kennzahl/i },
+  {
+    intent: "email_entwurf",
+    label: "E-Mail entwerfen",
+    test: /(e-?mail|mail).{0,25}(schreib|entwurf|formulier)|schreib.{0,15}(e-?mail|mail)/i,
+  },
+  {
+    intent: "dashboard",
+    label: "App-Übersicht zeigen",
+    test: /dashboard|übersicht|umsatz|kennzahl/i,
+  },
   { intent: "projekte", label: "Projekte zeigen", test: /projekt/i },
 ];
 
-function detectIntent(message: string): { intent: string; label: string } | null {
+function detectIntent(
+  message: string
+): { intent: string; label: string } | null {
   for (const rule of INTENT_RULES) {
-    if (rule.test.test(message)) return { intent: rule.intent, label: rule.label };
+    if (rule.test.test(message))
+      return { intent: rule.intent, label: rule.label };
   }
   return null;
 }
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
-async function executeCalendarAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
+async function executeCalendarAction(
+  userId: number,
+  action: string,
+  params: Record<string, unknown>
+): Promise<string> {
   try {
     const token = await getGoogleToken(userId);
     if (!token) return "Google Kalender ist nicht verbunden.";
     let accessToken = token.accessToken;
-    if (token.expiresAt <= Math.floor(Date.now() / 1000) + 60 && token.refreshToken) {
-      const rr = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID!, client_secret: process.env.GOOGLE_CLIENT_SECRET!, refresh_token: token.refreshToken, grant_type: "refresh_token" }) });
-      const rd = await rr.json() as { access_token?: string; expires_in?: number };
-      if (rd.access_token) { accessToken = rd.access_token; await upsertGoogleToken({ userId, accessToken, expiresAt: Math.floor(Date.now() / 1000) + (rd.expires_in ?? 3600), refreshToken: token.refreshToken, email: token.email }); }
+    if (
+      token.expiresAt <= Math.floor(Date.now() / 1000) + 60 &&
+      token.refreshToken
+    ) {
+      const rr = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          refresh_token: token.refreshToken,
+          grant_type: "refresh_token",
+        }),
+      });
+      const rd = (await rr.json()) as {
+        access_token?: string;
+        expires_in?: number;
+      };
+      if (rd.access_token) {
+        accessToken = rd.access_token;
+        await upsertGoogleToken({
+          userId,
+          accessToken,
+          expiresAt: Math.floor(Date.now() / 1000) + (rd.expires_in ?? 3600),
+          refreshToken: token.refreshToken,
+          email: token.email,
+        });
+      }
     }
-    const headers: Record<string, string> = { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    };
     const calId = (params.calendarId as string) ?? "primary";
     if (action === "list_events") {
-      const now = new Date(); const tMin = (params.timeMin as string) ?? now.toISOString(); const tMax = (params.timeMax as string) ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
-      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; location?: string; organizer?: { email?: string; displayName?: string; self?: boolean }; attendees?: Array<{ email?: string; displayName?: string; self?: boolean; organizer?: boolean; responseStatus?: string }> }> };
-      if (!data.items || data.items.length === 0) return "Keine Termine in diesem Zeitraum.";
+      const now = new Date();
+      const tMin = (params.timeMin as string) ?? now.toISOString();
+      const tMax =
+        (params.timeMax as string) ??
+        new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      const resp = await fetchWithTimeout(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
+        { headers }
+      );
+      const data = (await resp.json()) as {
+        items?: Array<{
+          id: string;
+          summary?: string;
+          start?: { dateTime?: string; date?: string };
+          location?: string;
+          organizer?: { email?: string; displayName?: string; self?: boolean };
+          attendees?: Array<{
+            email?: string;
+            displayName?: string;
+            self?: boolean;
+            organizer?: boolean;
+            responseStatus?: string;
+          }>;
+        }>;
+      };
+      if (!data.items || data.items.length === 0)
+        return "Keine Termine in diesem Zeitraum.";
       const tz = "Europe/Zurich";
-      return data.items.map(ev => {
-        const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
-        const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
-        const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganztägig";
-        // Einladung erkennen: organizer ist nicht der Nutzer selbst
-        let inviteInfo = "";
-        if (ev.organizer && !ev.organizer.self) {
-          const organizerName = ev.organizer.displayName || ev.organizer.email?.split("@")[0] || "jemanden";
-          inviteInfo = ` [Einladung von ${organizerName}]`;
-        }
-        return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`;
-      }).join("\n");
+      return data.items
+        .map(ev => {
+          const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
+          const dateStr = d.toLocaleDateString("de-DE", {
+            weekday: "short",
+            day: "2-digit",
+            month: "2-digit",
+            timeZone: tz,
+          });
+          const timeStr = ev.start?.dateTime
+            ? d.toLocaleTimeString("de-DE", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: tz,
+              })
+            : "Ganztägig";
+          // Einladung erkennen: organizer ist nicht der Nutzer selbst
+          let inviteInfo = "";
+          if (ev.organizer && !ev.organizer.self) {
+            const organizerName =
+              ev.organizer.displayName ||
+              ev.organizer.email?.split("@")[0] ||
+              "jemanden";
+            inviteInfo = ` [Einladung von ${organizerName}]`;
+          }
+          return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`;
+        })
+        .join("\n");
     }
     if (action === "create_event") {
-      const event = { summary: params.summary, description: params.description, location: params.location, start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" }, end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" } };
-      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`, { method: "POST", headers, body: JSON.stringify(event) });
-      const data = await resp.json() as { summary?: string; htmlLink?: string };
+      const event = {
+        summary: params.summary,
+        description: params.description,
+        location: params.location,
+        start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
+        end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" },
+      };
+      const resp = await fetchWithTimeout(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
+        { method: "POST", headers, body: JSON.stringify(event) }
+      );
+      const data = (await resp.json()) as {
+        summary?: string;
+        htmlLink?: string;
+      };
       return `Termin "${data.summary}" wurde erstellt.`;
     }
     if (action === "delete_event") {
-      await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "DELETE", headers });
+      await fetchWithTimeout(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
+        { method: "DELETE", headers }
+      );
       return "Termin wurde gelöscht.";
     }
     if (action === "update_event" || action === "invite_attendee") {
       // Aktuellen Termin laden
-      const getResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { headers });
+      const getResp = await fetchWithTimeout(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
+        { headers }
+      );
       if (!getResp.ok) return `Termin nicht gefunden (ID: ${params.eventId}).`;
-      const current = await getResp.json() as Record<string, unknown>;
+      const current = (await getResp.json()) as Record<string, unknown>;
 
       if (action === "invite_attendee") {
         // Gast hinzufügen
-        const existingAttendees = (current.attendees as Array<{ email: string }> | undefined) ?? [];
+        const existingAttendees =
+          (current.attendees as Array<{ email: string }> | undefined) ?? [];
         const newEmail = params.email as string;
         if (!newEmail) return "Bitte eine E-Mail-Adresse angeben.";
-        if (existingAttendees.some(a => a.email === newEmail)) return `${newEmail} ist bereits eingeladen.`;
-        const updatedEvent = { ...current, attendees: [...existingAttendees, { email: newEmail }] };
-        const putResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "PUT", headers, body: JSON.stringify(updatedEvent) });
-        const putData = await putResp.json() as { summary?: string };
+        if (existingAttendees.some(a => a.email === newEmail))
+          return `${newEmail} ist bereits eingeladen.`;
+        const updatedEvent = {
+          ...current,
+          attendees: [...existingAttendees, { email: newEmail }],
+        };
+        const putResp = await fetchWithTimeout(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
+          { method: "PUT", headers, body: JSON.stringify(updatedEvent) }
+        );
+        const putData = (await putResp.json()) as { summary?: string };
         return `${newEmail} wurde zum Termin "${putData.summary}" eingeladen.`;
       }
 
       if (action === "update_event") {
         const patch: Record<string, unknown> = { ...current };
         if (params.summary) patch.summary = params.summary;
-        if (params.description !== undefined) patch.description = params.description;
+        if (params.description !== undefined)
+          patch.description = params.description;
         if (params.location !== undefined) patch.location = params.location;
-        if (params.startDateTime) patch.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
-        if (params.endDateTime) patch.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
-        const putResp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`, { method: "PUT", headers, body: JSON.stringify(patch) });
-        const putData = await putResp.json() as { summary?: string };
+        if (params.startDateTime)
+          patch.start = {
+            dateTime: params.startDateTime,
+            timeZone: "Europe/Zurich",
+          };
+        if (params.endDateTime)
+          patch.end = {
+            dateTime: params.endDateTime,
+            timeZone: "Europe/Zurich",
+          };
+        const putResp = await fetchWithTimeout(
+          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
+          { method: "PUT", headers, body: JSON.stringify(patch) }
+        );
+        const putData = (await putResp.json()) as { summary?: string };
         return `Termin "${putData.summary}" wurde aktualisiert.`;
       }
     }
     if (action === "get_event") {
       // Termin-ID aus Kontext suchen (letzter Termin aus list_events)
       const tMin = (params.timeMin as string) ?? new Date().toISOString();
-      const tMax = (params.timeMax as string) ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      const resp = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=50&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`, { headers });
-      const data = await resp.json() as { items?: Array<{ id: string; summary?: string; start?: { dateTime?: string; date?: string }; attendees?: Array<{ email: string; displayName?: string }> }> };
-      const keyword = (params.keyword as string ?? "").toLowerCase();
-      const found = data.items?.find(ev => (ev.summary ?? "").toLowerCase().includes(keyword));
+      const tMax =
+        (params.timeMax as string) ??
+        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      const resp = await fetchWithTimeout(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=50&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
+        { headers }
+      );
+      const data = (await resp.json()) as {
+        items?: Array<{
+          id: string;
+          summary?: string;
+          start?: { dateTime?: string; date?: string };
+          attendees?: Array<{ email: string; displayName?: string }>;
+        }>;
+      };
+      const keyword = ((params.keyword as string) ?? "").toLowerCase();
+      const found = data.items?.find(ev =>
+        (ev.summary ?? "").toLowerCase().includes(keyword)
+      );
       if (!found) return `Kein Termin mit "${params.keyword}" gefunden.`;
-      const attendees = found.attendees?.map(a => a.displayName ?? a.email).join(", ") ?? "keine";
+      const attendees =
+        found.attendees?.map(a => a.displayName ?? a.email).join(", ") ??
+        "keine";
       return `Termin gefunden: "${found.summary}" (ID: ${found.id})\nTeilnehmer: ${attendees}`;
     }
     return `Unbekannte Aktion: "${action}". Verfügbar: list_events, create_event, update_event, delete_event, invite_attendee, get_event.`;
-  } catch (err) { return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`; }
+  } catch (err) {
+    return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`;
+  }
 }
 
 export const chatRouter = router({
@@ -142,10 +330,23 @@ export const chatRouter = router({
   suggestions: protectedProcedure.query(async ({ ctx }) => {
     const top = await getTopPrompts(ctx.user.id, 4);
     const fallback = [
-      { label: "Was steht heute an?", promptText: "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung." },
-      { label: "Offene Rechnungen zeigen", promptText: "Zeige mir alle offenen Rechnungen." },
-      { label: "Offene Tickets zeigen", promptText: "Welche Tickets sind noch offen?" },
-      { label: "Termine diese Woche", promptText: "Welche Termine habe ich diese Woche?" },
+      {
+        label: "Was steht heute an?",
+        promptText:
+          "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung.",
+      },
+      {
+        label: "Offene Rechnungen zeigen",
+        promptText: "Zeige mir alle offenen Rechnungen.",
+      },
+      {
+        label: "Offene Tickets zeigen",
+        promptText: "Welche Tickets sind noch offen?",
+      },
+      {
+        label: "Termine diese Woche",
+        promptText: "Welche Termine habe ich diese Woche?",
+      },
     ];
     if (top.length === 0) return fallback;
     const mapped = top.map(t => ({ label: t.label, promptText: t.promptText }));
@@ -170,7 +371,8 @@ export const chatRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const conv = await getConversationById(input.id);
-      if (!conv || conv.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (!conv || conv.userId !== ctx.user.id)
+        throw new TRPCError({ code: "FORBIDDEN" });
       await deleteConversation(input.id);
       return { success: true };
     }),
@@ -179,16 +381,19 @@ export const chatRouter = router({
     .input(z.object({ conversationId: z.number() }))
     .query(async ({ ctx, input }) => {
       const conv = await getConversationById(input.conversationId);
-      if (!conv || conv.userId !== ctx.user.id) throw new TRPCError({ code: "FORBIDDEN" });
+      if (!conv || conv.userId !== ctx.user.id)
+        throw new TRPCError({ code: "FORBIDDEN" });
       return getMessagesByConversation(input.conversationId);
     }),
 
   uploadFile: protectedProcedure
-    .input(z.object({
-      fileName: z.string(),
-      fileBase64: z.string(),
-      mimeType: z.string(),
-    }))
+    .input(
+      z.object({
+        fileName: z.string(),
+        fileBase64: z.string(),
+        mimeType: z.string(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.fileBase64, "base64");
       const key = `jarvis/${ctx.user.id}/files/${Date.now()}-${input.fileName}`;
@@ -197,15 +402,28 @@ export const chatRouter = router({
     }),
 
   transcribeAudio: protectedProcedure
-    .input(z.object({ audioBase64: z.string(), mimeType: z.string().optional() }))
+    .input(
+      z.object({ audioBase64: z.string(), mimeType: z.string().optional() })
+    )
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.audioBase64, "base64");
       const key = `jarvis/${ctx.user.id}/audio/${Date.now()}.webm`;
-      const { url } = await storagePut(key, buffer, input.mimeType ?? "audio/webm");
+      const { url } = await storagePut(
+        key,
+        buffer,
+        input.mimeType ?? "audio/webm"
+      );
       const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
       const fullUrl = `${baseUrl}${url}`;
-      const result = await transcribeAudio({ audioUrl: fullUrl, language: "de" });
-      if ("error" in result) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error });
+      const result = await transcribeAudio({
+        audioUrl: fullUrl,
+        language: "de",
+      });
+      if ("error" in result)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: result.error,
+        });
       return { text: (result as WhisperResponse).text };
     }),
 
@@ -213,22 +431,31 @@ export const chatRouter = router({
     .input(z.object({ query: z.string() }))
     .mutation(async ({ input }) => {
       try {
-        const response = await fetch(
+        const response = await fetchWithTimeout(
           `https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1&skip_disambig=1`
         );
-        const data = await response.json() as {
+        const data = (await response.json()) as {
           AbstractText?: string;
           AbstractURL?: string;
           RelatedTopics?: Array<{ Text?: string; FirstURL?: string }>;
         };
-        const results: Array<{ title: string; url: string; snippet: string }> = [];
+        const results: Array<{ title: string; url: string; snippet: string }> =
+          [];
         if (data.AbstractText) {
-          results.push({ title: "Zusammenfassung", url: data.AbstractURL ?? "", snippet: data.AbstractText });
+          results.push({
+            title: "Zusammenfassung",
+            url: data.AbstractURL ?? "",
+            snippet: data.AbstractText,
+          });
         }
         if (data.RelatedTopics) {
           for (const topic of data.RelatedTopics.slice(0, 5)) {
             if (topic.Text && topic.FirstURL) {
-              results.push({ title: topic.Text.slice(0, 80), url: topic.FirstURL, snippet: topic.Text });
+              results.push({
+                title: topic.Text.slice(0, 80),
+                url: topic.FirstURL,
+                snippet: topic.Text,
+              });
             }
           }
         }
@@ -240,24 +467,42 @@ export const chatRouter = router({
 
   // ─── tRPC-basierte Chat-Mutation (kein SSE, funktioniert in Produktion) ──────
   sendMessage: protectedProcedure
-    .input(z.object({
-      conversationId: z.number(),
-      message: z.string(),
-      fileUrl: z.string().optional(),
-      fileName: z.string().optional(),
-      searchResults: z.array(z.object({ title: z.string(), snippet: z.string(), url: z.string() })).optional(),
-    }))
+    .input(
+      z.object({
+        conversationId: z.number(),
+        message: z.string(),
+        fileUrl: z.string().optional(),
+        fileName: z.string().optional(),
+        searchResults: z
+          .array(
+            z.object({
+              title: z.string(),
+              snippet: z.string(),
+              url: z.string(),
+            })
+          )
+          .optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const { conversationId, message, fileUrl, fileName, searchResults } = input;
+      const { conversationId, message, fileUrl, fileName, searchResults } =
+        input;
       const userId = ctx.user.id;
 
       const conv = await getConversationById(conversationId);
-      if (!conv || conv.userId !== userId) throw new TRPCError({ code: "FORBIDDEN" });
+      if (!conv || conv.userId !== userId)
+        throw new TRPCError({ code: "FORBIDDEN" });
 
       const history = await getMessagesByConversation(conversationId);
 
       // Benutzer-Nachricht speichern
-      await addMessage({ conversationId, role: "user", content: message, fileUrl: fileUrl ?? null, fileName: fileName ?? null });
+      await addMessage({
+        conversationId,
+        role: "user",
+        content: message,
+        fileUrl: fileUrl ?? null,
+        fileName: fileName ?? null,
+      });
 
       // ── Freigabe für kritische Aktionen prüfen ──────────────────────────
       // Kritische Aktionen werden vorgemerkt. Sagt Stefan "Ja", führen wir sie
@@ -280,25 +525,44 @@ export const chatRouter = router({
           );
           executed.push(`- ${p.description}: ${step.result}`);
         }
-        approvalContext = executed.length > 0
-          ? `\n\nFREIGEGEBEN UND BEREITS AUSGEFÜHRT: Stefan hat zugestimmt, die folgenden Aktionen wurden gerade ausgeführt. Bestätige das kurz mit den echten Ergebnissen und führe sie NICHT erneut aus:\n${executed.join("\n")}`
-          : "";
+        approvalContext =
+          executed.length > 0
+            ? `\n\nFREIGEGEBEN UND BEREITS AUSGEFÜHRT: Stefan hat zugestimmt, die folgenden Aktionen wurden gerade ausgeführt. Bestätige das kurz mit den echten Ergebnissen und führe sie NICHT erneut aus:\n${executed.join("\n")}`
+            : "";
       } else if (rejectedNow) {
-        approvalContext = "\n\nABGELEHNT: Stefan hat die vorgemerkte Aktion abgelehnt. Bestätige kurz, dass du sie nicht ausgeführt hast, und frage nach der gewünschten Alternative.";
+        approvalContext =
+          "\n\nABGELEHNT: Stefan hat die vorgemerkte Aktion abgelehnt. Bestätige kurz, dass du sie nicht ausgeführt hast, und frage nach der gewünschten Alternative.";
       }
 
       // Intent für lernende Vorschläge erfassen
       try {
         const detected = detectIntent(message);
-        if (detected) await trackPrompt(userId, detected.intent, detected.label, message.slice(0, 400));
-      } catch (e) { console.error("[PromptStats]", e); }
+        if (detected)
+          await trackPrompt(
+            userId,
+            detected.intent,
+            detected.label,
+            message.slice(0, 400)
+          );
+      } catch (e) {
+        console.error("[PromptStats]", e);
+      }
 
       // Kalender-Kontext laden
       let calendarContext = "";
       try {
-        const upcoming = await executeCalendarAction(userId, "list_events", { timeMin: new Date().toISOString(), timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
-        if (!upcoming.includes("nicht verbunden") && !upcoming.includes("Keine Termine")) calendarContext = `\n\nDeine nächsten Termine (7 Tage):\n${upcoming}`;
-      } catch { /* ignorieren */ }
+        const upcoming = await executeCalendarAction(userId, "list_events", {
+          timeMin: new Date().toISOString(),
+          timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+        if (
+          !upcoming.includes("nicht verbunden") &&
+          !upcoming.includes("Keine Termine")
+        )
+          calendarContext = `\n\nDeine nächsten Termine (7 Tage):\n${upcoming}`;
+      } catch {
+        /* ignorieren */
+      }
 
       // Gedächtnis laden
       let memoryContext = "";
@@ -314,15 +578,21 @@ export const chatRouter = router({
           // das Modell hat die Markierungen sonst wörtlich in die Antwort
           // übernommen (im Chat erschien etwa «... 2019 [person].»).
           const namen: Record<string, string> = {
-            person: "Personen", contact: "Kontakte", preference: "Vorlieben",
-            project: "Projekte", fact: "Fakten", context: "Kontext",
+            person: "Personen",
+            contact: "Kontakte",
+            preference: "Vorlieben",
+            project: "Projekte",
+            fact: "Fakten",
+            context: "Kontext",
           };
           const lines = Object.entries(grouped)
             .map(([cat, items]) => `${namen[cat] ?? cat}:\n${items.join("\n")}`)
             .join("\n\n");
           memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
         }
-      } catch { /* ignorieren */ }
+      } catch {
+        /* ignorieren */
+      }
 
       // Nutzerprofil laden
       let profileContext = "";
@@ -330,22 +600,39 @@ export const chatRouter = router({
         const profile = await getUserProfile(userId);
         if (profile) {
           const parts: string[] = [];
-          if (profile.displayName) parts.push(`Name des Nutzers: ${profile.displayName}`);
+          if (profile.displayName)
+            parts.push(`Name des Nutzers: ${profile.displayName}`);
           if (profile.occupation) parts.push(`Beruf: ${profile.occupation}`);
           if (profile.location) parts.push(`Standort: ${profile.location}`);
-          if (profile.interests) parts.push(`Interessen/Hobbys: ${profile.interests}`);
-          if (profile.workContext) parts.push(`Beruflicher Kontext: ${profile.workContext}`);
-          if (profile.personalNotes) parts.push(`Persönliche Notizen: ${profile.personalNotes}`);
-          if (parts.length > 0) profileContext = `
+          if (profile.interests)
+            parts.push(`Interessen/Hobbys: ${profile.interests}`);
+          if (profile.workContext)
+            parts.push(`Beruflicher Kontext: ${profile.workContext}`);
+          if (profile.personalNotes)
+            parts.push(`Persönliche Notizen: ${profile.personalNotes}`);
+          if (parts.length > 0)
+            profileContext = `
 
 Nutzerprofil:
 ${parts.join("\n")}`;
           // Anredeform und Jarvis-Name
           const jarvisName = profile.jarvisName ?? "Jarvis";
           const addressForm = profile.addressForm ?? "sir";
-          const addressStr = addressForm === "sir" ? "Spreche den Nutzer mit 'Sir' an" : addressForm === "du" ? `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an` : `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an`;
-          const personalityStr = profile.jarvisPersonality ? `\n\nPersönlichkeit: ${profile.jarvisPersonality}` : "";
-          const langStr = profile.language === "en" ? "Antworte auf Englisch." : profile.language === "auto" ? "Antworte in der Sprache des Nutzers." : "Antworte auf Deutsch.";
+          const addressStr =
+            addressForm === "sir"
+              ? "Spreche den Nutzer mit 'Sir' an"
+              : addressForm === "du"
+                ? `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an`
+                : `Spreche den Nutzer mit '${profile.displayName ?? "du"}' an`;
+          const personalityStr = profile.jarvisPersonality
+            ? `\n\nPersönlichkeit: ${profile.jarvisPersonality}`
+            : "";
+          const langStr =
+            profile.language === "en"
+              ? "Antworte auf Englisch."
+              : profile.language === "auto"
+                ? "Antworte in der Sprache des Nutzers."
+                : "Antworte auf Deutsch.";
           const systemPrompt = `Du bist ${jarvisName}, der persönliche Assistent von Stefan Gross. ${addressStr}.
 ${langStr}
 
@@ -387,138 +674,13 @@ ARBEITSWEISE (sehr wichtig):
    - Erfinde NIE Rechnungsnummern, Beträge oder Daten. Fehlt eine Angabe, frage nach oder markiere sie klar als [Platzhalter]
 
 5. VORLAGEN: Für wiederkehrende Dokumente (Angebot, IT-Konzept, Beschaffungsantrag, Protokoll, Statusbericht) gibt es im Bereich "Vorlagen" fertige Muster mit Platzhaltern. Weise Stefan darauf hin, wenn eine Vorlage schneller wäre.`;
-          const fullSystemPrompt = systemPrompt + grossIctContext + intelligenceContext + `
+          const fullSystemPrompt =
+            systemPrompt +
+            grossIctContext +
+            intelligenceContext +
+            `
 
-HANDLUNGSFÄHIGKEIT (das Wichtigste überhaupt):
-Du bist kein Textgenerator, sondern ein handelnder Assistent mit echten Werkzeugen. Du arbeitest in Runden:
-In jeder Runde darfst du EINEN ODER MEHRERE Aktionsblöcke einsetzen. Deren Ergebnisse bekommst du anschliessend
-als Beobachtung zurück (der Nutzer sieht diese Zwischenschritte nicht) und darfst dann weitere Werkzeuge nutzen,
-bis die Aufgabe wirklich erledigt ist. Du hast bis zu fünf Runden.
-
-Daraus folgt:
-- BESCHAFFE FEHLENDE DATEN SELBST, statt danach zu fragen. Brauchst du eine Kunden-ID für eine Rechnung,
-  suche den Kunden zuerst mit list_customers und verwende dann die zurückgegebene ID. Frage nur nach, wenn
-  die Information nirgends in deinen Werkzeugen steht (z.B. ein gewünschter Betrag oder Wunschtermin).
-- KETTE SCHRITTE ZUSAMMEN. Beispiel "Schreib eine Mahnung an den Kunden mit der ältesten überfälligen Rechnung":
-  Runde 1 list_overdue_invoices, Runde 2 customer_dossier für den betroffenen Kunden, Runde 3 die Mahnung
-  mit den echten Zahlen schreiben und eine Aufgabe zum Nachfassen anlegen.
-- ERLEDIGE DIE GANZE AUFGABE. Wenn Stefan sagt "kümmere dich darum", führe die nötigen Schritte aus statt
-  nur zu erklären, was man tun könnte.
-- ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
-  Stefans Nachricht stammen.
-- Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
-
-BESTÄTIGUNG BEI KRITISCHEN AKTIONEN:
-Folgende Aktionen werden NICHT sofort ausgeführt, sondern erst nach Stefans ausdrücklicher Zustimmung:
-Rechnung als bezahlt markieren, Rechnung erstellen, Angebotsstatus ändern, Ticket-Status ändern,
-Termin löschen, jemanden zu einem Termin einladen, WhatsApp-Nachricht senden.
-Wenn du so eine Aktion für nötig hältst, nutze den Aktionsblock trotzdem – das System merkt sie vor
-und meldet dir "NICHT AUSGEFÜHRT". Frage Stefan dann in EINEM Satz konkret nach der Freigabe und nenne
-dabei die betroffenen Daten (Rechnungsnummer, Kunde, Betrag, Empfänger). Sagt er "Ja", wird die Aktion
-im nächsten Zug ausgeführt. Alles Lesende und harmlos Schreibende (Notizen, Aufgaben, Kommentare,
-Kunden/Leads/Projekte anlegen, Musik) führst du ohne Rückfrage aus.
-
-PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
-
-A) ZUSAMMENHÄNGE ERKENNEN: Verknüpfe Informationen aus verschiedenen Quellen, statt sie nur aufzulisten.
-   - Ein Kunde hat eine überfällige Rechnung UND ein offenes Ticket? Weise darauf hin, dass man das Ticket
-     vielleicht erst nach Zahlungseingang priorisieren sollte.
-   - Ein Angebot ist seit über zwei Wochen "sent" und ohne Reaktion? Schlage vor nachzufassen.
-   - Ein Termin überschneidet sich mit einer fälligen Aufgabe? Melde den Konflikt aktiv.
-   - Ein Projekt ist "active", aber es gibt keine Rechnung dazu? Frage, ob abgerechnet werden soll.
-
-B) NÄCHSTER SCHRITT: Beende jede Antwort, die Daten oder Ergebnisse enthält, mit genau EINEM konkreten,
-   sofort ausführbaren Vorschlag – keine Floskeln wie "Sag mir, wenn du Hilfe brauchst".
-   Gute Beispiele: "Soll ich für die drei überfälligen Rechnungen Mahnungen vorbereiten?",
-   "Soll ich eine Aufgabe zum Nachfassen bei Muster AG anlegen (Frist Freitag)?".
-   Formuliere den Vorschlag so, dass ein "Ja" von Stefan ausreicht, damit du ihn ausführen kannst.
-
-C) SELBSTÄNDIG NACHFASSEN: Erkennst du eine Pendenz, die sonst untergeht (Angebot ohne Antwort,
-   Rechnung kurz vor Verfall, Ticket ohne Bearbeitung), lege ungefragt eine Aufgabe mit Frist an
-   und erwähne das in einem Satz. Lieber eine Aufgabe zu viel als eine vergessene Pendenz.
-
-D) BEWERTEN STATT AUFZÄHLEN: Wenn du Listen zeigst, nenne zuerst in einem Satz die Kernaussage
-   ("Fünf Rechnungen offen, davon zwei über 30 Tage überfällig – zusammen CHF 922"), danach die Details.
-
-NOTIZEN: Du kannst Notizen durchsuchen und anlegen:
-<notes_action>{"action":"list","search":"Passwort"}</notes_action>
-<notes_action>{"action":"create","title":"Besprechung Muster AG","content":"Kernpunkte ..."}</notes_action>
-
-AUFGABEN: Du kannst Aufgaben lesen, anlegen und abschliessen:
-<tasks_action>{"action":"list"}</tasks_action>
-<tasks_action>{"action":"create","title":"Mahnung Muster AG senden","priority":"high","due_date":"2026-08-15"}</tasks_action>
-<tasks_action>{"action":"complete","id":42}</tasks_action>
-Nutze diese Werkzeuge aktiv: erkennst du im Gespräch eine offene Pendenz, lege selbst eine Aufgabe an
-und sage Stefan in einem Satz, dass du das getan hast.
-
-KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, nutze einen Aktionsblock:
-<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
-<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
-<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
-<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
-<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
-<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
-WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
-
-GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
-<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-Kategorien: person, contact, preference, project, fact.
-WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
-Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
-
-APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
-Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
-wenn du unabhängige Informationen brauchst (z.B. Dashboard und überfällige Rechnungen gleichzeitig).
-Verfügbare Aktionen (Beispiele):
-
-LESEN:
-<app_action>{"action":"dashboard"}</app_action>
-<app_action>{"action":"list_customers","search":"Muster"}</app_action>
-<app_action>{"action":"list_tickets","status":"open"}</app_action>
-<app_action>{"action":"list_quotes","status":"draft"}</app_action>
-<app_action>{"action":"list_invoices","status":"open"}</app_action>  // offen = open + sent
-<app_action>{"action":"list_overdue_invoices"}</app_action>
-<app_action>{"action":"list_projects","status":"active"}</app_action>
-<app_action>{"action":"list_leads"}</app_action>
-<app_action>{"action":"list_contracts"}</app_action>
-<app_action>{"action":"list_expenses"}</app_action>
-<app_action>{"action":"list_products"}</app_action>
-<app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
-<app_action>{"action":"customer_dossier","customer":"Muster AG"}</app_action>
-
-KUNDEN-DOSSIER: Wenn Stefan eine Gesamtuebersicht zu einem Kunden moechte (z.B. "Erzaehl mir alles ueber Muster AG",
-"Wie steht es mit Kunde X", "Lagebeurteilung Muster AG"), nutze customer_dossier. Das liefert Stammdaten,
-offene Rechnungen mit Betraegen, ueberfaellige Posten, Angebote, Tickets, Projekte und Vertraege in einem Block.
-Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als naechsten Schritt empfiehlst.
-
-ERSTELLEN:
-<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
-<app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
-<app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
-<app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
-<app_action>{"action":"create_expense","description":"Büromaterial","amount":45.80,"category":"Büro","supplier":"Migros"}</app_action>
-<app_action>{"action":"create_quote","customer_id":"uuid","notes":"Angebot Webseite","items":[{"description":"Webseite Design","quantity":1,"unit_price":1500},{"description":"Hosting Setup","quantity":1,"unit_price":200}]}</app_action>
-<app_action>{"action":"create_invoice","customer_id":"uuid","items":[{"description":"IT-Support Mai","quantity":5,"unit_price":120,"unit":"Std."}]}</app_action>
-
-ÄNDERN:
-<app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
-<app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
-<app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
-<app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>
-<app_action>{"action":"update_lead_status","id":"uuid","status":"qualified"}</app_action>
-<app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
-
-WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
-STATUS-WERTE in der App:
-- Rechnungen: open (offen), sent (gesendet), paid (bezahlt), draft (Entwurf)
-- Offene/unbezahlte Rechnungen = status "open" (der Filter deckt open+sent ab)
-- Tickets: open, in_progress, resolved, closed
-- Angebote: draft, sent, accepted, rejected
-- Projekte: active, completed, on_hold, cancelled
-- Leads: new, contacted, qualified, proposal, won, lost
-Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
-dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
+${CORE_AGENT_INSTRUCTIONS}
 
 MUSIK (Spotify): Stefan kann sein Spotify-Konto verbinden. Wenn er Musik hören will, füge GENAU EINEN spotify_action-Block ein:
 <spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
@@ -545,33 +707,82 @@ Wenn Angaben fehlen (Empfänger, Text, Uhrzeit), frage zuerst nach. Zeige NIE de
 ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
 
           // LLM aufrufen mit Profil-Kontext
-          type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
+          type LLMMessage = {
+            role: "system" | "user" | "assistant";
+            content:
+              | string
+              | Array<{
+                  type: string;
+                  text?: string;
+                  image_url?: { url: string };
+                }>;
+          };
           const llmMessages2: LLMMessage[] = [
             { role: "system", content: fullSystemPrompt },
-            ...history.map((m) => ({ role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: m.content })),
+            ...history.map(m => ({
+              role: (m.role === "assistant" ? "assistant" : "user") as
+                | "user"
+                | "assistant",
+              content: m.content,
+            })),
           ];
-          let userContent2: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
+          let userContent2:
+            | string
+            | Array<{
+                type: string;
+                text?: string;
+                image_url?: { url: string };
+              }> = message;
           if (searchResults && searchResults.length > 0) {
-            const ctxStr = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
+            const ctxStr = searchResults
+              .map(r => `**${r.title}**: ${r.snippet} (${r.url})`)
+              .join("\n");
             userContent2 = `${message}\n\n[Web-Suchergebnisse:\n${ctxStr}]`;
           }
           if (fileUrl && fileName) {
             const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
             const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
             const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
-            const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+            const absUrl = fileUrl.startsWith("http")
+              ? fileUrl
+              : `${baseUrl}${fileUrl}`;
             if (isImage) {
-              userContent2 = [{ type: "image_url", image_url: { url: absUrl } }, { type: "text", text: typeof userContent2 === "string" ? userContent2 || `Analysiere dieses Bild: ${fileName}` : message }];
+              userContent2 = [
+                { type: "image_url", image_url: { url: absUrl } },
+                {
+                  type: "text",
+                  text:
+                    typeof userContent2 === "string"
+                      ? userContent2 || `Analysiere dieses Bild: ${fileName}`
+                      : message,
+                },
+              ];
             } else {
               let fileContent = "";
-              try { const fr = await fetch(absUrl); if (fr.ok) { fileContent = await fr.text(); if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]"; } } catch { /* ignorieren */ }
-              userContent2 = fileContent ? `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]` : `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Datei: ${fileName}]`;
+              try {
+                const fr = await fetchWithTimeout(absUrl);
+                if (fr.ok) {
+                  fileContent = await fr.text();
+                  if (fileContent.length > 8000)
+                    fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]";
+                }
+              } catch {
+                /* ignorieren */
+              }
+              userContent2 = fileContent
+                ? `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
+                : `${typeof userContent2 === "string" ? userContent2 : message}\n\n[Datei: ${fileName}]`;
             }
           }
           llmMessages2.push({ role: "user", content: userContent2 as string });
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const llmResp2 = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages2 as any });
-          let fullResponse2 = (llmResp2.choices[0]?.message?.content as string) ?? "";
+          const llmResp2 = await invokeLLM({
+            model: "claude-sonnet-4-5",
+            max_tokens: 4096,
+            messages: llmMessages2 as any,
+          });
+          let fullResponse2 =
+            (llmResp2.choices[0]?.message?.content as string) ?? "";
           // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ──────
           // Jarvis darf mehrere Runden Werkzeuge nutzen. Nach jeder Runde
           // erhält er die Ergebnisse als Beobachtung und entscheidet selbst,
@@ -579,21 +790,41 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
           const loopP = await runAgentLoop({
             firstResponse: fullResponse2,
             messages: llmMessages2 as unknown as LoopMessage[],
-            runAction: (parsed) => executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
-            callModel: async (msgs) => {
+            runAction: parsed =>
+              executeAction(
+                { userId, runCalendar: executeCalendarAction },
+                parsed
+              ),
+            callModel: async msgs => {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const next = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: msgs as any });
+              const next = await invokeLLM({
+                model: "claude-sonnet-4-5",
+                max_tokens: 4096,
+                messages: msgs as any,
+              });
               return (next.choices[0]?.message?.content as string) ?? "";
             },
             // Hat Stefan im vorherigen Zug zugestimmt, dürfen kritische Aktionen laufen
           });
           // Interne Kategorie-Markierungen entfernen, bevor der Text gespeichert
           // und ausgegeben wird (sonst erscheint etwa «... 2019 [person].»).
-          fullResponse2 = removeInternalTags(loopP.text) + formatStepLog(loopP.steps);
+          fullResponse2 =
+            removeInternalTags(loopP.text) + formatStepLog(loopP.steps);
           rememberPending(conversationId, loopP.pending);
-          const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
-          if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
-          await addMessage({ conversationId, role: "assistant", content: fullResponse2 });
+          const convTitleP = fullResponse2
+            .slice(0, 50)
+            .replace(/[\n]/g, " ")
+            .trim();
+          if (history.length === 0)
+            await updateConversationTitle(
+              conversationId,
+              convTitleP || message.slice(0, 50)
+            );
+          await addMessage({
+            conversationId,
+            role: "assistant",
+            content: fullResponse2,
+          });
           return { response: fullResponse2 };
         }
       } catch (e) {
@@ -608,136 +839,7 @@ ${JARVIS_PERSONA}
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 
-HANDLUNGSFÄHIGKEIT (das Wichtigste überhaupt):
-Du bist kein Textgenerator, sondern ein handelnder Assistent mit echten Werkzeugen. Du arbeitest in Runden:
-In jeder Runde darfst du EINEN ODER MEHRERE Aktionsblöcke einsetzen. Deren Ergebnisse bekommst du anschliessend
-als Beobachtung zurück (der Nutzer sieht diese Zwischenschritte nicht) und darfst dann weitere Werkzeuge nutzen,
-bis die Aufgabe wirklich erledigt ist. Du hast bis zu fünf Runden.
-
-Daraus folgt:
-- BESCHAFFE FEHLENDE DATEN SELBST, statt danach zu fragen. Brauchst du eine Kunden-ID für eine Rechnung,
-  suche den Kunden zuerst mit list_customers und verwende dann die zurückgegebene ID. Frage nur nach, wenn
-  die Information nirgends in deinen Werkzeugen steht (z.B. ein gewünschter Betrag oder Wunschtermin).
-- KETTE SCHRITTE ZUSAMMEN. Beispiel "Schreib eine Mahnung an den Kunden mit der ältesten überfälligen Rechnung":
-  Runde 1 list_overdue_invoices, Runde 2 customer_dossier für den betroffenen Kunden, Runde 3 die Mahnung
-  mit den echten Zahlen schreiben und eine Aufgabe zum Nachfassen anlegen.
-- ERLEDIGE DIE GANZE AUFGABE. Wenn Stefan sagt "kümmere dich darum", führe die nötigen Schritte aus statt
-  nur zu erklären, was man tun könnte.
-- ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
-  Stefans Nachricht stammen.
-- Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
-
-BESTÄTIGUNG BEI KRITISCHEN AKTIONEN:
-Folgende Aktionen werden NICHT sofort ausgeführt, sondern erst nach Stefans ausdrücklicher Zustimmung:
-Rechnung als bezahlt markieren, Rechnung erstellen, Angebotsstatus ändern, Ticket-Status ändern,
-Termin löschen, jemanden zu einem Termin einladen, WhatsApp-Nachricht senden.
-Wenn du so eine Aktion für nötig hältst, nutze den Aktionsblock trotzdem – das System merkt sie vor
-und meldet dir "NICHT AUSGEFÜHRT". Frage Stefan dann in EINEM Satz konkret nach der Freigabe und nenne
-dabei die betroffenen Daten (Rechnungsnummer, Kunde, Betrag, Empfänger). Sagt er "Ja", wird die Aktion
-im nächsten Zug ausgeführt. Alles Lesende und harmlos Schreibende (Notizen, Aufgaben, Kommentare,
-Kunden/Leads/Projekte anlegen, Musik) führst du ohne Rückfrage aus.
-
-PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
-
-A) ZUSAMMENHÄNGE ERKENNEN: Verknüpfe Informationen aus verschiedenen Quellen, statt sie nur aufzulisten.
-   - Ein Kunde hat eine überfällige Rechnung UND ein offenes Ticket? Weise darauf hin, dass man das Ticket
-     vielleicht erst nach Zahlungseingang priorisieren sollte.
-   - Ein Angebot ist seit über zwei Wochen "sent" und ohne Reaktion? Schlage vor nachzufassen.
-   - Ein Termin überschneidet sich mit einer fälligen Aufgabe? Melde den Konflikt aktiv.
-   - Ein Projekt ist "active", aber es gibt keine Rechnung dazu? Frage, ob abgerechnet werden soll.
-
-B) NÄCHSTER SCHRITT: Beende jede Antwort, die Daten oder Ergebnisse enthält, mit genau EINEM konkreten,
-   sofort ausführbaren Vorschlag – keine Floskeln wie "Sag mir, wenn du Hilfe brauchst".
-   Gute Beispiele: "Soll ich für die drei überfälligen Rechnungen Mahnungen vorbereiten?",
-   "Soll ich eine Aufgabe zum Nachfassen bei Muster AG anlegen (Frist Freitag)?".
-   Formuliere den Vorschlag so, dass ein "Ja" von Stefan ausreicht, damit du ihn ausführen kannst.
-
-C) SELBSTÄNDIG NACHFASSEN: Erkennst du eine Pendenz, die sonst untergeht (Angebot ohne Antwort,
-   Rechnung kurz vor Verfall, Ticket ohne Bearbeitung), lege ungefragt eine Aufgabe mit Frist an
-   und erwähne das in einem Satz. Lieber eine Aufgabe zu viel als eine vergessene Pendenz.
-
-D) BEWERTEN STATT AUFZÄHLEN: Wenn du Listen zeigst, nenne zuerst in einem Satz die Kernaussage
-   ("Fünf Rechnungen offen, davon zwei über 30 Tage überfällig – zusammen CHF 922"), danach die Details.
-
-NOTIZEN: Du kannst Notizen durchsuchen und anlegen:
-<notes_action>{"action":"list","search":"Passwort"}</notes_action>
-<notes_action>{"action":"create","title":"Besprechung Muster AG","content":"Kernpunkte ..."}</notes_action>
-
-AUFGABEN: Du kannst Aufgaben lesen, anlegen und abschliessen:
-<tasks_action>{"action":"list"}</tasks_action>
-<tasks_action>{"action":"create","title":"Mahnung Muster AG senden","priority":"high","due_date":"2026-08-15"}</tasks_action>
-<tasks_action>{"action":"complete","id":42}</tasks_action>
-Nutze diese Werkzeuge aktiv: erkennst du im Gespräch eine offene Pendenz, lege selbst eine Aufgabe an
-und sage Stefan in einem Satz, dass du das getan hast.
-
-KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, nutze einen Aktionsblock:
-<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
-<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
-<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
-<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
-<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
-<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
-WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
-
-GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
-<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-Kategorien: person, contact, preference, project, fact.
-WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
-Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
-
-APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
-Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
-wenn du unabhängige Informationen brauchst (z.B. Dashboard und überfällige Rechnungen gleichzeitig).
-Verfügbare Aktionen (Beispiele):
-
-LESEN:
-<app_action>{"action":"dashboard"}</app_action>
-<app_action>{"action":"list_customers","search":"Muster"}</app_action>
-<app_action>{"action":"list_tickets","status":"open"}</app_action>
-<app_action>{"action":"list_quotes","status":"draft"}</app_action>
-<app_action>{"action":"list_invoices","status":"open"}</app_action>  // offen = open + sent
-<app_action>{"action":"list_overdue_invoices"}</app_action>
-<app_action>{"action":"list_projects","status":"active"}</app_action>
-<app_action>{"action":"list_leads"}</app_action>
-<app_action>{"action":"list_contracts"}</app_action>
-<app_action>{"action":"list_expenses"}</app_action>
-<app_action>{"action":"list_products"}</app_action>
-<app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
-<app_action>{"action":"customer_dossier","customer":"Muster AG"}</app_action>
-
-KUNDEN-DOSSIER: Wenn Stefan eine Gesamtuebersicht zu einem Kunden moechte (z.B. "Erzaehl mir alles ueber Muster AG",
-"Wie steht es mit Kunde X", "Lagebeurteilung Muster AG"), nutze customer_dossier. Das liefert Stammdaten,
-offene Rechnungen mit Betraegen, ueberfaellige Posten, Angebote, Tickets, Projekte und Vertraege in einem Block.
-Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als naechsten Schritt empfiehlst.
-
-ERSTELLEN:
-<app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
-<app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
-<app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
-<app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
-<app_action>{"action":"create_expense","description":"Büromaterial","amount":45.80,"category":"Büro","supplier":"Migros"}</app_action>
-<app_action>{"action":"create_quote","customer_id":"uuid","notes":"Angebot Webseite","items":[{"description":"Webseite Design","quantity":1,"unit_price":1500},{"description":"Hosting Setup","quantity":1,"unit_price":200}]}</app_action>
-<app_action>{"action":"create_invoice","customer_id":"uuid","items":[{"description":"IT-Support Mai","quantity":5,"unit_price":120,"unit":"Std."}]}</app_action>
-
-ÄNDERN:
-<app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
-<app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
-<app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
-<app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>
-<app_action>{"action":"update_lead_status","id":"uuid","status":"qualified"}</app_action>
-<app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
-
-WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
-STATUS-WERTE in der App:
-- Rechnungen: open (offen), sent (gesendet), paid (bezahlt), draft (Entwurf)
-- Offene/unbezahlte Rechnungen = status "open" (der Filter deckt open+sent ab)
-- Tickets: open, in_progress, resolved, closed
-- Angebote: draft, sent, accepted, rejected
-- Projekte: active, completed, on_hold, cancelled
-- Leads: new, contacted, qualified, proposal, won, lost
-Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
-dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
+${CORE_AGENT_INSTRUCTIONS}
 
 MUSIK (Spotify): Füge bei Musikwünschen GENAU EINEN spotify_action-Block ein:
 <spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
@@ -753,329 +855,108 @@ IPHONE (Kurzbefehle): Für WhatsApp-Nachrichten, Wecker und Timer GENAU EINEN de
 Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
 ${calendarContext}${memoryContext}${approvalContext}`;
 
-      type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
+      type LLMMessage = {
+        role: "system" | "user" | "assistant";
+        content:
+          | string
+          | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+      };
       const llmMessages: LLMMessage[] = [
         { role: "system", content: systemPrompt },
-        ...history.map((m) => ({ role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant", content: m.content })),
+        ...history.map(m => ({
+          role: (m.role === "assistant" ? "assistant" : "user") as
+            | "user"
+            | "assistant",
+          content: m.content,
+        })),
       ];
 
       // Aktuelle Nachricht aufbauen
-      let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
+      let userContent:
+        | string
+        | Array<{ type: string; text?: string; image_url?: { url: string } }> =
+        message;
       if (searchResults && searchResults.length > 0) {
-        const ctxStr = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
+        const ctxStr = searchResults
+          .map(r => `**${r.title}**: ${r.snippet} (${r.url})`)
+          .join("\n");
         userContent = `${message}\n\n[Web-Suchergebnisse:\n${ctxStr}]`;
       }
       if (fileUrl && fileName) {
         const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
         const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
         const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
-        const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
+        const absUrl = fileUrl.startsWith("http")
+          ? fileUrl
+          : `${baseUrl}${fileUrl}`;
         if (isImage) {
-          userContent = [{ type: "image_url", image_url: { url: absUrl } }, { type: "text", text: typeof userContent === "string" ? userContent || `Analysiere dieses Bild: ${fileName}` : message }];
+          userContent = [
+            { type: "image_url", image_url: { url: absUrl } },
+            {
+              type: "text",
+              text:
+                typeof userContent === "string"
+                  ? userContent || `Analysiere dieses Bild: ${fileName}`
+                  : message,
+            },
+          ];
         } else {
           let fileContent = "";
-          try { const fr = await fetch(absUrl); if (fr.ok) { fileContent = await fr.text(); if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]"; } } catch { /* ignorieren */ }
-          userContent = fileContent ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]` : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
+          try {
+            const fr = await fetchWithTimeout(absUrl);
+            if (fr.ok) {
+              fileContent = await fr.text();
+              if (fileContent.length > 8000)
+                fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]";
+            }
+          } catch {
+            /* ignorieren */
+          }
+          userContent = fileContent
+            ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
+            : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
         }
       }
       llmMessages.push({ role: "user", content: userContent as string });
 
       // LLM aufrufen (nicht-streaming)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const llmResp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages as any });
-      let fullResponse = (llmResp.choices[0]?.message?.content as string) ?? "";
+      const llmResp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 4096,
+        messages: llmMessages as any,
+      });
+      const fullResponse =
+        (llmResp.choices[0]?.message?.content as string) ?? "";
 
       // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ─────────
       // Auch dieser Pfad (ohne Profil) nutzt die mehrstufige Werkzeugnutzung.
       const loopFb = await runAgentLoop({
         firstResponse: fullResponse,
         messages: llmMessages as unknown as LoopMessage[],
-        runAction: (parsed) => executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
-        callModel: async (msgs) => {
+        runAction: parsed =>
+          executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
+        callModel: async msgs => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const next = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: msgs as any });
+          const next = await invokeLLM({
+            model: "claude-sonnet-4-5",
+            max_tokens: 4096,
+            messages: msgs as any,
+          });
           return (next.choices[0]?.message?.content as string) ?? "";
         },
       });
       // Interne Kategorie-Markierungen entfernen (siehe cleanResponse.ts)
-      let cleanResponse = removeInternalTags(loopFb.text) + formatStepLog(loopFb.steps);
+      const cleanResponse =
+        removeInternalTags(loopFb.text) + formatStepLog(loopFb.steps);
       rememberPending(conversationId, loopFb.pending);
 
-
       // Antwort speichern
-      await addMessage({ conversationId, role: "assistant", content: cleanResponse });
-
-      // Gesprächstitel generieren (nur beim ersten Austausch)
-      if (history.length === 0) {
-        try {
-          const titleRes = await invokeLLM({ model: "claude-haiku-4-5", max_tokens: 30, messages: [{ role: "user", content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"` }] });
-          const title = titleRes.choices[0]?.message?.content;
-          await updateConversationTitle(conversationId, typeof title === "string" ? title.trim() : message.slice(0, 40));
-        } catch { /* optional */ }
-      }
-
-      return { response: cleanResponse, conversationId };
-    }),
-});
-
-// ─── Streaming-Chat-Handler via Manus Forge LLM (SSE) ────────────────────────
-import type { Request, Response } from "express";
-
-export async function handleChatStream(req: Request, res: Response) {
-  try {
-    const { conversationId, message, fileUrl, fileName, searchResults } = req.body as {
-      conversationId: number;
-      message: string;
-      fileUrl?: string;
-      fileName?: string;
-      searchResults?: Array<{ title: string; snippet: string; url: string }>;
-    };
-
-    const userId = (req as Request & { user?: { id: number } }).user?.id;
-    const conv = await getConversationById(conversationId);
-    if (!conv || conv.userId !== userId) {
-      res.status(403).json({ error: "Zugriff verweigert" });
-      return;
-    }
-
-    const history = await getMessagesByConversation(conversationId);
-
-    // Benutzer-Nachricht speichern
-    await addMessage({
-      conversationId,
-      role: "user",
-      content: message,
-      fileUrl: fileUrl ?? null,
-      fileName: fileName ?? null,
-    });
-
-    // Kalender-Kontext laden
-    let calendarContext = "";
-    if (userId) {
-      try {
-        const upcoming = await executeCalendarAction(userId, "list_events", { timeMin: new Date().toISOString(), timeMax: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() });
-        if (!upcoming.includes("nicht verbunden") && !upcoming.includes("Keine Termine")) calendarContext = `\n\nDeine nächsten Termine (7 Tage):\n${upcoming}`;
-      } catch { /* ignorieren */ }
-    }
-
-    // Gedächtnis laden
-    let memoryContext = "";
-    if (userId) {
-      try {
-        const mems = await getMemoriesByUser(userId);
-        if (mems.length > 0) {
-          const grouped: Record<string, string[]> = {};
-          for (const m of mems) {
-            if (!grouped[m.category]) grouped[m.category] = [];
-            grouped[m.category].push(`${m.key}: ${m.value}`);
-          }
-          // Kategorien als Klartext-Überschrift, NICHT in eckigen Klammern:
-          // das Modell hat die Markierungen sonst wörtlich in die Antwort
-          // übernommen (im Chat erschien etwa «... 2019 [person].»).
-          const namen: Record<string, string> = {
-            person: "Personen", contact: "Kontakte", preference: "Vorlieben",
-            project: "Projekte", fact: "Fakten", context: "Kontext",
-          };
-          const lines = Object.entries(grouped)
-            .map(([cat, items]) => `${namen[cat] ?? cat}:\n${items.join("\n")}`)
-            .join("\n\n");
-          memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
-        }
-      } catch { /* ignorieren */ }
-    }
-
-    const systemPrompt = `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
-
-${JARVIS_PERSONA}
-
-Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
-
-KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein (kein sichtbarer XML-Block für den Nutzer):
-<calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
-<calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
-<calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel","startDateTime":"ISO","endDateTime":"ISO"}</calendar_action>
-<calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
-<calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
-<calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
-WICHTIG: Wenn du eine eventId brauchst (für update/delete/invite), nutze zuerst get_event um die ID zu finden, dann führe die gewünschte Aktion aus. Zeige dem Nutzer NIE den rohen Aktionsblock.
-
-GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt (Namen, E-Mail, Telefon, Präferenzen, Fakten über Personen oder Projekte), speichere sie mit einem memory_action-Block am Ende deiner Antwort:
-<memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-<memory_action>{"category":"preference","key":"Lieblingsfarbe","value":"Blau"}</memory_action>
-Kategorien: person, contact, preference, project, fact.
-WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
-Kategorien-Hinweis Ende. Speichere NUR wenn der Nutzer explizit eine Information mitteilt. Zeige dem Nutzer NIE den rohen memory_action-Block.
-${calendarContext}${memoryContext}`;
-
-    // Nachrichten-History aufbauen
-    type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
-    const llmMessages: LLMMessage[] = [
-      { role: "system", content: systemPrompt },
-      ...history.map((m) => ({
-        role: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
-        content: m.content,
-      })),
-    ];
-
-    // Aktuelle Nachricht aufbauen
-    let userContent: string | Array<{ type: string; text?: string; image_url?: { url: string } }> = message;
-
-    if (searchResults && searchResults.length > 0) {
-      const ctx = searchResults.map((r) => `**${r.title}**: ${r.snippet} (${r.url})`).join("\n");
-      userContent = `${message}\n\n[Web-Suchergebnisse:\n${ctx}]`;
-    }
-
-    if (fileUrl && fileName) {
-      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-      const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
-      const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
-      const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
-
-      if (isImage) {
-        userContent = [
-          { type: "image_url", image_url: { url: absUrl } },
-          { type: "text", text: typeof userContent === "string" ? userContent || `Analysiere dieses Bild: ${fileName}` : message },
-        ];
-      } else {
-        // Text/PDF: Inhalt laden
-        let fileContent = "";
-        try {
-          const fr = await fetch(absUrl);
-          if (fr.ok) {
-            fileContent = await fr.text();
-            if (fileContent.length > 8000) fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]";
-          }
-        } catch { /* ignorieren */ }
-        userContent = fileContent
-          ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
-          : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
-      }
-    }
-
-    llmMessages.push({ role: "user", content: userContent as string });
-
-    // SSE-Header setzen
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    let finished = false;
-    res.on("close", () => { finished = true; });
-
-    // Streaming via Forge API (OpenAI-kompatibel)
-    const forgeUrl = `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`;
-    const streamResp = await fetch(forgeUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${ENV.forgeApiKey}`,
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-5",
-        messages: llmMessages,
-        max_tokens: 4096,
-        stream: true,
-      }),
-    });
-
-    if (!streamResp.ok || !streamResp.body) {
-      const errText = await streamResp.text();
-      throw new Error(`LLM Fehler: ${streamResp.status} ${errText}`);
-    }
-
-    const reader = streamResp.body.getReader();
-    const decoder = new TextDecoder();
-    let fullResponse = "";
-
-    while (true) {
-      if (finished) break;
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      const lines = chunk.split("\n");
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const data = line.slice(6).trim();
-        if (data === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(data);
-          const text = parsed.choices?.[0]?.delta?.content ?? "";
-          if (text) {
-            fullResponse += text;
-            res.write(`data: ${JSON.stringify({ text })}\n\n`);
-          }
-        } catch { /* ignorieren */ }
-      }
-    }
-
-    if (!finished) {
-      // ── calendar_action-Blöcke aus Antwort herausfiltern und ausführen ──────
-      const calActionRegex = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
-      const calMatches: RegExpExecArray[] = [];
-      let m: RegExpExecArray | null;
-      while ((m = calActionRegex.exec(fullResponse)) !== null) calMatches.push(m);
-      let cleanResponse = fullResponse.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
-
-      if (calMatches.length > 0 && userId) {
-        for (const match of calMatches) {
-          try {
-            const actionData = JSON.parse(match[1].trim()) as Record<string, unknown>;
-            const action = actionData.action as string;
-            const result = await executeCalendarAction(userId, action, actionData);
-            // Ergebnis als Extra-Chunk senden
-            const resultText = `\n\n**Kalender:** ${result}`;
-            cleanResponse += resultText;
-            res.write(`data: ${JSON.stringify({ text: resultText })}\n\n`);
-          } catch (e) {
-            const errText = `\n\n**Kalender-Fehler:** ${e instanceof Error ? e.message : String(e)}`;
-            cleanResponse += errText;
-            res.write(`data: ${JSON.stringify({ text: errText })}\n\n`);
-          }
-        }
-      }
-
-      // ── memory_action-Blöcke herausfiltern und speichern ─────────────────────
-      const memActionRegex = /<memory_action>([\s\S]*?)<\/memory_action>/g;
-      const memMatches: RegExpExecArray[] = [];
-      let mm: RegExpExecArray | null;
-      while ((mm = memActionRegex.exec(cleanResponse)) !== null) memMatches.push(mm);
-      cleanResponse = cleanResponse.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
-
-      if (memMatches.length > 0 && userId) {
-        for (const match of memMatches) {
-          try {
-            const memData = JSON.parse(match[1].trim()) as { category?: string; key?: string; value?: string };
-            if (memData.key && memData.value) {
-              await upsertMemory(userId, memData.category ?? "fact", memData.key, memData.value, "chat");
-            }
-          } catch { /* ignorieren */ }
-        }
-      }
-
-      // ── app_action-Blöcke ausführen und Ergebnis einfügen ─────────────────
-      const appActionRegex = /<app_action>([\s\S]*?)<\/app_action>/g;
-      const appMatches: RegExpExecArray[] = [];
-      let am: RegExpExecArray | null;
-      while ((am = appActionRegex.exec(cleanResponse)) !== null) appMatches.push(am);
-      cleanResponse = cleanResponse.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
-
-      if (appMatches.length > 0) {
-        for (const match of appMatches) {
-          try {
-            const actionData = JSON.parse(match[1].trim()) as { action: string; [key: string]: unknown };
-            const { action, ...params } = actionData;
-            const result = await executeAppAction(action, params);
-            cleanResponse = cleanResponse + "\n\n" + result;
-          } catch (e) {
-            console.error("[AppAction] Fehler:", e);
-          }
-        }
-      }
-
-      // Antwort in DB speichern (ohne action-Blöcke)
-      await addMessage({ conversationId, role: "assistant", content: cleanResponse });
+      await addMessage({
+        conversationId,
+        role: "assistant",
+        content: cleanResponse,
+      });
 
       // Gesprächstitel generieren (nur beim ersten Austausch)
       if (history.length === 0) {
@@ -1083,24 +964,23 @@ ${calendarContext}${memoryContext}`;
           const titleRes = await invokeLLM({
             model: "claude-haiku-4-5",
             max_tokens: 30,
-            messages: [{ role: "user", content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"` }],
+            messages: [
+              {
+                role: "user",
+                content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"`,
+              },
+            ],
           });
           const title = titleRes.choices[0]?.message?.content;
-          const titleText = typeof title === "string" ? title.trim() : message.slice(0, 40);
-          await updateConversationTitle(conversationId, titleText);
-        } catch { /* Titel-Generierung ist optional */ }
+          await updateConversationTitle(
+            conversationId,
+            typeof title === "string" ? title.trim() : message.slice(0, 40)
+          );
+        } catch {
+          /* optional */
+        }
       }
 
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
-    }
-  } catch (err) {
-    console.error("[Chat Stream Error]", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Fehler beim Chat" });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: "Fehler beim Generieren der Antwort" })}\n\n`);
-      res.end();
-    }
-  }
-}
+      return { response: cleanResponse, conversationId };
+    }),
+});
