@@ -39,6 +39,11 @@ const envSchema = z.object({
   APP_PASSWORD: z.string().optional(),
   OWNER_NAME: z.string().optional(),
 
+  // Öffentliche Basis-URL der App (z.B. https://ai-gross-ict.ch) – Grundlage
+  // der OAuth-Redirect-URIs für Google und Spotify. Ohne Angabe wird sie aus
+  // dem Request abgeleitet.
+  APP_URL: z.string().url().optional().or(z.literal("")),
+
   // Optionale Integrationen
   ELEVENLABS_API_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -75,6 +80,7 @@ const values = parsed.success
       ANTHROPIC_API_KEY: RAW.ANTHROPIC_API_KEY,
       APP_PASSWORD: RAW.APP_PASSWORD,
       OWNER_NAME: RAW.OWNER_NAME,
+      APP_URL: RAW.APP_URL,
       ELEVENLABS_API_KEY: RAW.ELEVENLABS_API_KEY,
       GOOGLE_CLIENT_ID: RAW.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: RAW.GOOGLE_CLIENT_SECRET,

@@ -3,11 +3,10 @@ import { TRPCError } from "@trpc/server";
 import type { Request, Response } from "express";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getSpotifyToken, upsertSpotifyToken, deleteSpotifyToken } from "../db";
+import { getSpotifyRedirectUri } from "../_core/baseUrl";
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET ?? "";
-export const SPOTIFY_REDIRECT_URI =
-  "https://jarvisai-h2rxxjj4.manus.space/api/oauth/spotify/callback";
 
 /** Benötigte Berechtigungen für Wiedergabesteuerung und Suche. */
 const SCOPES = [
@@ -122,7 +121,9 @@ export async function handleSpotifyOAuthCallback(req: Request, res: Response) {
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: SPOTIFY_REDIRECT_URI,
+        // Muss exakt der redirect_uri aus getAuthUrl entsprechen – beide
+        // leiten sich aus derselben Basis-URL ab.
+        redirect_uri: getSpotifyRedirectUri(req),
       }),
     });
     const tokenData = (await tokenRes.json()) as {
@@ -403,7 +404,7 @@ export const spotifyRouter = router({
     const url = new URL("https://accounts.spotify.com/authorize");
     url.searchParams.set("client_id", CLIENT_ID);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", SPOTIFY_REDIRECT_URI);
+    url.searchParams.set("redirect_uri", getSpotifyRedirectUri(ctx.req));
     url.searchParams.set("scope", SCOPES);
     url.searchParams.set("state", String(ctx.user.id));
     url.searchParams.set("show_dialog", "false");

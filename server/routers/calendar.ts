@@ -2,11 +2,10 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getGoogleToken, upsertGoogleToken, deleteGoogleToken } from "../db";
+import { getGoogleRedirectUri } from "../_core/baseUrl";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const REDIRECT_URI =
-  "https://jarvisai-h2rxxjj4.manus.space/api/oauth/google/callback";
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
@@ -111,7 +110,7 @@ export const calendarRouter = router({
   getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
     const params = new URLSearchParams({
       client_id: GOOGLE_CLIENT_ID,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: getGoogleRedirectUri(ctx.req),
       response_type: "code",
       scope: SCOPES,
       access_type: "offline",

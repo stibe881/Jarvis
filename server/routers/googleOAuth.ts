@@ -2,11 +2,10 @@ import type { Request, Response } from "express";
 import { upsertGoogleToken } from "../db";
 import { getUserByOpenId } from "../db";
 import { sdk } from "../_core/sdk";
+import { getGoogleRedirectUri } from "../_core/baseUrl";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const REDIRECT_URI =
-  "https://jarvisai-h2rxxjj4.manus.space/api/oauth/google/callback";
 
 export async function handleGoogleOAuthCallback(req: Request, res: Response) {
   try {
@@ -35,7 +34,9 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
         client_secret: GOOGLE_CLIENT_SECRET,
         code,
         grant_type: "authorization_code",
-        redirect_uri: REDIRECT_URI,
+        // Muss exakt der redirect_uri aus der Auth-URL (calendar.getAuthUrl)
+        // entsprechen – beide leiten sich aus derselben Basis-URL ab.
+        redirect_uri: getGoogleRedirectUri(req),
       }),
     });
 
