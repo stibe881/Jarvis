@@ -6,7 +6,8 @@ import { getSpotifyToken, upsertSpotifyToken, deleteSpotifyToken } from "../db";
 
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET ?? "";
-export const SPOTIFY_REDIRECT_URI = "https://jarvisai-h2rxxjj4.manus.space/api/oauth/spotify/callback";
+export const SPOTIFY_REDIRECT_URI =
+  "https://jarvisai-h2rxxjj4.manus.space/api/oauth/spotify/callback";
 
 /** Benötigte Berechtigungen für Wiedergabesteuerung und Suche. */
 const SCOPES = [
@@ -21,11 +22,15 @@ const SCOPES = [
 ].join(" ");
 
 function basicAuth() {
-  return "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
+  return (
+    "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64")
+  );
 }
 
 /** Gültigen Access-Token holen, bei Bedarf über Refresh-Token erneuern. */
-export async function getValidSpotifyAccessToken(userId: number): Promise<string | null> {
+export async function getValidSpotifyAccessToken(
+  userId: number
+): Promise<string | null> {
   const row = await getSpotifyToken(userId);
   if (!row) return null;
 
@@ -35,10 +40,20 @@ export async function getValidSpotifyAccessToken(userId: number): Promise<string
 
   const res = await fetch("https://accounts.spotify.com/api/token", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: basicAuth() },
-    body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: row.refreshToken }),
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Authorization: basicAuth(),
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: row.refreshToken,
+    }),
   });
-  const data = (await res.json()) as { access_token?: string; expires_in?: number; refresh_token?: string };
+  const data = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    refresh_token?: string;
+  };
   if (!res.ok || !data.access_token) {
     console.error("[Spotify] Refresh fehlgeschlagen", data);
     return null;
@@ -74,7 +89,11 @@ async function spotifyFetch(
   if (res.status === 204) return { status: 204, data: null };
   const text = await res.text();
   let data: unknown = null;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text;
+  }
   return { status: res.status, data };
 }
 
@@ -83,15 +102,23 @@ async function spotifyFetch(
 export async function handleSpotifyOAuthCallback(req: Request, res: Response) {
   try {
     const { code, state, error } = req.query as Record<string, string>;
-    if (error) return res.redirect(`/integrations?spotify_error=${encodeURIComponent(error)}`);
-    if (!code || !state) return res.redirect("/integrations?spotify_error=missing_params");
+    if (error)
+      return res.redirect(
+        `/integrations?spotify_error=${encodeURIComponent(error)}`
+      );
+    if (!code || !state)
+      return res.redirect("/integrations?spotify_error=missing_params");
 
     const userId = parseInt(state, 10);
-    if (Number.isNaN(userId)) return res.redirect("/integrations?spotify_error=invalid_state");
+    if (Number.isNaN(userId))
+      return res.redirect("/integrations?spotify_error=invalid_state");
 
     const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: basicAuth() },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Authorization: basicAuth(),
+      },
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
@@ -99,11 +126,17 @@ export async function handleSpotifyOAuthCallback(req: Request, res: Response) {
       }),
     });
     const tokenData = (await tokenRes.json()) as {
-      access_token?: string; refresh_token?: string; expires_in?: number; scope?: string; error?: string;
+      access_token?: string;
+      refresh_token?: string;
+      expires_in?: number;
+      scope?: string;
+      error?: string;
     };
     if (!tokenRes.ok || !tokenData.access_token) {
       console.error("[Spotify OAuth] Token-Fehler", tokenData);
-      return res.redirect(`/integrations?spotify_error=${encodeURIComponent(tokenData.error ?? "token_error")}`);
+      return res.redirect(
+        `/integrations?spotify_error=${encodeURIComponent(tokenData.error ?? "token_error")}`
+      );
     }
 
     // Profil abrufen (Name + Premium-Status)
@@ -111,10 +144,15 @@ export async function handleSpotifyOAuthCallback(req: Request, res: Response) {
     let product: string | null = null;
     try {
       const me = await spotifyFetch(tokenData.access_token, "/me");
-      const info = me.data as { display_name?: string; product?: string } | null;
+      const info = me.data as {
+        display_name?: string;
+        product?: string;
+      } | null;
       displayName = info?.display_name ?? null;
       product = info?.product ?? null;
-    } catch { /* ignorieren */ }
+    } catch {
+      /* ignorieren */
+    }
 
     await upsertSpotifyToken({
       userId,
@@ -135,10 +173,15 @@ export async function handleSpotifyOAuthCallback(req: Request, res: Response) {
 
 // ── Aktions-Dispatcher für den Chat ──────────────────────────────────────────
 
-type TrackInfo = { name: string; artists?: { name: string }[]; uri: string; album?: { name: string } };
+type TrackInfo = {
+  name: string;
+  artists?: { name: string }[];
+  uri: string;
+  album?: { name: string };
+};
 
 function formatTrack(t: TrackInfo) {
-  const artists = (t.artists ?? []).map((a) => a.name).join(", ");
+  const artists = (t.artists ?? []).map(a => a.name).join(", ");
   return artists ? `${t.name} – ${artists}` : t.name;
 }
 
@@ -156,19 +199,25 @@ export async function executeSpotifyAction(
     return "⚠️ Spotify ist nicht verbunden. Verbinde dein Konto unter **Verbindungen → Spotify**.";
   }
 
-  const noDevice = "⚠️ Kein aktives Spotify-Gerät gefunden. Öffne Spotify auf dem iPhone, Mac oder im Browser und starte kurz ein Lied – danach kann ich die Wiedergabe steuern.";
+  const noDevice =
+    "⚠️ Kein aktives Spotify-Gerät gefunden. Öffne Spotify auf dem iPhone, Mac oder im Browser und starte kurz ein Lied – danach kann ich die Wiedergabe steuern.";
 
-  const str = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : undefined);
-  const num = (k: string) => (typeof params[k] === "number" ? (params[k] as number) : undefined);
+  const str = (k: string) =>
+    typeof params[k] === "string" ? (params[k] as string) : undefined;
+  const num = (k: string) =>
+    typeof params[k] === "number" ? (params[k] as number) : undefined;
 
   switch (action) {
     case "play": {
       const query = str("query");
       // Ohne Suchbegriff: Wiedergabe fortsetzen
       if (!query) {
-        const r = await spotifyFetch(token, "/me/player/play", { method: "PUT" });
+        const r = await spotifyFetch(token, "/me/player/play", {
+          method: "PUT",
+        });
         if (r.status === 404) return noDevice;
-        if (r.status === 403) return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
+        if (r.status === 403)
+          return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
         return "▶️ Wiedergabe gestartet.";
       }
       // Mit Suchbegriff: passenden Titel/Playlist/Album suchen und abspielen
@@ -179,37 +228,57 @@ export async function executeSpotifyAction(
       );
       const sd = search.data as Record<string, { items?: unknown[] }> | null;
       const items = sd?.[`${type}s`]?.items ?? [];
-      if (!items.length) return `Ich habe zu "${query}" nichts auf Spotify gefunden.`;
+      if (!items.length)
+        return `Ich habe zu "${query}" nichts auf Spotify gefunden.`;
 
       if (type === "track") {
         const track = items[0] as TrackInfo;
-        const r = await spotifyFetch(token, "/me/player/play", { method: "PUT", body: { uris: [track.uri] } });
+        const r = await spotifyFetch(token, "/me/player/play", {
+          method: "PUT",
+          body: { uris: [track.uri] },
+        });
         if (r.status === 404) return noDevice;
-        if (r.status === 403) return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
+        if (r.status === 403)
+          return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
         return `▶️ Spiele **${formatTrack(track)}**`;
       }
       const ctx = items[0] as { uri: string; name: string };
-      const r = await spotifyFetch(token, "/me/player/play", { method: "PUT", body: { context_uri: ctx.uri } });
+      const r = await spotifyFetch(token, "/me/player/play", {
+        method: "PUT",
+        body: { context_uri: ctx.uri },
+      });
       if (r.status === 404) return noDevice;
-      if (r.status === 403) return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
-      const label = type === "playlist" ? "Playlist" : type === "album" ? "Album" : "Künstler";
+      if (r.status === 403)
+        return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
+      const label =
+        type === "playlist"
+          ? "Playlist"
+          : type === "album"
+            ? "Album"
+            : "Künstler";
       return `▶️ Spiele ${label} **${ctx.name}**`;
     }
 
     case "pause": {
-      const r = await spotifyFetch(token, "/me/player/pause", { method: "PUT" });
+      const r = await spotifyFetch(token, "/me/player/pause", {
+        method: "PUT",
+      });
       if (r.status === 404) return noDevice;
       return "⏸️ Wiedergabe pausiert.";
     }
 
     case "next": {
-      const r = await spotifyFetch(token, "/me/player/next", { method: "POST" });
+      const r = await spotifyFetch(token, "/me/player/next", {
+        method: "POST",
+      });
       if (r.status === 404) return noDevice;
       return "⏭️ Nächster Titel.";
     }
 
     case "previous": {
-      const r = await spotifyFetch(token, "/me/player/previous", { method: "POST" });
+      const r = await spotifyFetch(token, "/me/player/previous", {
+        method: "POST",
+      });
       if (r.status === 404) return noDevice;
       return "⏮️ Vorheriger Titel.";
     }
@@ -217,21 +286,33 @@ export async function executeSpotifyAction(
     case "volume": {
       const level = num("level") ?? 50;
       const clamped = Math.max(0, Math.min(100, Math.round(level)));
-      const r = await spotifyFetch(token, `/me/player/volume?volume_percent=${clamped}`, { method: "PUT" });
+      const r = await spotifyFetch(
+        token,
+        `/me/player/volume?volume_percent=${clamped}`,
+        { method: "PUT" }
+      );
       if (r.status === 404) return noDevice;
       return `🔊 Lautstärke auf ${clamped}% gesetzt.`;
     }
 
     case "shuffle": {
       const on = params.enabled !== false;
-      const r = await spotifyFetch(token, `/me/player/shuffle?state=${on}`, { method: "PUT" });
+      const r = await spotifyFetch(token, `/me/player/shuffle?state=${on}`, {
+        method: "PUT",
+      });
       if (r.status === 404) return noDevice;
-      return on ? "🔀 Zufallswiedergabe eingeschaltet." : "➡️ Zufallswiedergabe ausgeschaltet.";
+      return on
+        ? "🔀 Zufallswiedergabe eingeschaltet."
+        : "➡️ Zufallswiedergabe ausgeschaltet.";
     }
 
     case "current": {
-      const r = await spotifyFetch(token, "/me/player/currently-playing?market=CH");
-      if (r.status === 204 || !r.data) return "Momentan läuft nichts auf Spotify.";
+      const r = await spotifyFetch(
+        token,
+        "/me/player/currently-playing?market=CH"
+      );
+      if (r.status === 204 || !r.data)
+        return "Momentan läuft nichts auf Spotify.";
       const d = r.data as { item?: TrackInfo; is_playing?: boolean };
       if (!d.item) return "Momentan läuft nichts auf Spotify.";
       const state = d.is_playing ? "▶️ Läuft gerade" : "⏸️ Pausiert";
@@ -243,30 +324,52 @@ export async function executeSpotifyAction(
       const query = str("query");
       if (!query) return "Was soll ich auf Spotify suchen?";
       const type = str("type") ?? "track";
-      const r = await spotifyFetch(token, `/search?q=${encodeURIComponent(query)}&type=${type}&limit=5&market=CH`);
+      const r = await spotifyFetch(
+        token,
+        `/search?q=${encodeURIComponent(query)}&type=${type}&limit=5&market=CH`
+      );
       const sd = r.data as Record<string, { items?: unknown[] }> | null;
       const items = (sd?.[`${type}s`]?.items ?? []) as TrackInfo[];
       if (!items.length) return `Zu "${query}" habe ich nichts gefunden.`;
-      return `**Suchergebnisse für "${query}":**\n` +
-        items.map((t, i) => `${i + 1}. ${formatTrack(t)}`).join("\n");
+      return (
+        `**Suchergebnisse für "${query}":**\n` +
+        items.map((t, i) => `${i + 1}. ${formatTrack(t)}`).join("\n")
+      );
     }
 
     case "playlists": {
       const r = await spotifyFetch(token, "/me/playlists?limit=20");
-      const d = r.data as { items?: { name: string; tracks?: { total: number } }[] } | null;
+      const d = r.data as {
+        items?: { name: string; tracks?: { total: number } }[];
+      } | null;
       const items = d?.items ?? [];
       if (!items.length) return "Du hast keine Playlists.";
-      return `**Deine Playlists (${items.length}):**\n` +
-        items.map((p) => `• ${p.name}${p.tracks ? ` (${p.tracks.total} Titel)` : ""}`).join("\n");
+      return (
+        `**Deine Playlists (${items.length}):**\n` +
+        items
+          .map(
+            p => `• ${p.name}${p.tracks ? ` (${p.tracks.total} Titel)` : ""}`
+          )
+          .join("\n")
+      );
     }
 
     case "devices": {
       const r = await spotifyFetch(token, "/me/player/devices");
-      const d = r.data as { devices?: { name: string; type: string; is_active: boolean }[] } | null;
+      const d = r.data as {
+        devices?: { name: string; type: string; is_active: boolean }[];
+      } | null;
       const devices = d?.devices ?? [];
       if (!devices.length) return noDevice;
-      return `**Verfügbare Geräte:**\n` +
-        devices.map((dev) => `• ${dev.name} (${dev.type})${dev.is_active ? " – aktiv" : ""}`).join("\n");
+      return (
+        `**Verfügbare Geräte:**\n` +
+        devices
+          .map(
+            dev =>
+              `• ${dev.name} (${dev.type})${dev.is_active ? " – aktiv" : ""}`
+          )
+          .join("\n")
+      );
     }
 
     default:
@@ -292,7 +395,10 @@ export const spotifyRouter = router({
   /** Autorisierungs-URL für den OAuth-Flow. */
   getAuthUrl: protectedProcedure.query(({ ctx }) => {
     if (!CLIENT_ID) {
-      throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Spotify ist nicht konfiguriert." });
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Spotify ist nicht konfiguriert.",
+      });
     }
     const url = new URL("https://accounts.spotify.com/authorize");
     url.searchParams.set("client_id", CLIENT_ID);
@@ -313,28 +419,49 @@ export const spotifyRouter = router({
   nowPlaying: protectedProcedure.query(async ({ ctx }) => {
     const token = await getValidSpotifyAccessToken(ctx.user.id);
     if (!token) return { connected: false as const };
-    const r = await spotifyFetch(token, "/me/player/currently-playing?market=CH");
-    if (r.status === 204 || !r.data) return { connected: true as const, playing: false as const };
-    const d = r.data as { item?: TrackInfo; is_playing?: boolean; progress_ms?: number };
+    const r = await spotifyFetch(
+      token,
+      "/me/player/currently-playing?market=CH"
+    );
+    if (r.status === 204 || !r.data)
+      return { connected: true as const, playing: false as const };
+    const d = r.data as {
+      item?: TrackInfo;
+      is_playing?: boolean;
+      progress_ms?: number;
+    };
     if (!d.item) return { connected: true as const, playing: false as const };
     return {
       connected: true as const,
       playing: !!d.is_playing,
       title: d.item.name,
-      artist: (d.item.artists ?? []).map((a) => a.name).join(", "),
+      artist: (d.item.artists ?? []).map(a => a.name).join(", "),
       album: d.item.album?.name ?? null,
     };
   }),
 
   /** Steuerbefehl aus der UI. */
   control: protectedProcedure
-    .input(z.object({
-      action: z.enum(["play", "pause", "next", "previous", "volume", "shuffle", "current", "search", "playlists", "devices"]),
-      query: z.string().optional(),
-      type: z.enum(["track", "album", "playlist", "artist"]).optional(),
-      level: z.number().min(0).max(100).optional(),
-      enabled: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        action: z.enum([
+          "play",
+          "pause",
+          "next",
+          "previous",
+          "volume",
+          "shuffle",
+          "current",
+          "search",
+          "playlists",
+          "devices",
+        ]),
+        query: z.string().optional(),
+        type: z.enum(["track", "album", "playlist", "artist"]).optional(),
+        level: z.number().min(0).max(100).optional(),
+        enabled: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const { action, ...params } = input;
       const message = await executeSpotifyAction(ctx.user.id, action, params);

@@ -1,13 +1,26 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
-  createTemplate, getTemplatesByUser, getTemplateById,
-  updateTemplate, deleteTemplate, incrementTemplateUsage,
+  createTemplate,
+  getTemplatesByUser,
+  getTemplateById,
+  updateTemplate,
+  deleteTemplate,
+  incrementTemplateUsage,
 } from "../db";
 import { invokeLLM } from "../_core/llm";
 import { TRPCError } from "@trpc/server";
 
-const categoryEnum = z.enum(["quote", "invoice", "concept", "report", "email", "procurement", "minutes", "other"]);
+const categoryEnum = z.enum([
+  "quote",
+  "invoice",
+  "concept",
+  "report",
+  "email",
+  "procurement",
+  "minutes",
+  "other",
+]);
 const contextEnum = z.enum(["gross_ict", "sonnenberg", "general"]);
 
 // Platzhalter aus Vorlagentext extrahieren: {{name}}
@@ -87,7 +100,8 @@ Gross ICT · gross-ict.ch`,
     name: "IT-Konzept (Sonnenberg)",
     category: "concept",
     context: "sonnenberg",
-    description: "Struktur für ein IT-Konzept zur Vorlage bei der Geschäftsleitung.",
+    description:
+      "Struktur für ein IT-Konzept zur Vorlage bei der Geschäftsleitung.",
     content: `# IT-Konzept: {{Titel}}
 
 Kompetenzzentrum Sonnenberg, Baar · Abteilung ICT
@@ -128,7 +142,8 @@ Investition: CHF {{Investition}} · Wiederkehrend pro Jahr: CHF {{Betriebskosten
     name: "Beschaffungsantrag (Sonnenberg)",
     category: "procurement",
     context: "sonnenberg",
-    description: "Antrag für eine ICT-Beschaffung inklusive Begründung und Kosten.",
+    description:
+      "Antrag für eine ICT-Beschaffung inklusive Begründung und Kosten.",
     content: `# Beschaffungsantrag {{Beschaffungsnummer}}
 
 Kompetenzzentrum Sonnenberg, Baar · Abteilung ICT
@@ -238,13 +253,15 @@ export const templatesRouter = router({
     }),
 
   create: protectedProcedure
-    .input(z.object({
-      name: z.string().min(1),
-      category: categoryEnum.default("other"),
-      context: contextEnum.default("general"),
-      description: z.string().optional(),
-      content: z.string().min(1),
-    }))
+    .input(
+      z.object({
+        name: z.string().min(1),
+        category: categoryEnum.default("other"),
+        context: contextEnum.default("general"),
+        description: z.string().optional(),
+        content: z.string().min(1),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const placeholders = extractPlaceholders(input.content);
       return createTemplate({
@@ -259,19 +276,22 @@ export const templatesRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number(),
-      name: z.string().optional(),
-      category: categoryEnum.optional(),
-      context: contextEnum.optional(),
-      description: z.string().optional(),
-      content: z.string().optional(),
-      isFavorite: z.boolean().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        category: categoryEnum.optional(),
+        context: contextEnum.optional(),
+        description: z.string().optional(),
+        content: z.string().optional(),
+        isFavorite: z.boolean().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const { id, ...rest } = input;
       const data: Record<string, unknown> = { ...rest };
-      if (rest.content) data.placeholders = JSON.stringify(extractPlaceholders(rest.content));
+      if (rest.content)
+        data.placeholders = JSON.stringify(extractPlaceholders(rest.content));
       await updateTemplate(id, ctx.user.id, data);
       return { success: true };
     }),
@@ -306,19 +326,28 @@ export const templatesRouter = router({
 
   // Vorlage ausfüllen: bekannte Werte einsetzen, Rest von Jarvis ergänzen lassen
   fill: protectedProcedure
-    .input(z.object({
-      id: z.number(),
-      values: z.record(z.string(), z.string()),
-      autoComplete: z.boolean().default(false),
-      extraContext: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number(),
+        values: z.record(z.string(), z.string()),
+        autoComplete: z.boolean().default(false),
+        extraContext: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const tpl = await getTemplateById(input.id, ctx.user.id);
-      if (!tpl) throw new TRPCError({ code: "NOT_FOUND", message: "Vorlage nicht gefunden." });
+      if (!tpl)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Vorlage nicht gefunden.",
+        });
 
       let result = tpl.content;
       for (const [key, value] of Object.entries(input.values)) {
-        const rx = new RegExp(`\\{\\{\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\}\\}`, "g");
+        const rx = new RegExp(
+          `\\{\\{\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\}\\}`,
+          "g"
+        );
         result = result.replace(rx, value);
       }
 

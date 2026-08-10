@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { detectWakeWord } from "../shared/wakeWord";
 import {
-  budgetState, currentYearMonth, shortenForSpeech, stripForSpeech,
-  MAX_CHARS_PER_SPEECH, MONTHLY_CHAR_LIMIT,
+  budgetState,
+  currentYearMonth,
+  shortenForSpeech,
+  stripForSpeech,
+  MAX_CHARS_PER_SPEECH,
+  MONTHLY_CHAR_LIMIT,
 } from "./ttsBudget";
 
 describe("Wake-Word-Erkennung", () => {
@@ -28,7 +32,11 @@ describe("Wake-Word-Erkennung", () => {
   });
 
   it("reagiert nicht, wenn der Name mitten im Satz vorkommt", () => {
-    expect(detectWakeWord("Ich habe gestern mit meinem Kollegen über Jarvis gesprochen").detected).toBe(false);
+    expect(
+      detectWakeWord(
+        "Ich habe gestern mit meinem Kollegen über Jarvis gesprochen"
+      ).detected
+    ).toBe(false);
   });
 
   it("reagiert nicht auf beliebige Sätze", () => {
@@ -39,21 +47,29 @@ describe("Wake-Word-Erkennung", () => {
 
 describe("Sprachausgabe-Text bereinigen", () => {
   it("entfernt Markdown-Auszeichnungen", () => {
-    expect(stripForSpeech("## Titel\n\n**Wichtig**: das *hier*")).toBe("Titel. Wichtig: das hier");
+    expect(stripForSpeech("## Titel\n\n**Wichtig**: das *hier*")).toBe(
+      "Titel. Wichtig: das hier"
+    );
   });
 
   it("entfernt Codeblöcke vollständig", () => {
-    const out = stripForSpeech("Hier der Code:\n```ts\nconst a = 1;\n```\nFertig.");
+    const out = stripForSpeech(
+      "Hier der Code:\n```ts\nconst a = 1;\n```\nFertig."
+    );
     expect(out).not.toContain("const a");
     expect(out).toContain("Fertig");
   });
 
   it("behält nur den Linktext", () => {
-    expect(stripForSpeech("Siehe [Webseite](https://gross-ict.ch)")).toBe("Siehe Webseite");
+    expect(stripForSpeech("Siehe [Webseite](https://gross-ict.ch)")).toBe(
+      "Siehe Webseite"
+    );
   });
 
   it("entfernt Listenzeichen", () => {
-    expect(stripForSpeech("- Erster Punkt\n- Zweiter Punkt")).toBe("Erster Punkt Zweiter Punkt");
+    expect(stripForSpeech("- Erster Punkt\n- Zweiter Punkt")).toBe(
+      "Erster Punkt Zweiter Punkt"
+    );
   });
 });
 
@@ -78,7 +94,10 @@ describe("Kurzfassung für die Sprachausgabe", () => {
   });
 
   it("respektiert ein individuelles Limit", () => {
-    const r = shortenForSpeech("Ein etwas längerer Satz zum Testen der Kürzung.", 20);
+    const r = shortenForSpeech(
+      "Ein etwas längerer Satz zum Testen der Kürzung.",
+      20
+    );
     expect(r.spoken.length).toBeLessThanOrEqual(22);
     expect(r.truncated).toBe(true);
   });

@@ -47,9 +47,9 @@
   --radius: 0.5rem;
   --background: oklch(0.07 0.02 240);
   --foreground: oklch(0.92 0.03 210);
-  --card: oklch(0.10 0.03 240);
+  --card: oklch(0.1 0.03 240);
   --card-foreground: oklch(0.92 0.03 210);
-  --popover: oklch(0.10 0.03 240);
+  --popover: oklch(0.1 0.03 240);
   --popover-foreground: oklch(0.92 0.03 210);
   --primary: oklch(0.65 0.22 220);
   --primary-foreground: oklch(0.07 0.02 240);
@@ -67,8 +67,8 @@
   --chart-1: oklch(0.65 0.22 220);
   --chart-2: oklch(0.75 0.18 195);
   --chart-3: oklch(0.55 0.18 260);
-  --chart-4: oklch(0.70 0.20 170);
-  --chart-5: oklch(0.60 0.20 280);
+  --chart-4: oklch(0.7 0.2 170);
+  --chart-5: oklch(0.6 0.2 280);
   --sidebar: oklch(0.08 0.025 240);
   --sidebar-foreground: oklch(0.92 0.03 210);
   --sidebar-primary: oklch(0.65 0.22 220);
@@ -82,9 +82,9 @@
 .dark {
   --background: oklch(0.07 0.02 240);
   --foreground: oklch(0.92 0.03 210);
-  --card: oklch(0.10 0.03 240);
+  --card: oklch(0.1 0.03 240);
   --card-foreground: oklch(0.92 0.03 210);
-  --popover: oklch(0.10 0.03 240);
+  --popover: oklch(0.1 0.03 240);
   --popover-foreground: oklch(0.92 0.03 210);
   --primary: oklch(0.65 0.22 220);
   --primary-foreground: oklch(0.07 0.02 240);
@@ -115,10 +115,10 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: "Inter", sans-serif;
   }
   .font-jarvis {
-    font-family: 'Orbitron', monospace;
+    font-family: "Orbitron", monospace;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -163,34 +163,53 @@
 /* Jarvis Glow-Effekte */
 @layer utilities {
   .jarvis-glow {
-    box-shadow: 0 0 20px oklch(0.65 0.22 220 / 0.3), 0 0 60px oklch(0.65 0.22 220 / 0.1);
+    box-shadow:
+      0 0 20px oklch(0.65 0.22 220 / 0.3),
+      0 0 60px oklch(0.65 0.22 220 / 0.1);
   }
   .jarvis-glow-sm {
     box-shadow: 0 0 8px oklch(0.65 0.22 220 / 0.5);
   }
   .jarvis-glow-text {
-    text-shadow: 0 0 10px oklch(0.75 0.18 195 / 0.8), 0 0 30px oklch(0.65 0.22 220 / 0.4);
+    text-shadow:
+      0 0 10px oklch(0.75 0.18 195 / 0.8),
+      0 0 30px oklch(0.65 0.22 220 / 0.4);
   }
   .jarvis-border {
     border: 1px solid oklch(0.65 0.22 220 / 0.4);
     box-shadow: inset 0 0 10px oklch(0.65 0.22 220 / 0.05);
   }
   .jarvis-card {
-    background: oklch(0.10 0.03 240);
+    background: oklch(0.1 0.03 240);
     border: 1px solid oklch(0.22 0.06 240);
     box-shadow: 0 4px 24px oklch(0.65 0.22 220 / 0.08);
   }
   @keyframes pulse-ring {
-    0%, 100% { opacity: 0.4; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.05); }
+    0%,
+    100% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.05);
+    }
   }
   @keyframes jarvis-spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
   @keyframes jarvis-spin-reverse {
-    from { transform: rotate(360deg); }
-    to { transform: rotate(0deg); }
+    from {
+      transform: rotate(360deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
   }
   .animate-pulse-ring {
     animation: pulse-ring 2s ease-in-out infinite;

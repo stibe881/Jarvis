@@ -5,7 +5,8 @@ import { sdk } from "../_core/sdk";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
-const REDIRECT_URI = "https://jarvisai-h2rxxjj4.manus.space/api/oauth/google/callback";
+const REDIRECT_URI =
+  "https://jarvisai-h2rxxjj4.manus.space/api/oauth/google/callback";
 
 export async function handleGoogleOAuthCallback(req: Request, res: Response) {
   try {
@@ -38,7 +39,7 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
       }),
     });
 
-    const tokenData = await tokenResp.json() as {
+    const tokenData = (await tokenResp.json()) as {
       access_token?: string;
       refresh_token?: string;
       expires_in?: number;
@@ -48,18 +49,25 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
 
     if (!tokenResp.ok || !tokenData.access_token) {
       console.error("[Google OAuth] Token-Fehler:", tokenData);
-      return res.redirect(`/calendar?error=${encodeURIComponent(tokenData.error ?? "token_error")}`);
+      return res.redirect(
+        `/calendar?error=${encodeURIComponent(tokenData.error ?? "token_error")}`
+      );
     }
 
     // E-Mail-Adresse des Google-Kontos abrufen
     let email: string | null = null;
     try {
-      const userInfoResp = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
-        headers: { Authorization: `Bearer ${tokenData.access_token}` },
-      });
-      const userInfo = await userInfoResp.json() as { email?: string };
+      const userInfoResp = await fetch(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` },
+        }
+      );
+      const userInfo = (await userInfoResp.json()) as { email?: string };
       email = userInfo.email ?? null;
-    } catch { /* ignorieren */ }
+    } catch {
+      /* ignorieren */
+    }
 
     // Token in DB speichern
     await upsertGoogleToken({

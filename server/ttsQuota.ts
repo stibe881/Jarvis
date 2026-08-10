@@ -24,7 +24,10 @@ export type TtsQuota = {
 };
 
 /** Warnstufe aus Verbrauch und Limit bestimmen. */
-export function quotaLevel(charsUsed: number, limit: number): TtsQuota["level"] {
+export function quotaLevel(
+  charsUsed: number,
+  limit: number
+): TtsQuota["level"] {
   const remaining = Math.max(0, limit - charsUsed);
   if (remaining <= 0) return "exhausted";
   const percent = limit === 0 ? 100 : (charsUsed / limit) * 100;
@@ -60,9 +63,14 @@ export async function fetchLiveQuota(): Promise<TtsQuota | null> {
       charsUsed,
       limit,
       remaining: Math.max(0, limit - charsUsed),
-      percentUsed: limit === 0 ? 100 : Math.min(100, Math.round((charsUsed / limit) * 100)),
+      percentUsed:
+        limit === 0
+          ? 100
+          : Math.min(100, Math.round((charsUsed / limit) * 100)),
       level: quotaLevel(charsUsed, limit),
-      resetAt: d.next_character_count_reset_unix ? d.next_character_count_reset_unix * 1000 : null,
+      resetAt: d.next_character_count_reset_unix
+        ? d.next_character_count_reset_unix * 1000
+        : null,
       tier: d.tier ?? "free",
       live: true,
     };
@@ -83,7 +91,10 @@ export function invalidateQuotaCache() {
  * Prüft, ob eine Ausgabe dieser Länge noch möglich ist.
  * ElevenLabs rechnet in Zeichen, verlangt aber einen Puffer – daher etwas Reserve.
  */
-export function fitsInQuota(quota: TtsQuota | null, textLength: number): boolean {
+export function fitsInQuota(
+  quota: TtsQuota | null,
+  textLength: number
+): boolean {
   if (!quota) return true; // Unbekannt: Versuch zulassen, Fehler wird sauber behandelt
   return quota.remaining >= textLength;
 }

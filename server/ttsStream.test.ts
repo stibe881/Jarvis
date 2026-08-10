@@ -20,7 +20,10 @@ describe("Streaming-Endpunkt der Sprachausgabe", () => {
 
   it("baut die Wiedergabe-Adresse mit Text, Stimme und Kürzung", () => {
     // Genau diese Adresse setzt der Chat auf `audio.src`
-    const params = new URLSearchParams({ text: "Guten Tag, Sir.", shorten: "true" });
+    const params = new URLSearchParams({
+      text: "Guten Tag, Sir.",
+      shorten: "true",
+    });
     params.set("voiceId", "JBFqnCBsd6RMkjVDRZzb");
     const url = `/api/tts/stream?${params.toString()}`;
     expect(url).toContain("/api/tts/stream?");

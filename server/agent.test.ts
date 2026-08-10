@@ -1,13 +1,23 @@
 import { describe, it, expect } from "vitest";
 import {
-  parseActions, formatObservations, formatStepLog, isWritingAction, STEP_LOG_MARKER,
-  hasNextStep, ensureNextStep, runAgentLoop, type AgentStep, type LoopMessage, type ParsedAction,
+  parseActions,
+  formatObservations,
+  formatStepLog,
+  isWritingAction,
+  STEP_LOG_MARKER,
+  hasNextStep,
+  ensureNextStep,
+  runAgentLoop,
+  type AgentStep,
+  type LoopMessage,
+  type ParsedAction,
 } from "./agent";
 import { stripForSpeech } from "./ttsBudget";
 
 describe("Aktionsblöcke erkennen", () => {
   it("findet einen app_action-Block und entfernt ihn aus dem Text", () => {
-    const raw = 'Ich schaue nach.\n<app_action>{"action":"list_overdue_invoices"}</app_action>';
+    const raw =
+      'Ich schaue nach.\n<app_action>{"action":"list_overdue_invoices"}</app_action>';
     const { text, actions } = parseActions(raw);
     expect(actions).toHaveLength(1);
     expect(actions[0].tag).toBe("app_action");
@@ -25,18 +35,23 @@ describe("Aktionsblöcke erkennen", () => {
     ].join("\n");
     const { text, actions } = parseActions(raw);
     expect(actions).toHaveLength(3);
-    expect(actions.map((a) => a.tag).sort()).toEqual(["app_action", "calendar_action", "tasks_action"]);
+    expect(actions.map(a => a.tag).sort()).toEqual([
+      "app_action",
+      "calendar_action",
+      "tasks_action",
+    ]);
     expect(text).toBe("Einen Moment.");
   });
 
   it("erkennt mehrere Blöcke desselben Werkzeugs", () => {
-    const raw = '<app_action>{"action":"dashboard"}</app_action><app_action>{"action":"list_leads"}</app_action>';
+    const raw =
+      '<app_action>{"action":"dashboard"}</app_action><app_action>{"action":"list_leads"}</app_action>';
     const { actions } = parseActions(raw);
     expect(actions).toHaveLength(2);
   });
 
   it("entfernt fehlerhaftes JSON aus dem Text ohne die Antwort zu verlieren", () => {
-    const raw = 'Hier bitte.\n<app_action>{kaputt}</app_action>';
+    const raw = "Hier bitte.\n<app_action>{kaputt}</app_action>";
     const { text, actions } = parseActions(raw);
     expect(actions).toHaveLength(0);
     expect(text).toBe("Hier bitte.");
@@ -50,7 +65,8 @@ describe("Aktionsblöcke erkennen", () => {
   });
 
   it("erkennt device_action über das Feld type", () => {
-    const raw = '<device_action>{"type":"alarm","time":"06:30"}</device_action>';
+    const raw =
+      '<device_action>{"type":"alarm","time":"06:30"}</device_action>';
     const { actions } = parseActions(raw);
     expect(actions[0].payload.type).toBe("alarm");
   });
@@ -59,7 +75,12 @@ describe("Aktionsblöcke erkennen", () => {
 describe("Beobachtungen für das Modell", () => {
   it("stellt Werkzeug-Ergebnisse strukturiert dar", () => {
     const steps: AgentStep[] = [
-      { kind: "app_action", action: "list_overdue_invoices", result: "5 Rechnungen offen", label: "App · list_overdue_invoices" },
+      {
+        kind: "app_action",
+        action: "list_overdue_invoices",
+        result: "5 Rechnungen offen",
+        label: "App · list_overdue_invoices",
+      },
     ];
     const out = formatObservations(steps);
     expect(out).toContain("[Werkzeug app_action/list_overdue_invoices]");
@@ -69,8 +90,18 @@ describe("Beobachtungen für das Modell", () => {
 
 describe("Schritt-Protokoll", () => {
   const steps: AgentStep[] = [
-    { kind: "app_action", action: "list_customers", result: "ok", label: "App · list_customers: Muster" },
-    { kind: "tasks_action", action: "create", result: "ok", label: "Aufgaben · create" },
+    {
+      kind: "app_action",
+      action: "list_customers",
+      result: "ok",
+      label: "App · list_customers: Muster",
+    },
+    {
+      kind: "tasks_action",
+      action: "create",
+      result: "ok",
+      label: "Aufgaben · create",
+    },
   ];
 
   it("hängt das Protokoll mit Marker an", () => {
@@ -106,18 +137,29 @@ describe("Schreibende Aktionen", () => {
 
 describe("Konkreter nächster Schritt", () => {
   it("erkennt einen konkreten Vorschlag", () => {
-    expect(hasNextStep("Fünf Rechnungen offen. Soll ich Mahnungen vorbereiten?")).toBe(true);
-    expect(hasNextStep("Möchtest du, dass ich eine Aufgabe anlege?")).toBe(true);
+    expect(
+      hasNextStep("Fünf Rechnungen offen. Soll ich Mahnungen vorbereiten?")
+    ).toBe(true);
+    expect(hasNextStep("Möchtest du, dass ich eine Aufgabe anlege?")).toBe(
+      true
+    );
   });
 
   it("wertet Floskeln nicht als Vorschlag", () => {
-    expect(hasNextStep("Hier die Liste. Kann ich sonst noch etwas tun?")).toBe(false);
+    expect(hasNextStep("Hier die Liste. Kann ich sonst noch etwas tun?")).toBe(
+      false
+    );
     expect(hasNextStep("Das war alles.")).toBe(false);
   });
 
   it("ergänzt einen passenden Vorschlag nach Werkzeugeinsatz", () => {
     const steps: AgentStep[] = [
-      { kind: "app_action", action: "list_overdue_invoices", result: "ok", label: "App · list_overdue_invoices" },
+      {
+        kind: "app_action",
+        action: "list_overdue_invoices",
+        result: "ok",
+        label: "App · list_overdue_invoices",
+      },
     ];
     const out = ensureNextStep("Es sind fünf Rechnungen überfällig.", steps);
     expect(out).toContain("Zahlungserinnerungen");
@@ -129,7 +171,14 @@ describe("Konkreter nächster Schritt", () => {
   });
 
   it("ergänzt nichts, wenn schon ein Vorschlag vorhanden ist", () => {
-    const steps: AgentStep[] = [{ kind: "app_action", action: "dashboard", result: "ok", label: "App · dashboard" }];
+    const steps: AgentStep[] = [
+      {
+        kind: "app_action",
+        action: "dashboard",
+        result: "ok",
+        label: "App · dashboard",
+      },
+    ];
     const text = "Alles im grünen Bereich. Soll ich die Details zeigen?";
     expect(ensureNextStep(text, steps)).toBe(text);
   });
@@ -137,10 +186,17 @@ describe("Konkreter nächster Schritt", () => {
 
 describe("Mehrstufige Werkzeugnutzung", () => {
   /** Hilfsfunktion: Aktion ausführen mit vorgegebenen Ergebnissen. */
-  const fakeRunner = (results: Record<string, string>) => async (parsed: ParsedAction): Promise<AgentStep> => {
-    const action = String(parsed.payload.action ?? parsed.payload.type ?? "");
-    return { kind: parsed.tag, action, result: results[action] ?? "ok", label: `${parsed.tag} · ${action}` };
-  };
+  const fakeRunner =
+    (results: Record<string, string>) =>
+    async (parsed: ParsedAction): Promise<AgentStep> => {
+      const action = String(parsed.payload.action ?? parsed.payload.type ?? "");
+      return {
+        kind: parsed.tag,
+        action,
+        result: results[action] ?? "ok",
+        label: `${parsed.tag} · ${action}`,
+      };
+    };
 
   it("beschafft fehlende Daten selbst: erst Kunde suchen, dann Ticket erstellen", async () => {
     const modelAnswers = [
@@ -153,7 +209,8 @@ describe("Mehrstufige Werkzeugnutzung", () => {
     const messages: LoopMessage[] = [{ role: "system", content: "prompt" }];
 
     const result = await runAgentLoop({
-      firstResponse: 'Ich suche den Kunden.\n<app_action>{"action":"list_customers","search":"Muster"}</app_action>',
+      firstResponse:
+        'Ich suche den Kunden.\n<app_action>{"action":"list_customers","search":"Muster"}</app_action>',
       messages,
       runAction: fakeRunner({
         list_customers: "Muster AG (id: cust-77)",
@@ -163,7 +220,10 @@ describe("Mehrstufige Werkzeugnutzung", () => {
     });
 
     expect(result.rounds).toBe(2);
-    expect(result.steps.map((s) => s.action)).toEqual(["list_customers", "create_ticket"]);
+    expect(result.steps.map(s => s.action)).toEqual([
+      "list_customers",
+      "create_ticket",
+    ]);
     expect(result.text).toContain("Ticket für Muster AG");
     // Die Kunden-ID wurde nie beim Nutzer erfragt, sondern selbst beschafft
     expect(result.text).not.toContain("welche ID");
@@ -174,10 +234,17 @@ describe("Mehrstufige Werkzeugnutzung", () => {
     await runAgentLoop({
       firstResponse: '<app_action>{"action":"dashboard"}</app_action>',
       messages,
-      runAction: fakeRunner({ dashboard: "22 Kunden, 5 überfällige Rechnungen" }),
-      callModel: async () => "Alles erfasst. Soll ich die überfälligen Rechnungen zeigen?",
+      runAction: fakeRunner({
+        dashboard: "22 Kunden, 5 überfällige Rechnungen",
+      }),
+      callModel: async () =>
+        "Alles erfasst. Soll ich die überfälligen Rechnungen zeigen?",
     });
-    const observation = messages.find((m) => typeof m.content === "string" && (m.content as string).includes("[Werkzeug "));
+    const observation = messages.find(
+      m =>
+        typeof m.content === "string" &&
+        (m.content as string).includes("[Werkzeug ")
+    );
     expect(observation).toBeDefined();
     expect(String(observation?.content)).toContain("22 Kunden");
   });
@@ -187,7 +254,9 @@ describe("Mehrstufige Werkzeugnutzung", () => {
       firstResponse: "Guten Morgen, Sir.",
       messages: [],
       runAction: fakeRunner({}),
-      callModel: async () => { throw new Error("darf nicht aufgerufen werden"); },
+      callModel: async () => {
+        throw new Error("darf nicht aufgerufen werden");
+      },
     });
     expect(result.rounds).toBe(0);
     expect(result.steps).toHaveLength(0);
@@ -209,7 +278,8 @@ describe("Mehrstufige Werkzeugnutzung", () => {
 
   it("führt mehrere Aktionen einer Runde parallel im Protokoll", async () => {
     const result = await runAgentLoop({
-      firstResponse: '<app_action>{"action":"dashboard"}</app_action><tasks_action>{"action":"list"}</tasks_action>',
+      firstResponse:
+        '<app_action>{"action":"dashboard"}</app_action><tasks_action>{"action":"list"}</tasks_action>',
       messages: [],
       runAction: fakeRunner({ dashboard: "ok", list: "3 Aufgaben" }),
       callModel: async () => "Zusammengefasst. Soll ich priorisieren?",
@@ -220,13 +290,17 @@ describe("Mehrstufige Werkzeugnutzung", () => {
 
   it("verliert bei einem Werkzeugfehler die Antwort nicht", async () => {
     const result = await runAgentLoop({
-      firstResponse: '<app_action>{"action":"mark_invoice_paid","id":"x"}</app_action>',
+      firstResponse:
+        '<app_action>{"action":"mark_invoice_paid","id":"x"}</app_action>',
       messages: [],
-      runAction: async (parsed) => ({
-        kind: parsed.tag, action: "mark_invoice_paid",
-        result: "Fehler: Rechnung nicht gefunden", label: "App · mark_invoice_paid",
+      runAction: async parsed => ({
+        kind: parsed.tag,
+        action: "mark_invoice_paid",
+        result: "Fehler: Rechnung nicht gefunden",
+        label: "App · mark_invoice_paid",
       }),
-      callModel: async () => "Die Rechnung wurde nicht gefunden. Soll ich nach der richtigen Nummer suchen?",
+      callModel: async () =>
+        "Die Rechnung wurde nicht gefunden. Soll ich nach der richtigen Nummer suchen?",
     });
     expect(result.text).toContain("nicht gefunden");
     expect(hasNextStep(result.text)).toBe(true);

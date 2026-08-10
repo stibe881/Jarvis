@@ -570,16 +570,14 @@ export async function trackPrompt(
       })
       .where(eq(promptStats.id, existing[0].id));
   } else {
-    await db
-      .insert(promptStats)
-      .values({
-        userId,
-        intent,
-        label,
-        promptText,
-        count: 1,
-        lastUsedAt: Date.now(),
-      });
+    await db.insert(promptStats).values({
+      userId,
+      intent,
+      label,
+      promptText,
+      count: 1,
+      lastUsedAt: Date.now(),
+    });
   }
 }
 

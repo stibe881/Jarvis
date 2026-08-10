@@ -7,7 +7,8 @@
  * schützt zusätzlich bereits gespeicherte Gespräche.
  */
 
-const INTERNE_TAGS = "person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar";
+const INTERNE_TAGS =
+  "person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar";
 
 /** Entfernt interne Kategorie-Markierungen und räumt Satzzeichen auf. */
 export function removeInternalTags(text: string): string {
@@ -22,7 +23,7 @@ export function removeInternalTags(text: string): string {
 export function splitSentences(text: string): string[] {
   return text
     .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
+    .map(s => s.trim())
     .filter(Boolean);
 }
 
@@ -42,7 +43,8 @@ export function buildSpokenSummary(clean: string, limit: number): string {
   if (limit < hinweis.length + 40) {
     const window = clean.slice(0, Math.max(1, limit - 2));
     const lastSpace = window.lastIndexOf(" ");
-    const cut = lastSpace > window.length * 0.4 ? window.slice(0, lastSpace) : window;
+    const cut =
+      lastSpace > window.length * 0.4 ? window.slice(0, lastSpace) : window;
     return `${cut.trim()} …`;
   }
 
@@ -52,7 +54,8 @@ export function buildSpokenSummary(clean: string, limit: number): string {
   if (sentences.length <= 1) {
     const window = clean.slice(0, Math.max(0, limit - hinweis.length - 2));
     const lastSpace = window.lastIndexOf(" ");
-    const cut = lastSpace > window.length * 0.5 ? window.slice(0, lastSpace) : window;
+    const cut =
+      lastSpace > window.length * 0.5 ? window.slice(0, lastSpace) : window;
     return `${cut.trim()} … ${hinweis}`;
   }
 

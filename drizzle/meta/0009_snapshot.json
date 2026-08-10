@@ -52,9 +52,7 @@
       "compositePrimaryKeys": {
         "conversations_id": {
           "name": "conversations_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -164,9 +162,7 @@
       "compositePrimaryKeys": {
         "delegations_id": {
           "name": "delegations_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -239,9 +235,7 @@
       "compositePrimaryKeys": {
         "device_commands_id": {
           "name": "device_commands_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -347,9 +341,7 @@
       "compositePrimaryKeys": {
         "document_templates_id": {
           "name": "document_templates_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -430,17 +422,13 @@
       "compositePrimaryKeys": {
         "google_tokens_id": {
           "name": "google_tokens_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "google_tokens_userId_unique": {
           "name": "google_tokens_userId_unique",
-          "columns": [
-            "userId"
-          ]
+          "columns": ["userId"]
         }
       },
       "checkConstraint": {}
@@ -550,9 +538,7 @@
       "compositePrimaryKeys": {
         "gross_ict_projects_id": {
           "name": "gross_ict_projects_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -648,9 +634,7 @@
       "compositePrimaryKeys": {
         "gross_ict_quotes_id": {
           "name": "gross_ict_quotes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -726,9 +710,7 @@
       "compositePrimaryKeys": {
         "memories_id": {
           "name": "memories_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -800,9 +782,7 @@
       "compositePrimaryKeys": {
         "messages_id": {
           "name": "messages_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -869,9 +849,7 @@
       "compositePrimaryKeys": {
         "notes_id": {
           "name": "notes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -944,9 +922,7 @@
       "compositePrimaryKeys": {
         "prompt_stats_id": {
           "name": "prompt_stats_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1004,9 +980,7 @@
       "compositePrimaryKeys": {
         "push_subscriptions_id": {
           "name": "push_subscriptions_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1094,17 +1068,13 @@
       "compositePrimaryKeys": {
         "spotify_tokens_id": {
           "name": "spotify_tokens_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "spotify_tokens_userId_unique": {
           "name": "spotify_tokens_userId_unique",
-          "columns": [
-            "userId"
-          ]
+          "columns": ["userId"]
         }
       },
       "checkConstraint": {}
@@ -1186,9 +1156,7 @@
       "compositePrimaryKeys": {
         "tasks_id": {
           "name": "tasks_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1315,17 +1283,13 @@
       "compositePrimaryKeys": {
         "user_profiles_id": {
           "name": "user_profiles_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "user_profiles_userId_unique": {
           "name": "user_profiles_userId_unique",
-          "columns": [
-            "userId"
-          ]
+          "columns": ["userId"]
         }
       },
       "checkConstraint": {}
@@ -1407,17 +1371,13 @@
       "compositePrimaryKeys": {
         "users_id": {
           "name": "users_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "users_openId_unique": {
           "name": "users_openId_unique",
-          "columns": [
-            "openId"
-          ]
+          "columns": ["openId"]
         }
       },
       "checkConstraint": {}
@@ -1503,9 +1463,7 @@
       "compositePrimaryKeys": {
         "voice_notes_id": {
           "name": "voice_notes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1571,9 +1529,7 @@
       "compositePrimaryKeys": {
         "webhook_events_id": {
           "name": "webhook_events_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -1647,17 +1603,13 @@
       "compositePrimaryKeys": {
         "webhook_keys_id": {
           "name": "webhook_keys_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {
         "webhook_keys_apiKey_unique": {
           "name": "webhook_keys_apiKey_unique",
-          "columns": [
-            "apiKey"
-          ]
+          "columns": ["apiKey"]
         }
       },
       "checkConstraint": {}

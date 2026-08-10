@@ -12,11 +12,20 @@ import {
  * Jarvis legt sie in die Queue, das iPhone holt sie über
  * GET /api/device/commands?key=<API-Key> ab.
  */
-export type DeviceCommandType = "whatsapp" | "alarm" | "timer" | "reminder" | "speak";
+export type DeviceCommandType =
+  | "whatsapp"
+  | "alarm"
+  | "timer"
+  | "reminder"
+  | "speak";
 
 /** Erzeugt einen lesbaren Text für die Bestätigung im Chat. */
-export function describeDeviceCommand(type: string, params: Record<string, unknown>): string {
-  const s = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
+export function describeDeviceCommand(
+  type: string,
+  params: Record<string, unknown>
+): string {
+  const s = (k: string) =>
+    typeof params[k] === "string" ? (params[k] as string) : "";
   switch (type) {
     case "whatsapp":
       return `WhatsApp an ${s("recipient") || "Kontakt"}: „${s("message")}“`;
@@ -65,25 +74,35 @@ export async function queueDeviceCommand(
 export const deviceRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     const rows = await getDeviceCommandsByUser(ctx.user.id);
-    return rows.map((r) => ({
+    return rows.map(r => ({
       ...r,
-      params: (() => { try { return JSON.parse(r.payload) as Record<string, unknown>; } catch { return {}; } })(),
+      params: (() => {
+        try {
+          return JSON.parse(r.payload) as Record<string, unknown>;
+        } catch {
+          return {};
+        }
+      })(),
     }));
   }),
 
   create: protectedProcedure
-    .input(z.object({
-      type: z.enum(["whatsapp", "alarm", "timer", "reminder", "speak"]),
-      recipient: z.string().optional(),
-      message: z.string().optional(),
-      time: z.string().optional(),
-      minutes: z.number().optional(),
-      label: z.string().optional(),
-      text: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        type: z.enum(["whatsapp", "alarm", "timer", "reminder", "speak"]),
+        recipient: z.string().optional(),
+        message: z.string().optional(),
+        time: z.string().optional(),
+        minutes: z.number().optional(),
+        label: z.string().optional(),
+        text: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const { type, ...params } = input;
-      const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined));
+      const clean = Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v !== undefined)
+      );
       const message = await queueDeviceCommand(ctx.user.id, type, clean);
       return { message };
     }),

@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { createVoiceNote, getVoiceNotesByUser, deleteVoiceNote, createNote, createTask } from "../db";
+import {
+  createVoiceNote,
+  getVoiceNotesByUser,
+  deleteVoiceNote,
+  createNote,
+  createTask,
+} from "../db";
 import { invokeLLM } from "../_core/llm";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
@@ -13,7 +19,10 @@ type Analysis = {
   dueHint?: string;
 };
 
-async function transcribeWithElevenLabs(audioBase64: string, mimeType: string): Promise<string> {
+async function transcribeWithElevenLabs(
+  audioBase64: string,
+  mimeType: string
+): Promise<string> {
   const audioBuffer = Buffer.from(audioBase64, "base64");
   const blob = new Blob([audioBuffer], { type: mimeType });
   const formData = new FormData();
@@ -26,7 +35,10 @@ async function transcribeWithElevenLabs(audioBase64: string, mimeType: string): 
     body: formData,
   });
   if (!resp.ok) throw new Error(`Transkription fehlgeschlagen: ${resp.status}`);
-  const result = await resp.json() as { text?: string; words?: Array<{ text: string }> };
+  const result = (await resp.json()) as {
+    text?: string;
+    words?: Array<{ text: string }>;
+  };
   return result.text ?? result.words?.map(w => w.text).join(" ") ?? "";
 }
 
@@ -46,8 +58,11 @@ Schweizer Schreibweise verwenden ("ss" statt "ß").`;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: "user", content: prompt }] as any,
     });
-    const raw = ((resp.choices[0]?.message?.content as string) ?? "").trim()
-      .replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+    const raw = ((resp.choices[0]?.message?.content as string) ?? "")
+      .trim()
+      .replace(/^```(?:json)?/i, "")
+      .replace(/```$/, "")
+      .trim();
     const parsed = JSON.parse(raw) as Analysis;
     return {
       summary: parsed.summary ?? transcript.slice(0, 140),
@@ -58,7 +73,11 @@ Schweizer Schreibweise verwenden ("ss" statt "ß").`;
     };
   } catch (e) {
     console.error("[VoiceNotes] Analyse fehlgeschlagen:", e);
-    return { summary: transcript.slice(0, 140), category: "Allgemein", isTask: false };
+    return {
+      summary: transcript.slice(0, 140),
+      category: "Allgemein",
+      isTask: false,
+    };
   }
 }
 
@@ -69,17 +88,29 @@ export const voiceNotesRouter = router({
 
   // Audio hochladen, transkribieren, analysieren und speichern
   record: protectedProcedure
-    .input(z.object({
-      audioBase64: z.string(),
-      mimeType: z.string().default("audio/webm"),
-      durationSec: z.number().optional(),
-      autoCreateTask: z.boolean().default(true),
-      alsoSaveAsNote: z.boolean().default(true),
-    }))
+    .input(
+      z.object({
+        audioBase64: z.string(),
+        mimeType: z.string().default("audio/webm"),
+        durationSec: z.number().optional(),
+        autoCreateTask: z.boolean().default(true),
+        alsoSaveAsNote: z.boolean().default(true),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      const transcript = await transcribeWithElevenLabs(input.audioBase64, input.mimeType);
+      const transcript = await transcribeWithElevenLabs(
+        input.audioBase64,
+        input.mimeType
+      );
       if (!transcript.trim()) {
-        return { transcript: "", summary: "", category: "Allgemein", createdTask: false, createdNote: false, id: 0 };
+        return {
+          transcript: "",
+          summary: "",
+          category: "Allgemein",
+          createdTask: false,
+          createdNote: false,
+          id: 0,
+        };
       }
 
       const analysis = await analyseTranscript(transcript);
@@ -97,7 +128,9 @@ export const voiceNotesRouter = router({
             tags: `Sprachnotiz,${analysis.category}`,
           });
           noteId = res?.id ?? null;
-        } catch (e) { console.error("[VoiceNotes] Notiz anlegen fehlgeschlagen:", e); }
+        } catch (e) {
+          console.error("[VoiceNotes] Notiz anlegen fehlgeschlagen:", e);
+        }
       }
 
       if (input.autoCreateTask && analysis.isTask && analysis.taskTitle) {
@@ -108,7 +141,9 @@ export const voiceNotesRouter = router({
             description: `Aus Sprachnotiz: ${transcript}${analysis.dueHint ? `\nFrist laut Notiz: ${analysis.dueHint}` : ""}`,
           });
           taskId = res?.id ?? null;
-        } catch (e) { console.error("[VoiceNotes] Aufgabe anlegen fehlgeschlagen:", e); }
+        } catch (e) {
+          console.error("[VoiceNotes] Aufgabe anlegen fehlgeschlagen:", e);
+        }
       }
 
       const created = await createVoiceNote({

@@ -1,6 +1,7 @@
 # Jarvis – Projekt TODO
 
 ## Backend
+
 - [x] Datenbankschema: conversations, messages, notes, tasks, uploaded_files
 - [x] Anthropic API Key als Secret setzen (ANTHROPIC_API_KEY)
 - [x] Claude Chat-Route mit Streaming (SSE) via direktem Anthropic SDK
@@ -13,6 +14,7 @@
 - [x] Gesprächsverlauf speichern und laden
 
 ## Web-Frontend
+
 - [x] Globales Dark-Theme (futuristisch, blau/cyan Akzente)
 - [x] DashboardLayout mit Sidebar-Navigation
 - [x] Jarvis Chat-Seite mit Streaming, Markdown-Rendering, Datei-Upload
@@ -25,10 +27,12 @@
 - [x] Web-Suche in Chat integriert
 
 ## Tests
+
 - [x] Backend-Unit-Tests für Chat-Route (13 Tests, alle grün)
 - [x] Backend-Unit-Tests für Notizen/Aufgaben
 
 ## Neue Features (Phase 2)
+
 - [x] Mobile-Layout: responsiv, Bottom-Navigation auf kleinen Bildschirmen
 - [x] Chat-Sidebar auf Mobile: ausblendbar per Hamburger-Menü
 - [x] Bessere Dateianalyse: PDFs und Bilder als Claude Vision/File-Input senden
@@ -36,6 +40,7 @@
 - [x] Expo iOS-App: Chat, Notizen, Aufgaben (ZIP-Archiv)
 
 ## Google Calendar-Integration
+
 - [x] Google OAuth-Secrets setzen (Client ID + Secret)
 - [x] DB-Schema: google_tokens Tabelle
 - [x] OAuth-Flow: /api/oauth/google/callback
@@ -44,6 +49,7 @@
 - [x] Chat-Integration: Jarvis versteht Kalender-Befehle
 
 ## Phase 3 – 13 Verbesserungen
+
 - [x] 1 Onboarding-Wizard beim ersten Start (Profil, Kalender, Sprachausgabe)
 - [x] 4 PWA mit Benachrichtigungs-Badge (offene Aufgaben + Tickets)
 - [x] 6 Kontextbewusstes Nachfragen bei unklaren Anfragen
@@ -61,6 +67,7 @@
 - [x] Wochenbericht-Cron nach Deployment anlegen (Freitag 16:00 Zürich, task_uid QFvDg6RoXpcDWUCmp8nt6E)
 
 ## Phase 4 – Geräte- und Musiksteuerung
+
 - [x] Spotify OAuth (Client ID/Secret, Refresh-Token-Speicherung)
 - [x] Spotify-Steuerung: abspielen, pausieren, weiter, Playlist/Song suchen, Lautstärke
 - [x] Chat-Integration: spotify_action-Block (z.B. "Spiele Coldplay")
@@ -70,6 +77,7 @@
 - [x] Einrichtungsanleitung für iOS-Kurzbefehle (Seite /shortcuts mit Schritt-für-Schritt-Anleitung)
 
 ## Phase 5 – Fehlerbehebung und weitere Verbesserungen
+
 - [x] BUG: Nur eine Anfrage pro Sitzung möglich – zweite Anfrage wird ignoriert (Warteschlange statt Verwerfen, synchrone Sperre, Auto-Zuhören erst nach Antwortende)
 - [x] Kunden-Dossier: Backend-Aggregation (Kunde, Tickets, Angebote, Rechnungen, Projekte, Verträge)
 - [x] Kunden-Dossier: Detailseite im Frontend mit allen Kundendaten
@@ -86,6 +94,7 @@
 - [x] Bestätigung bei kritischen Aktionen (Rechnung bezahlt/erstellt, Termin löschen, Einladung, WhatsApp, Status-Änderungen) – werden vorgemerkt und erst nach klarem «Ja» ausgeführt
 
 ## Phase 6 – Spracheingabe-Bug
+
 - [x] BUG: Zweite Spracheingabe löst nicht mehr aus – alte Erkennungs-Instanz wird nun hart beendet und neu aufgebaut, Wächter-Timer verhindert hängenden «Höre zu»-Zustand
 - [x] BUG: Jarvis spricht nicht mehr – Ursache war die Autoplay-Sperre des Browsers bei Sprachbedienung. Ton wird jetzt einmalig per Klick freigegeben (auch über den Mikrofon-Knopf) und dauerhaft wiederverwendet
 - [x] Sprachausgabe-Zustand wird bei Erfolg, Fehler, blockierter Wiedergabe und aufgebrauchtem Budget zurückgesetzt und löst das Weiterhören zentral aus; beim ausdrücklichen Stopp bleibt es bewusst aus

@@ -15,7 +15,7 @@ export function useAppBadge() {
   });
 
   useEffect(() => {
-    const openTasks = (tasks ?? []).filter((t) => !t.completed).length;
+    const openTasks = (tasks ?? []).filter(t => !t.completed).length;
     const openTickets = appSummary?.openTickets ?? 0;
     const total = openTasks + openTickets;
 
@@ -30,11 +30,14 @@ export function useAppBadge() {
     }
 
     // Titel als Fallback für Desktop-Browser ohne Badging-API
-    document.title = total > 0
-      ? `(${total}) Jarvis – Dein persönlicher KI-Assistent`
-      : "Jarvis – Dein persönlicher KI-Assistent";
+    document.title =
+      total > 0
+        ? `(${total}) Jarvis – Dein persönlicher KI-Assistent`
+        : "Jarvis – Dein persönlicher KI-Assistent";
 
-    navigator.serviceWorker?.controller?.postMessage({ type: "SET_BADGE", count: total });
+    navigator.serviceWorker?.controller?.postMessage({
+      type: "SET_BADGE",
+      count: total,
+    });
   }, [tasks, appSummary]);
 }
-

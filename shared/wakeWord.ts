@@ -7,7 +7,15 @@
  */
 
 /** Akzeptierte Varianten des Namens, wie die Spracherkennung ihn liefert. */
-const NAME_VARIANTS = ["jarvis", "jarvas", "jarwis", "jervis", "jarves", "charvis", "dscharvis"];
+const NAME_VARIANTS = [
+  "jarvis",
+  "jarvas",
+  "jarwis",
+  "jervis",
+  "jarves",
+  "charvis",
+  "dscharvis",
+];
 
 /** Vorangestellte Anreden, die ignoriert werden dürfen. */
 const GREETINGS = ["hey", "hei", "hallo", "hoi", "ok", "okay", "he", "hä"];
@@ -38,8 +46,11 @@ export function detectWakeWord(text: string): WakeWordResult {
     if (NAME_VARIANTS.includes(word)) {
       // Alles davor darf nur eine Anrede sein
       const before = words.slice(0, i);
-      if (before.every((w) => GREETINGS.includes(w))) {
-        const rest = words.slice(i + 1).join(" ").trim();
+      if (before.every(w => GREETINGS.includes(w))) {
+        const rest = words
+          .slice(i + 1)
+          .join(" ")
+          .trim();
         return { detected: true, rest };
       }
     }

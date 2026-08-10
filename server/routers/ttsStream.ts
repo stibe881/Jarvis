@@ -13,19 +13,33 @@
 
 import type { Request, Response } from "express";
 import { addTtsUsage, getTtsUsage } from "../db";
-import { budgetState, currentYearMonth, shortenForSpeech, MAX_CHARS_PER_SPEECH } from "../ttsBudget";
+import {
+  budgetState,
+  currentYearMonth,
+  shortenForSpeech,
+  MAX_CHARS_PER_SPEECH,
+} from "../ttsBudget";
 import { fetchLiveQuota, invalidateQuotaCache } from "../ttsQuota";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 const JARVIS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
 
-export async function handleTtsStream(req: Request, res: Response, userId: number) {
+export async function handleTtsStream(
+  req: Request,
+  res: Response,
+  userId: number
+) {
   try {
     // GET erlaubt die Wiedergabe direkt über `audio.src` – nur so kann der
     // Browser abspielen, während die Daten noch eintreffen. Bei POST müsste der
     // Client die Antwort erst vollständig einlesen.
     const src = req.method === "GET" ? (req.query ?? {}) : (req.body ?? {});
-    const body = src as { text?: string; voiceId?: string; shorten?: boolean | string; checkOnly?: boolean | string };
+    const body = src as {
+      text?: string;
+      voiceId?: string;
+      shorten?: boolean | string;
+      checkOnly?: boolean | string;
+    };
     const rawText = (body.text ?? "").trim();
     if (!rawText) {
       res.status(400).json({ error: "Kein Text übergeben" });
@@ -49,12 +63,19 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
     // Reine Vorabprüfung: der Client will nur wissen, ob Guthaben da ist.
     // So vermeidet er, das Audio-Element auf eine Fehlerseite zu richten.
     if (body.checkOnly === true || body.checkOnly === "true") {
-      res.status(200).json({ ok: true, remaining: state.remaining, resetAt: live?.resetAt ?? null });
+      res.status(200).json({
+        ok: true,
+        remaining: state.remaining,
+        resetAt: live?.resetAt ?? null,
+      });
       return;
     }
 
     const shorten = body.shorten !== false && body.shorten !== "false";
-    const limit = Math.min(shorten ? MAX_CHARS_PER_SPEECH : 2500, state.remaining);
+    const limit = Math.min(
+      shorten ? MAX_CHARS_PER_SPEECH : 2500,
+      state.remaining
+    );
     const { spoken } = shorten
       ? shortenForSpeech(rawText, limit)
       : { spoken: rawText.slice(0, limit) };
@@ -64,7 +85,9 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
     }
 
     const voiceId = body.voiceId || JARVIS_VOICE_ID;
-    const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`);
+    const url = new URL(
+      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`
+    );
     // Höchste Latenz-Optimierung und kleines Format: schnellster erster Ton.
     // Gemessen: Flash-Modell ~1,8 s bis zum ersten Audiopaket,
     // Turbo ~4,0 s, multilingual (komplette Datei) ~4,2 s.
@@ -103,7 +126,9 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
         res.status(429).json({ error: "Sprachausgabe-Guthaben aufgebraucht" });
         return;
       }
-      res.status(502).json({ error: `Sprachausgabe fehlgeschlagen (${upstream.status})` });
+      res
+        .status(502)
+        .json({ error: `Sprachausgabe fehlgeschlagen (${upstream.status})` });
       return;
     }
 
@@ -131,7 +156,8 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
     res.end();
   } catch (e) {
     console.error("[TTS-Stream] Fehler:", e);
-    if (!res.headersSent) res.status(500).json({ error: "Sprachausgabe fehlgeschlagen" });
+    if (!res.headersSent)
+      res.status(500).json({ error: "Sprachausgabe fehlgeschlagen" });
     else res.end();
   }
 }

@@ -32,8 +32,12 @@ export function afterSpeechEnded(s: VoiceState): VoiceState {
 }
 
 const base: VoiceState = {
-  isStreaming: false, isSpeaking: false, isListening: false,
-  isBusy: false, autoListen: false, wakeWord: false,
+  isStreaming: false,
+  isSpeaking: false,
+  isListening: false,
+  isBusy: false,
+  autoListen: false,
+  wakeWord: false,
 };
 
 describe("Wann darf wieder zugehört werden", () => {
@@ -50,25 +54,37 @@ describe("Wann darf wieder zugehört werden", () => {
   });
 
   it("nicht während einer laufenden Antwort", () => {
-    expect(mayResumeListening({ ...base, autoListen: true, isStreaming: true })).toBe(false);
+    expect(
+      mayResumeListening({ ...base, autoListen: true, isStreaming: true })
+    ).toBe(false);
   });
 
   it("nicht während Jarvis spricht", () => {
-    expect(mayResumeListening({ ...base, autoListen: true, isSpeaking: true })).toBe(false);
+    expect(
+      mayResumeListening({ ...base, autoListen: true, isSpeaking: true })
+    ).toBe(false);
   });
 
   it("nicht wenn schon zugehört wird (kein Doppelstart)", () => {
-    expect(mayResumeListening({ ...base, autoListen: true, isListening: true })).toBe(false);
+    expect(
+      mayResumeListening({ ...base, autoListen: true, isListening: true })
+    ).toBe(false);
   });
 
   it("nicht wenn noch eine Anfrage in Arbeit ist", () => {
-    expect(mayResumeListening({ ...base, wakeWord: true, isBusy: true })).toBe(false);
+    expect(mayResumeListening({ ...base, wakeWord: true, isBusy: true })).toBe(
+      false
+    );
   });
 });
 
 describe("Zustand nach der Sprachausgabe", () => {
   it("setzt «spricht» zurück, auch wenn die Wiedergabe blockiert wurde", () => {
-    const blocked = afterSpeechEnded({ ...base, autoListen: true, isSpeaking: true });
+    const blocked = afterSpeechEnded({
+      ...base,
+      autoListen: true,
+      isSpeaking: true,
+    });
     expect(blocked.isSpeaking).toBe(false);
     // Genau das war der Fehler: danach muss wieder zugehört werden dürfen
     expect(mayResumeListening(blocked)).toBe(true);
@@ -76,12 +92,20 @@ describe("Zustand nach der Sprachausgabe", () => {
 
   it("führt bei fehlender Sprachausgabe trotzdem zum Weiterhören", () => {
     // Antwort fertig, aber Budget aufgebraucht → kein Ton, dennoch weiterhören
-    const afterNoAudio = afterSpeechEnded({ ...base, wakeWord: true, isStreaming: false });
+    const afterNoAudio = afterSpeechEnded({
+      ...base,
+      wakeWord: true,
+      isStreaming: false,
+    });
     expect(mayResumeListening(afterNoAudio)).toBe(true);
   });
 
   it("bleibt gesperrt, solange die Antwort noch läuft", () => {
-    const stillStreaming = afterSpeechEnded({ ...base, autoListen: true, isStreaming: true });
+    const stillStreaming = afterSpeechEnded({
+      ...base,
+      autoListen: true,
+      isStreaming: true,
+    });
     expect(mayResumeListening(stillStreaming)).toBe(false);
   });
 });

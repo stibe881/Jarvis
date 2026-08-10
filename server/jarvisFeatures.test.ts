@@ -4,23 +4,38 @@ import type { TrpcContext } from "./_core/context";
 
 // ── DB-Mocks für die neuen Features ──────────────────────────────────────────
 
-
 vi.mock("./db", () => ({
   // Vorlagen
   createTemplate: vi.fn().mockResolvedValue({ id: 7 }),
   getTemplatesByUser: vi.fn().mockResolvedValue([
     {
-      id: 7, userId: 1, name: "Angebot Webseite", category: "quote", context: "gross_ict",
-      description: "Standard-Angebot", content: "Kunde: {{Kundenname}}\nPreis: {{Betrag}}",
+      id: 7,
+      userId: 1,
+      name: "Angebot Webseite",
+      category: "quote",
+      context: "gross_ict",
+      description: "Standard-Angebot",
+      content: "Kunde: {{Kundenname}}\nPreis: {{Betrag}}",
       placeholders: JSON.stringify(["Kundenname", "Betrag"]),
-      isFavorite: false, usageCount: 0, createdAt: new Date(), updatedAt: new Date(),
+      isFavorite: false,
+      usageCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ]),
   getTemplateById: vi.fn().mockResolvedValue({
-    id: 7, userId: 1, name: "Angebot Webseite", category: "quote", context: "gross_ict",
-    description: null, content: "Kunde: {{Kundenname}}\nPreis: {{Betrag}}",
+    id: 7,
+    userId: 1,
+    name: "Angebot Webseite",
+    category: "quote",
+    context: "gross_ict",
+    description: null,
+    content: "Kunde: {{Kundenname}}\nPreis: {{Betrag}}",
     placeholders: JSON.stringify(["Kundenname", "Betrag"]),
-    isFavorite: false, usageCount: 0, createdAt: new Date(), updatedAt: new Date(),
+    isFavorite: false,
+    usageCount: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }),
   updateTemplate: vi.fn().mockResolvedValue(undefined),
   deleteTemplate: vi.fn().mockResolvedValue(undefined),
@@ -29,16 +44,33 @@ vi.mock("./db", () => ({
   createDelegation: vi.fn().mockResolvedValue({ id: 3 }),
   getDelegationsByUser: vi.fn().mockResolvedValue([
     {
-      id: 3, userId: 1, assigneeName: "Bine", assigneeEmail: "bine@example.com",
-      title: "Rechnung prüfen", details: null, dueDate: null, status: "open",
-      emailDraft: "Betreff: Rechnung prüfen\n\nHallo Bine", emailSentAt: null,
-      createdAt: new Date(), updatedAt: new Date(),
+      id: 3,
+      userId: 1,
+      assigneeName: "Bine",
+      assigneeEmail: "bine@example.com",
+      title: "Rechnung prüfen",
+      details: null,
+      dueDate: null,
+      status: "open",
+      emailDraft: "Betreff: Rechnung prüfen\n\nHallo Bine",
+      emailSentAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ]),
   getDelegationById: vi.fn().mockResolvedValue({
-    id: 3, userId: 1, assigneeName: "Bine", assigneeEmail: "bine@example.com",
-    title: "Rechnung prüfen", details: null, dueDate: null, status: "open",
-    emailDraft: null, emailSentAt: null, createdAt: new Date(), updatedAt: new Date(),
+    id: 3,
+    userId: 1,
+    assigneeName: "Bine",
+    assigneeEmail: "bine@example.com",
+    title: "Rechnung prüfen",
+    details: null,
+    dueDate: null,
+    status: "open",
+    emailDraft: null,
+    emailSentAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }),
   updateDelegation: vi.fn().mockResolvedValue(undefined),
   deleteDelegation: vi.fn().mockResolvedValue(undefined),
@@ -46,27 +78,58 @@ vi.mock("./db", () => ({
   createVoiceNote: vi.fn().mockResolvedValue({ id: 11 }),
   getVoiceNotesByUser: vi.fn().mockResolvedValue([
     {
-      id: 11, userId: 1, transcript: "Bine anrufen wegen Rechnung", summary: "Bine anrufen",
-      category: "task", durationSec: 4, noteId: null, taskId: 5, createdAt: new Date(),
+      id: 11,
+      userId: 1,
+      transcript: "Bine anrufen wegen Rechnung",
+      summary: "Bine anrufen",
+      category: "task",
+      durationSec: 4,
+      noteId: null,
+      taskId: 5,
+      createdAt: new Date(),
     },
   ]),
   deleteVoiceNote: vi.fn().mockResolvedValue(undefined),
   // Webhooks
-  createWebhookKey: vi.fn().mockResolvedValue({ id: 2, apiKey: "jarvis_testkey_123456" }),
+  createWebhookKey: vi
+    .fn()
+    .mockResolvedValue({ id: 2, apiKey: "jarvis_testkey_123456" }),
   getWebhookKeysByUser: vi.fn().mockResolvedValue([
-    { id: 2, userId: 1, label: "Gross ICT App", apiKey: "jarvis_testkey_123456", isActive: true, callCount: 0, lastUsedAt: null, createdAt: new Date() },
+    {
+      id: 2,
+      userId: 1,
+      label: "Gross ICT App",
+      apiKey: "jarvis_testkey_123456",
+      isActive: true,
+      callCount: 0,
+      lastUsedAt: null,
+      createdAt: new Date(),
+    },
   ]),
   deleteWebhookKey: vi.fn().mockResolvedValue(undefined),
   findWebhookKey: vi.fn().mockResolvedValue(null),
   touchWebhookKey: vi.fn().mockResolvedValue(undefined),
   createWebhookEvent: vi.fn().mockResolvedValue({ id: 1 }),
   getWebhookEventsByUser: vi.fn().mockResolvedValue([
-    { id: 1, userId: 1, source: "Gross ICT App", title: "Neues Ticket", body: "Drucker", notified: true, createdAt: new Date() },
+    {
+      id: 1,
+      userId: 1,
+      source: "Gross ICT App",
+      title: "Neues Ticket",
+      body: "Drucker",
+      notified: true,
+      createdAt: new Date(),
+    },
   ]),
   // Prompt-Statistik
   trackPrompt: vi.fn().mockResolvedValue(undefined),
   getTopPrompts: vi.fn().mockResolvedValue([
-    { intent: "offene_rechnungen", label: "Offene Rechnungen zeigen", promptText: "Zeige mir alle offenen Rechnungen.", count: 5 },
+    {
+      intent: "offene_rechnungen",
+      label: "Offene Rechnungen zeigen",
+      promptText: "Zeige mir alle offenen Rechnungen.",
+      count: 5,
+    },
   ]),
   // Notizen/Aufgaben (von Sprachnotizen genutzt)
   createNote: vi.fn().mockResolvedValue({ id: 21 }),
@@ -76,7 +139,13 @@ vi.mock("./db", () => ({
   // Chat/Konversationen
   createConversation: vi.fn().mockResolvedValue({ id: 1 }),
   getConversationsByUser: vi.fn().mockResolvedValue([]),
-  getConversationById: vi.fn().mockResolvedValue({ id: 1, userId: 1, title: "Test", createdAt: new Date(), updatedAt: new Date() }),
+  getConversationById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    title: "Test",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   getMessagesByConversation: vi.fn().mockResolvedValue([]),
   addMessage: vi.fn().mockResolvedValue({ id: 1 }),
   deleteConversation: vi.fn().mockResolvedValue(undefined),
@@ -91,18 +160,33 @@ vi.mock("./db", () => ({
 
 vi.mock("./_core/llm", () => ({
   invokeLLM: vi.fn().mockResolvedValue({
-    choices: [{ message: { content: "Betreff: Rechnung prüfen\n\nHallo Bine\n\nBitte prüfe die Rechnung.\n\nFreundliche Grüsse\nStefan" } }],
+    choices: [
+      {
+        message: {
+          content:
+            "Betreff: Rechnung prüfen\n\nHallo Bine\n\nBitte prüfe die Rechnung.\n\nFreundliche Grüsse\nStefan",
+        },
+      },
+    ],
   }),
 }));
 
 vi.mock("./routers/elevenlabs", () => ({
   elevenLabsRouter: { _def: { procedures: {} } },
-  transcribeWithElevenLabs: vi.fn().mockResolvedValue("Bine anrufen wegen der offenen Rechnung"),
+  transcribeWithElevenLabs: vi
+    .fn()
+    .mockResolvedValue("Bine anrufen wegen der offenen Rechnung"),
 }));
 
 function makeCtx(userId = 1): TrpcContext {
   return {
-    user: { id: userId, openId: "test-open-id", name: "Stefan", email: "stefan@example.com", role: "admin" },
+    user: {
+      id: userId,
+      openId: "test-open-id",
+      name: "Stefan",
+      email: "stefan@example.com",
+      role: "admin",
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     req: {} as any,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

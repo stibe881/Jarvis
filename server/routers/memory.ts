@@ -8,13 +8,21 @@ export const memoryRouter = router({
   }),
 
   upsert: protectedProcedure
-    .input(z.object({
-      category: z.string().default("fact"),
-      key: z.string(),
-      value: z.string(),
-    }))
+    .input(
+      z.object({
+        category: z.string().default("fact"),
+        key: z.string(),
+        value: z.string(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
-      await upsertMemory(ctx.user.id, input.category, input.key, input.value, "manual");
+      await upsertMemory(
+        ctx.user.id,
+        input.category,
+        input.key,
+        input.value,
+        "manual"
+      );
       return { success: true };
     }),
 
@@ -25,4 +33,3 @@ export const memoryRouter = router({
       return { success: true };
     }),
 });
-

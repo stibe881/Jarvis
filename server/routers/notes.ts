@@ -17,22 +17,26 @@ export const notesRouter = router({
     }),
 
   create: protectedProcedure
-    .input(z.object({
-      title: z.string().min(1),
-      content: z.string(),
-      tags: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        title: z.string().min(1),
+        content: z.string(),
+        tags: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       return createNote({ userId: ctx.user.id, ...input });
     }),
 
   update: protectedProcedure
-    .input(z.object({
-      id: z.number(),
-      title: z.string().optional(),
-      content: z.string().optional(),
-      tags: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        id: z.number(),
+        title: z.string().optional(),
+        content: z.string().optional(),
+        tags: z.string().optional(),
+      })
+    )
     .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
       const note = await getNoteById(id, ctx.user.id);
@@ -48,4 +52,3 @@ export const notesRouter = router({
       return { success: true };
     }),
 });
-

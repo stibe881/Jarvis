@@ -69,8 +69,12 @@ describe("Sprachausgabe-Modus", () => {
       ...Array<Quelle>(4).fill("sprache"),
     ];
     const zeichenProAntwort = 260;
-    const immer = anfragen.filter(q => darfSprechen("always", q)).length * zeichenProAntwort;
-    const nurSprache = anfragen.filter(q => darfSprechen("voice-only", q)).length * zeichenProAntwort;
+    const immer =
+      anfragen.filter(q => darfSprechen("always", q)).length *
+      zeichenProAntwort;
+    const nurSprache =
+      anfragen.filter(q => darfSprechen("voice-only", q)).length *
+      zeichenProAntwort;
     expect(immer).toBe(14 * 260);
     expect(nurSprache).toBe(4 * 260);
     // Deutliche Einsparung: weniger als ein Drittel des Verbrauchs

@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import "dotenv/config";
-import { quotaLevel, fitsInQuota, fetchLiveQuota, invalidateQuotaCache, type TtsQuota } from "./ttsQuota";
+import {
+  quotaLevel,
+  fitsInQuota,
+  fetchLiveQuota,
+  invalidateQuotaCache,
+  type TtsQuota,
+} from "./ttsQuota";
 
 /**
  * Hintergrund: Jarvis verstummte, weil der lokale Zähler noch Guthaben auswies,
@@ -21,8 +27,14 @@ describe("Guthaben der Sprachausgabe", () => {
 
   it("erkennt, ob ein Text noch ins Guthaben passt", () => {
     const quota: TtsQuota = {
-      charsUsed: 9949, limit: 10000, remaining: 51, percentUsed: 99,
-      level: "critical", resetAt: null, tier: "free", live: true,
+      charsUsed: 9949,
+      limit: 10000,
+      remaining: 51,
+      percentUsed: 99,
+      level: "critical",
+      resetAt: null,
+      tier: "free",
+      live: true,
     };
     expect(fitsInQuota(quota, 40)).toBe(true);
     expect(fitsInQuota(quota, 160)).toBe(false);
@@ -36,7 +48,9 @@ describe("Guthaben der Sprachausgabe", () => {
       console.warn("[Guthaben] übersprungen – Dienst nicht erreichbar");
       return;
     }
-    console.log(`[Guthaben] ${quota.charsUsed}/${quota.limit} verbraucht, ${quota.remaining} übrig, Plan ${quota.tier}`);
+    console.log(
+      `[Guthaben] ${quota.charsUsed}/${quota.limit} verbraucht, ${quota.remaining} übrig, Plan ${quota.tier}`
+    );
     expect(quota.live).toBe(true);
     expect(quota.limit).toBeGreaterThan(0);
     expect(quota.charsUsed).toBeGreaterThanOrEqual(0);

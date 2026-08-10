@@ -17,12 +17,22 @@ Berücksichtige den sozialen Auftrag der Institution bei allen Formulierungen.`;
 export const sonnenbergRouter = router({
   // ── IT-Konzept generieren ─────────────────────────────────────────────────
   generateConcept: protectedProcedure
-    .input(z.object({
-      topic: z.string().min(1),
-      scope: z.string().optional(),
-      background: z.string().optional(),
-      type: z.enum(["it_concept", "security_concept", "migration_plan", "infrastructure_plan", "other"]).default("it_concept"),
-    }))
+    .input(
+      z.object({
+        topic: z.string().min(1),
+        scope: z.string().optional(),
+        background: z.string().optional(),
+        type: z
+          .enum([
+            "it_concept",
+            "security_concept",
+            "migration_plan",
+            "infrastructure_plan",
+            "other",
+          ])
+          .default("it_concept"),
+      })
+    )
     .mutation(async ({ input }) => {
       const typeLabels: Record<string, string> = {
         it_concept: "IT-Konzept",
@@ -49,19 +59,25 @@ Das Dokument soll enthalten:
 Format: Markdown, professionell, für interne Verwendung beim SONNENBERG Baar.`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 3000, messages: [{ role: "user", content: prompt }] as any });
+      const resp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 3000,
+        messages: [{ role: "user", content: prompt }] as any,
+      });
       return { content: (resp.choices[0]?.message?.content as string) ?? "" };
     }),
 
   // ── Beschaffungsantrag generieren ─────────────────────────────────────────
   generateProcurement: protectedProcedure
-    .input(z.object({
-      item: z.string().min(1), // Was wird beschafft
-      quantity: z.number().optional(),
-      estimatedCost: z.number().optional(), // CHF
-      justification: z.string().optional(),
-      urgency: z.enum(["low", "medium", "high"]).default("medium"),
-    }))
+    .input(
+      z.object({
+        item: z.string().min(1), // Was wird beschafft
+        quantity: z.number().optional(),
+        estimatedCost: z.number().optional(), // CHF
+        justification: z.string().optional(),
+        urgency: z.enum(["low", "medium", "high"]).default("medium"),
+      })
+    )
     .mutation(async ({ input }) => {
       const urgencyLabels = { low: "Tief", medium: "Mittel", high: "Hoch" };
       const prompt = `${SONNENBERG_CONTEXT}
@@ -85,17 +101,23 @@ Der Antrag soll enthalten:
 Format: Markdown, formell, für interne Genehmigung.`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 2000, messages: [{ role: "user", content: prompt }] as any });
+      const resp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }] as any,
+      });
       return { content: (resp.choices[0]?.message?.content as string) ?? "" };
     }),
 
   // ── Sitzungsnotizen strukturieren ─────────────────────────────────────────
   structureMeetingNotes: protectedProcedure
-    .input(z.object({
-      rawNotes: z.string().min(1),
-      meetingTitle: z.string().optional(),
-      participants: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        rawNotes: z.string().min(1),
+        meetingTitle: z.string().optional(),
+        participants: z.string().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
       const prompt = `${SONNENBERG_CONTEXT}
 
@@ -117,21 +139,32 @@ Erstelle ein strukturiertes Protokoll mit:
 Format: Markdown, professionell, klar strukturiert.`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 2000, messages: [{ role: "user", content: prompt }] as any });
+      const resp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }] as any,
+      });
       return { content: (resp.choices[0]?.message?.content as string) ?? "" };
     }),
 
   // ── IT-Statusbericht generieren ───────────────────────────────────────────
   generateStatusReport: protectedProcedure
-    .input(z.object({
-      period: z.string().optional(), // z.B. "August 2026"
-      completedItems: z.string().optional(),
-      ongoingItems: z.string().optional(),
-      plannedItems: z.string().optional(),
-      issues: z.string().optional(),
-    }))
+    .input(
+      z.object({
+        period: z.string().optional(), // z.B. "August 2026"
+        completedItems: z.string().optional(),
+        ongoingItems: z.string().optional(),
+        plannedItems: z.string().optional(),
+        issues: z.string().optional(),
+      })
+    )
     .mutation(async ({ input }) => {
-      const period = input.period ?? new Date().toLocaleDateString("de-CH", { month: "long", year: "numeric" });
+      const period =
+        input.period ??
+        new Date().toLocaleDateString("de-CH", {
+          month: "long",
+          year: "numeric",
+        });
       const prompt = `${SONNENBERG_CONTEXT}
 
 Erstelle einen IT-Statusbericht für den SONNENBERG Baar für den Zeitraum: ${period}
@@ -152,18 +185,32 @@ Der Statusbericht soll enthalten:
 Format: Markdown, professionell, für Geschäftsleitung oder Vorgesetzte.`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 2500, messages: [{ role: "user", content: prompt }] as any });
+      const resp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2500,
+        messages: [{ role: "user", content: prompt }] as any,
+      });
       return { content: (resp.choices[0]?.message?.content as string) ?? "" };
     }),
 
   // ── Allgemeiner ICT-Text für Sonnenberg ───────────────────────────────────
   generateText: protectedProcedure
-    .input(z.object({
-      type: z.enum(["email", "announcement", "policy", "training_material", "other"]),
-      topic: z.string().min(1),
-      details: z.string().optional(),
-      audience: z.enum(["management", "staff", "external", "all"]).default("staff"),
-    }))
+    .input(
+      z.object({
+        type: z.enum([
+          "email",
+          "announcement",
+          "policy",
+          "training_material",
+          "other",
+        ]),
+        topic: z.string().min(1),
+        details: z.string().optional(),
+        audience: z
+          .enum(["management", "staff", "external", "all"])
+          .default("staff"),
+      })
+    )
     .mutation(async ({ input }) => {
       const typeLabels: Record<string, string> = {
         email: "E-Mail",
@@ -189,7 +236,11 @@ Berücksichtige den sozialen Auftrag der Institution. Schreibe professionell, kl
 Format: Markdown.`;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const resp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 1500, messages: [{ role: "user", content: prompt }] as any });
+      const resp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: prompt }] as any,
+      });
       return { content: (resp.choices[0]?.message?.content as string) ?? "" };
     }),
 });

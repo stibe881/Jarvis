@@ -22,7 +22,9 @@ describe("Jarvis-Persönlichkeit", () => {
   });
 
   it("verlangt Sachlichkeit bei Zahlen und kritischen Themen", () => {
-    expect(JARVIS_PERSONA).toMatch(/Zahlen, Termine, Beträge und Namen bleiben exakt/);
+    expect(JARVIS_PERSONA).toMatch(
+      /Zahlen, Termine, Beträge und Namen bleiben exakt/
+    );
     expect(JARVIS_PERSONA).toMatch(/kritischen oder dringenden Sachverhalten/);
   });
 

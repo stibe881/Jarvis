@@ -10,21 +10,33 @@ import { notifyOwner } from "../_core/notification";
  */
 export async function handleJarvisWebhook(req: Request, res: Response) {
   try {
-    const headerKey = (req.headers["x-jarvis-key"] as string | undefined)
-      ?? (typeof req.headers.authorization === "string" && req.headers.authorization.startsWith("Bearer ")
+    const headerKey =
+      (req.headers["x-jarvis-key"] as string | undefined) ??
+      (typeof req.headers.authorization === "string" &&
+      req.headers.authorization.startsWith("Bearer ")
         ? req.headers.authorization.slice(7)
         : undefined);
 
     if (!headerKey) {
-      return res.status(401).json({ error: "API-Schlüssel fehlt. Header X-Jarvis-Key setzen." });
+      return res
+        .status(401)
+        .json({ error: "API-Schlüssel fehlt. Header X-Jarvis-Key setzen." });
     }
 
     const keyRow = await findWebhookKey(headerKey.trim());
     if (!keyRow || !keyRow.isActive) {
-      return res.status(401).json({ error: "Ungültiger oder deaktivierter API-Schlüssel." });
+      return res
+        .status(401)
+        .json({ error: "Ungültiger oder deaktivierter API-Schlüssel." });
     }
 
-    const body = (req.body ?? {}) as { title?: string; body?: string; message?: string; source?: string; notify?: boolean };
+    const body = (req.body ?? {}) as {
+      title?: string;
+      body?: string;
+      message?: string;
+      source?: string;
+      notify?: boolean;
+    };
     const title = (body.title ?? "Jarvis-Ereignis").toString().slice(0, 240);
     const content = (body.body ?? body.message ?? "").toString().slice(0, 8000);
     const source = (body.source ?? keyRow.label).toString().slice(0, 120);
@@ -33,14 +45,23 @@ export async function handleJarvisWebhook(req: Request, res: Response) {
     let notified = false;
     if (shouldNotify) {
       try {
-        await notifyOwner({ title: `🔔 ${title}`, content: content || `Ereignis von ${source}` });
+        await notifyOwner({
+          title: `🔔 ${title}`,
+          content: content || `Ereignis von ${source}`,
+        });
         notified = true;
       } catch (e) {
         console.error("[Webhook] Benachrichtigung fehlgeschlagen:", e);
       }
     }
 
-    await createWebhookEvent(keyRow.userId, source, title, content || null, notified);
+    await createWebhookEvent(
+      keyRow.userId,
+      source,
+      title,
+      content || null,
+      notified
+    );
     await touchWebhookKey(keyRow.id, keyRow.callCount);
 
     res.json({ ok: true, notified });

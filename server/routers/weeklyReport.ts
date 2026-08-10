@@ -1,7 +1,13 @@
 import type { Request, Response } from "express";
 import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
-import { tasks, users, notes, voiceNotes, delegations } from "../../drizzle/schema";
+import {
+  tasks,
+  users,
+  notes,
+  voiceNotes,
+  delegations,
+} from "../../drizzle/schema";
 import { and, eq, gte } from "drizzle-orm";
 import { notifyOwner } from "../_core/notification";
 import { invokeLLM } from "../_core/llm";
@@ -24,29 +30,47 @@ export async function handleWeeklyReport(req: Request, res: Response) {
     const ownerOpenId = process.env.OWNER_OPEN_ID;
     if (!ownerOpenId) return res.json({ ok: true, skipped: "no-owner" });
 
-    const ownerRows = await db.select().from(users).where(eq(users.openId, ownerOpenId)).limit(1);
-    if (!ownerRows[0]) return res.json({ ok: true, skipped: "owner-not-found" });
+    const ownerRows = await db
+      .select()
+      .from(users)
+      .where(eq(users.openId, ownerOpenId))
+      .limit(1);
+    if (!ownerRows[0])
+      return res.json({ ok: true, skipped: "owner-not-found" });
     const ownerId = ownerRows[0].id;
     const ownerName = ownerRows[0].name ?? "Stefan";
 
     const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // Erledigte und offene Aufgaben
-    const allTasks = await db.select().from(tasks).where(eq(tasks.userId, ownerId));
-    const doneThisWeek = allTasks.filter(t => t.completed && t.updatedAt >= weekAgo);
+    const allTasks = await db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.userId, ownerId));
+    const doneThisWeek = allTasks.filter(
+      t => t.completed && t.updatedAt >= weekAgo
+    );
     const stillOpen = allTasks.filter(t => !t.completed);
-    const overdueTasks = stillOpen.filter(t => t.dueDate && t.dueDate < Date.now());
+    const overdueTasks = stillOpen.filter(
+      t => t.dueDate && t.dueDate < Date.now()
+    );
 
     // Notizen und Sprachnotizen der Woche
-    const weekNotes = await db.select().from(notes)
+    const weekNotes = await db
+      .select()
+      .from(notes)
       .where(and(eq(notes.userId, ownerId), gte(notes.createdAt, weekAgo)));
-    const weekVoiceNotes = await db.select().from(voiceNotes)
-      .where(and(eq(voiceNotes.userId, ownerId), gte(voiceNotes.createdAt, weekAgo)));
+    const weekVoiceNotes = await db
+      .select()
+      .from(voiceNotes)
+      .where(
+        and(eq(voiceNotes.userId, ownerId), gte(voiceNotes.createdAt, weekAgo))
+      );
 
     // Offene Delegationen
-    const openDelegations = (await db.select().from(delegations)
-      .where(eq(delegations.userId, ownerId)))
-      .filter(d => d.status === "open" || d.status === "in_progress");
+    const openDelegations = (
+      await db.select().from(delegations).where(eq(delegations.userId, ownerId))
+    ).filter(d => d.status === "open" || d.status === "in_progress");
 
     // Zahlen aus der Gross ICT App
     let appSummary = "";
@@ -58,7 +82,9 @@ export async function handleWeeklyReport(req: Request, res: Response) {
 
     const kw = (() => {
       const d = new Date();
-      const target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const target = new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+      );
       const dayNr = (target.getUTCDay() + 6) % 7;
       target.setUTCDate(target.getUTCDate() - dayNr + 3);
       const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
@@ -67,16 +93,29 @@ export async function handleWeeklyReport(req: Request, res: Response) {
     })();
 
     const facts = `Erledigte Aufgaben diese Woche: ${doneThisWeek.length}
-${doneThisWeek.slice(0, 12).map(t => `- ${t.title}`).join("\n")}
+${doneThisWeek
+  .slice(0, 12)
+  .map(t => `- ${t.title}`)
+  .join("\n")}
 
 Noch offene Aufgaben: ${stillOpen.length} (davon überfällig: ${overdueTasks.length})
-${overdueTasks.slice(0, 8).map(t => `- ÜBERFÄLLIG: ${t.title}`).join("\n")}
-${stillOpen.filter(t => !overdueTasks.includes(t)).slice(0, 8).map(t => `- ${t.title}`).join("\n")}
+${overdueTasks
+  .slice(0, 8)
+  .map(t => `- ÜBERFÄLLIG: ${t.title}`)
+  .join("\n")}
+${stillOpen
+  .filter(t => !overdueTasks.includes(t))
+  .slice(0, 8)
+  .map(t => `- ${t.title}`)
+  .join("\n")}
 
 Neue Notizen: ${weekNotes.length}
 Neue Sprachnotizen: ${weekVoiceNotes.length}
 Offene Delegationen: ${openDelegations.length}
-${openDelegations.slice(0, 6).map(d => `- ${d.title} → ${d.assigneeName}`).join("\n")}
+${openDelegations
+  .slice(0, 6)
+  .map(d => `- ${d.title} → ${d.assigneeName}`)
+  .join("\n")}
 
 ${appSummary ? `Aktuelle Zahlen aus der Gross ICT App:\n${appSummary}` : ""}`;
 
@@ -123,7 +162,10 @@ ${facts}`;
     });
   } catch (e) {
     console.error("[WeeklyReport] Fehler:", e);
-    res.status(500).json({ error: String(e), stack: e instanceof Error ? e.stack : undefined, timestamp: Date.now() });
+    res.status(500).json({
+      error: String(e),
+      stack: e instanceof Error ? e.stack : undefined,
+      timestamp: Date.now(),
+    });
   }
 }
-

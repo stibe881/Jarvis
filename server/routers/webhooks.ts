@@ -2,7 +2,10 @@ import { z } from "zod";
 import { randomBytes } from "crypto";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
-  createWebhookKey, getWebhookKeysByUser, deleteWebhookKey, getWebhookEventsByUser,
+  createWebhookKey,
+  getWebhookKeysByUser,
+  deleteWebhookKey,
+  getWebhookEventsByUser,
 } from "../db";
 
 export const webhooksRouter = router({
@@ -25,9 +28,10 @@ export const webhooksRouter = router({
     }),
 
   listEvents: protectedProcedure
-    .input(z.object({ limit: z.number().min(1).max(200).default(50) }).optional())
+    .input(
+      z.object({ limit: z.number().min(1).max(200).default(50) }).optional()
+    )
     .query(async ({ ctx, input }) => {
       return getWebhookEventsByUser(ctx.user.id, input?.limit ?? 50);
     }),
 });
-

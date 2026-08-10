@@ -34,7 +34,11 @@ export function exportQuotePdf(quote: QuoteData): void {
   // Datum rechts
   doc.setTextColor(180, 200, 220);
   doc.setFontSize(9);
-  const dateStr = new Date(quote.createdAt).toLocaleDateString("de-CH", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const dateStr = new Date(quote.createdAt).toLocaleDateString("de-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
   doc.text(dateStr, pageW - margin, 26, { align: "right" });
 
   y = 55;
@@ -106,7 +110,10 @@ export function exportQuotePdf(quote: QuoteData): void {
   // ── Gesamtbetrag ─────────────────────────────────────────────────────────
   if (quote.totalAmount) {
     y += 8;
-    if (y + 15 > pageH - footerH) { doc.addPage(); y = 20; }
+    if (y + 15 > pageH - footerH) {
+      doc.addPage();
+      y = 20;
+    }
     doc.setDrawColor(0, 180, 216);
     doc.setLineWidth(0.3);
     doc.line(margin, y, pageW - margin, y);
@@ -114,12 +121,19 @@ export function exportQuotePdf(quote: QuoteData): void {
     doc.setFontSize(12);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(10, 25, 47);
-    doc.text(`Gesamtbetrag: CHF ${quote.totalAmount.toLocaleString("de-CH")}`, pageW - margin, y, { align: "right" });
+    doc.text(
+      `Gesamtbetrag: CHF ${quote.totalAmount.toLocaleString("de-CH")}`,
+      pageW - margin,
+      y,
+      { align: "right" }
+    );
     y += 6;
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
     doc.setTextColor(100, 100, 100);
-    doc.text("Alle Preise in CHF, exkl. MwSt.", pageW - margin, y, { align: "right" });
+    doc.text("Alle Preise in CHF, exkl. MwSt.", pageW - margin, y, {
+      align: "right",
+    });
   }
 
   // ── Footer ───────────────────────────────────────────────────────────────
@@ -131,8 +145,14 @@ export function exportQuotePdf(quote: QuoteData): void {
     doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
     doc.setFont("helvetica", "normal");
-    doc.text("Gross ICT · gross-ict.ch · stefan.gross@gross-ict.ch", margin, pageH - 7);
-    doc.text(`Seite ${i} / ${totalPages}`, pageW - margin, pageH - 7, { align: "right" });
+    doc.text(
+      "Gross ICT · gross-ict.ch · stefan.gross@gross-ict.ch",
+      margin,
+      pageH - 7
+    );
+    doc.text(`Seite ${i} / ${totalPages}`, pageW - margin, pageH - 7, {
+      align: "right",
+    });
   }
 
   // ── Download ─────────────────────────────────────────────────────────────

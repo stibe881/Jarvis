@@ -15,7 +15,14 @@
 import { executeAppAction } from "./routers/appIntegration";
 import { executeSpotifyAction } from "./routers/spotify";
 import { queueDeviceCommand } from "./routers/deviceCommands";
-import { createNote, createTask, getNotesByUser, getTasksByUser, updateTask, upsertMemory } from "./db";
+import {
+  createNote,
+  createTask,
+  getNotesByUser,
+  getTasksByUser,
+  updateTask,
+  upsertMemory,
+} from "./db";
 
 /** Ein einzelner ausgeführter Schritt – wird dem Nutzer als Protokoll gezeigt. */
 export type AgentStep = {
@@ -31,11 +38,27 @@ export type AgentStep = {
 
 /** Aktionen, die Daten verändern und deshalb im Protokoll hervorgehoben werden. */
 const WRITING_ACTIONS = [
-  "create_customer", "create_ticket", "create_lead", "create_project", "create_project_task",
-  "create_expense", "create_quote", "create_invoice", "update_ticket_status", "update_ticket_priority",
-  "add_ticket_comment", "mark_invoice_paid", "update_lead_status", "update_quote_status",
-  "create_event", "update_event", "delete_event", "invite_attendee",
-  "create_note", "create_task", "complete_task",
+  "create_customer",
+  "create_ticket",
+  "create_lead",
+  "create_project",
+  "create_project_task",
+  "create_expense",
+  "create_quote",
+  "create_invoice",
+  "update_ticket_status",
+  "update_ticket_priority",
+  "add_ticket_comment",
+  "mark_invoice_paid",
+  "update_lead_status",
+  "update_quote_status",
+  "create_event",
+  "update_event",
+  "delete_event",
+  "invite_attendee",
+  "create_note",
+  "create_task",
+  "complete_task",
 ];
 
 export function isWritingAction(action: string): boolean {
@@ -49,11 +72,15 @@ export function isWritingAction(action: string): boolean {
  */
 const CRITICAL_ACTIONS = [
   // Geld und Buchhaltung
-  "mark_invoice_paid", "create_invoice",
+  "mark_invoice_paid",
+  "create_invoice",
   // Nach aussen wirksam
-  "update_quote_status", "invite_attendee", "whatsapp",
+  "update_quote_status",
+  "invite_attendee",
+  "whatsapp",
   // Löschen und Verwerfen
-  "delete_event", "update_ticket_status",
+  "delete_event",
+  "update_ticket_status",
 ];
 
 export function isCriticalAction(action: string): boolean {
@@ -70,8 +97,13 @@ export type PendingAction = {
 };
 
 /** Formuliert eine kurze, verständliche Beschreibung einer kritischen Aktion. */
-export function describeCritical(tag: ActionTag, action: string, payload: Record<string, unknown>): string {
-  const val = (k: string) => (payload[k] === undefined || payload[k] === null ? "" : String(payload[k]));
+export function describeCritical(
+  tag: ActionTag,
+  action: string,
+  payload: Record<string, unknown>
+): string {
+  const val = (k: string) =>
+    payload[k] === undefined || payload[k] === null ? "" : String(payload[k]);
   switch (action) {
     case "mark_invoice_paid":
       return `Rechnung ${val("id") || val("number") || "(unbekannt)"} als bezahlt markieren`;
@@ -94,8 +126,13 @@ export function describeCritical(tag: ActionTag, action: string, payload: Record
 
 /** Alle unterstützten Aktionsblöcke mit ihrem XML-Tag. */
 export const ACTION_TAGS = [
-  "app_action", "calendar_action", "memory_action",
-  "spotify_action", "device_action", "notes_action", "tasks_action",
+  "app_action",
+  "calendar_action",
+  "memory_action",
+  "spotify_action",
+  "device_action",
+  "notes_action",
+  "tasks_action",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];
@@ -110,7 +147,10 @@ export type ParsedAction = {
  * Liest alle Aktionsblöcke aus einer Modellantwort und entfernt sie aus dem Text.
  * Gibt den bereinigten Text und die gefundenen Aktionen zurück.
  */
-export function parseActions(response: string): { text: string; actions: ParsedAction[] } {
+export function parseActions(response: string): {
+  text: string;
+  actions: ParsedAction[];
+} {
   let text = response;
   const actions: ParsedAction[] = [];
 
@@ -133,8 +173,17 @@ export function parseActions(response: string): { text: string; actions: ParsedA
 }
 
 /** Kurzbeschreibung eines Schritts für die Anzeige im Chat. */
-function describe(tag: ActionTag, action: string, params: Record<string, unknown>): string {
-  const name = (params.customer ?? params.search ?? params.title ?? params.query ?? params.recipient ?? "") as string;
+function describe(
+  tag: ActionTag,
+  action: string,
+  params: Record<string, unknown>
+): string {
+  const name = (params.customer ??
+    params.search ??
+    params.title ??
+    params.query ??
+    params.recipient ??
+    "") as string;
   const suffix = name ? `: ${String(name).slice(0, 40)}` : "";
   const map: Record<string, string> = {
     app_action: "App",
@@ -149,12 +198,20 @@ function describe(tag: ActionTag, action: string, params: Record<string, unknown
 }
 
 /** Werkzeuge rund um Notizen – damit Jarvis selbst nachschlagen und festhalten kann. */
-async function executeNotesAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
+async function executeNotesAction(
+  userId: number,
+  action: string,
+  params: Record<string, unknown>
+): Promise<string> {
   if (action === "list" || action === "search") {
-    const search = typeof params.search === "string" ? params.search : undefined;
+    const search =
+      typeof params.search === "string" ? params.search : undefined;
     const notes = await getNotesByUser(userId, search);
     if (notes.length === 0) return "Keine Notizen gefunden.";
-    return notes.slice(0, 15).map((n) => `- ${n.title}: ${(n.content ?? "").slice(0, 160)}`).join("\n");
+    return notes
+      .slice(0, 15)
+      .map(n => `- ${n.title}: ${(n.content ?? "").slice(0, 160)}`)
+      .join("\n");
   }
   if (action === "create") {
     const title = typeof params.title === "string" ? params.title : "Notiz";
@@ -166,34 +223,52 @@ async function executeNotesAction(userId: number, action: string, params: Record
 }
 
 /** Werkzeuge rund um Aufgaben – Jarvis kann Fälligkeiten prüfen und Aufgaben anlegen. */
-async function executeTasksAction(userId: number, action: string, params: Record<string, unknown>): Promise<string> {
+async function executeTasksAction(
+  userId: number,
+  action: string,
+  params: Record<string, unknown>
+): Promise<string> {
   if (action === "list") {
     const tasks = await getTasksByUser(userId);
-    const open = tasks.filter((t) => !t.completed);
+    const open = tasks.filter(t => !t.completed);
     if (open.length === 0) return "Keine offenen Aufgaben.";
-    return open.slice(0, 20).map((t) => {
-      const due = t.dueDate ? ` (fällig: ${new Date(t.dueDate).toLocaleDateString("de-CH")})` : "";
-      return `- [id:${t.id}] ${t.title}${due} · Priorität: ${t.priority ?? "normal"}`;
-    }).join("\n");
+    return open
+      .slice(0, 20)
+      .map(t => {
+        const due = t.dueDate
+          ? ` (fällig: ${new Date(t.dueDate).toLocaleDateString("de-CH")})`
+          : "";
+        return `- [id:${t.id}] ${t.title}${due} · Priorität: ${t.priority ?? "normal"}`;
+      })
+      .join("\n");
   }
   if (action === "create") {
     const title = typeof params.title === "string" ? params.title : "";
     if (!title) return "Für eine Aufgabe wird ein Titel benötigt.";
-    const raw = typeof params.priority === "string" ? params.priority : "medium";
+    const raw =
+      typeof params.priority === "string" ? params.priority : "medium";
     const priority: "low" | "medium" | "high" =
       raw === "low" || raw === "high" ? raw : "medium";
-    const parsedDue = typeof params.due_date === "string" ? new Date(params.due_date) : null;
-    const dueDate = parsedDue && !Number.isNaN(parsedDue.getTime()) ? parsedDue.getTime() : null;
+    const parsedDue =
+      typeof params.due_date === "string" ? new Date(params.due_date) : null;
+    const dueDate =
+      parsedDue && !Number.isNaN(parsedDue.getTime())
+        ? parsedDue.getTime()
+        : null;
     await createTask({
-      userId, title, priority,
-      description: typeof params.description === "string" ? params.description : null,
+      userId,
+      title,
+      priority,
+      description:
+        typeof params.description === "string" ? params.description : null,
       dueDate,
     });
     return `Aufgabe «${title}» wurde erstellt.`;
   }
   if (action === "complete") {
     const id = Number(params.id);
-    if (!Number.isFinite(id)) return "Für das Abschliessen wird eine Aufgaben-ID benötigt.";
+    if (!Number.isFinite(id))
+      return "Für das Abschliessen wird eine Aufgaben-ID benötigt.";
     await updateTask(id, userId, { completed: true });
     return `Aufgabe ${id} wurde als erledigt markiert.`;
   }
@@ -203,7 +278,11 @@ async function executeTasksAction(userId: number, action: string, params: Record
 export type ExecuteContext = {
   userId: number;
   /** Kalender-Aktionen liegen im Chat-Router, daher als Funktion übergeben. */
-  runCalendar: (userId: number, action: string, params: Record<string, unknown>) => Promise<string>;
+  runCalendar: (
+    userId: number,
+    action: string,
+    params: Record<string, unknown>
+  ) => Promise<string>;
 };
 
 /**
@@ -211,9 +290,17 @@ export type ExecuteContext = {
  * Fehler werden abgefangen und als Text zurückgegeben, damit das Modell
  * darauf reagieren kann statt die ganze Antwort zu verlieren.
  */
-export async function executeAction(ctx: ExecuteContext, parsed: ParsedAction): Promise<AgentStep> {
+export async function executeAction(
+  ctx: ExecuteContext,
+  parsed: ParsedAction
+): Promise<AgentStep> {
   const { tag, payload } = parsed;
-  const action = typeof payload.action === "string" ? payload.action : typeof payload.type === "string" ? payload.type : "";
+  const action =
+    typeof payload.action === "string"
+      ? payload.action
+      : typeof payload.type === "string"
+        ? payload.type
+        : "";
   const label = describe(tag, action, payload);
 
   try {
@@ -231,8 +318,12 @@ export async function executeAction(ctx: ExecuteContext, parsed: ParsedAction): 
       case "memory_action": {
         const key = typeof payload.key === "string" ? payload.key : "";
         const value = typeof payload.value === "string" ? payload.value : "";
-        if (!key || !value) { result = "Für das Gedächtnis werden Schlüssel und Wert benötigt."; break; }
-        const category = typeof payload.category === "string" ? payload.category : "fact";
+        if (!key || !value) {
+          result = "Für das Gedächtnis werden Schlüssel und Wert benötigt.";
+          break;
+        }
+        const category =
+          typeof payload.category === "string" ? payload.category : "fact";
         await upsertMemory(ctx.userId, category, key, value, "chat");
         result = `Gemerkt: ${key} = ${value}`;
         break;
@@ -271,7 +362,7 @@ export async function executeAction(ctx: ExecuteContext, parsed: ParsedAction): 
 /** Beobachtungen für das Modell aufbereiten. */
 export function formatObservations(steps: AgentStep[]): string {
   return steps
-    .map((s) => `[Werkzeug ${s.kind}/${s.action}]\n${s.result}`)
+    .map(s => `[Werkzeug ${s.kind}/${s.action}]\n${s.result}`)
     .join("\n\n");
 }
 
@@ -293,10 +384,20 @@ export function hasNextStep(text: string): boolean {
   const tail = text.slice(-320).toLowerCase();
   if (!tail.includes("?")) return false;
   // Floskeln zählen nicht als konkreter Vorschlag
-  const empty = ["kann ich sonst", "sonst noch etwas", "brauchst du noch", "wie kann ich dir"];
-  if (empty.some((p) => tail.includes(p))) return false;
-  const concrete = ["soll ich", "möchtest du, dass ich", "darf ich", "sollen wir"];
-  return concrete.some((p) => tail.includes(p));
+  const empty = [
+    "kann ich sonst",
+    "sonst noch etwas",
+    "brauchst du noch",
+    "wie kann ich dir",
+  ];
+  if (empty.some(p => tail.includes(p))) return false;
+  const concrete = [
+    "soll ich",
+    "möchtest du, dass ich",
+    "darf ich",
+    "sollen wir",
+  ];
+  return concrete.some(p => tail.includes(p));
 }
 
 /**
@@ -306,26 +407,35 @@ export function hasNextStep(text: string): boolean {
 export function ensureNextStep(text: string, steps: AgentStep[]): string {
   if (steps.length === 0 || hasNextStep(text)) return text;
 
-  const actions = steps.map((s) => s.action);
+  const actions = steps.map(s => s.action);
   let suggestion = "Soll ich daraus eine Aufgabe mit Frist anlegen?";
-  if (actions.some((a) => a.includes("overdue"))) {
-    suggestion = "Soll ich für die überfälligen Posten Zahlungserinnerungen vorbereiten?";
-  } else if (actions.some((a) => a.includes("invoice"))) {
-    suggestion = "Soll ich zu den offenen Rechnungen eine Nachfass-Aufgabe anlegen?";
-  } else if (actions.some((a) => a.includes("quote"))) {
+  if (actions.some(a => a.includes("overdue"))) {
+    suggestion =
+      "Soll ich für die überfälligen Posten Zahlungserinnerungen vorbereiten?";
+  } else if (actions.some(a => a.includes("invoice"))) {
+    suggestion =
+      "Soll ich zu den offenen Rechnungen eine Nachfass-Aufgabe anlegen?";
+  } else if (actions.some(a => a.includes("quote"))) {
     suggestion = "Soll ich beim Kunden zum Angebot nachfassen?";
-  } else if (actions.some((a) => a.includes("ticket"))) {
-    suggestion = "Soll ich ein Ticket priorisieren oder einen Kommentar hinterlegen?";
-  } else if (actions.some((a) => a.includes("event"))) {
-    suggestion = "Soll ich einen dieser Termine verschieben oder eine Erinnerung setzen?";
-  } else if (actions.some((a) => a.includes("dossier") || a.includes("customer"))) {
+  } else if (actions.some(a => a.includes("ticket"))) {
+    suggestion =
+      "Soll ich ein Ticket priorisieren oder einen Kommentar hinterlegen?";
+  } else if (actions.some(a => a.includes("event"))) {
+    suggestion =
+      "Soll ich einen dieser Termine verschieben oder eine Erinnerung setzen?";
+  } else if (
+    actions.some(a => a.includes("dossier") || a.includes("customer"))
+  ) {
     suggestion = "Soll ich für diesen Kunden den nächsten Schritt vorbereiten?";
   }
   return `${text.trim()}\n\n${suggestion}`;
 }
 
 /** Eine Nachricht, wie sie an das Modell geht. */
-export type LoopMessage = { role: "system" | "user" | "assistant"; content: unknown };
+export type LoopMessage = {
+  role: "system" | "user" | "assistant";
+  content: unknown;
+};
 
 export type RunAgentLoopOptions = {
   /** Erste Modellantwort, die möglicherweise Aktionsblöcke enthält. */
@@ -353,9 +463,12 @@ export type RunAgentLoopOptions = {
  * Dadurch kann Jarvis fehlende Daten selbst beschaffen: erst den Kunden
  * suchen, dann mit der erhaltenen ID die nächste Aktion ausführen.
  */
-export async function runAgentLoop(
-  opts: RunAgentLoopOptions
-): Promise<{ text: string; steps: AgentStep[]; rounds: number; pending: PendingAction[] }> {
+export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
+  text: string;
+  steps: AgentStep[];
+  rounds: number;
+  pending: PendingAction[];
+}> {
   const maxRounds = opts.maxRounds ?? MAX_AGENT_ROUNDS;
   const steps: AgentStep[] = [];
   const pending: PendingAction[] = [];
@@ -364,18 +477,34 @@ export async function runAgentLoop(
 
   for (let round = 0; round < maxRounds; round++) {
     const { text, actions } = parseActions(current);
-    if (actions.length === 0) { current = text; break; }
+    if (actions.length === 0) {
+      current = text;
+      break;
+    }
 
     rounds++;
     const roundSteps: AgentStep[] = [];
     for (const parsed of actions) {
-      const actionName = String(parsed.payload.action ?? parsed.payload.type ?? "");
+      const actionName = String(
+        parsed.payload.action ?? parsed.payload.type ?? ""
+      );
       // Kritische Aktionen nur nach ausdrücklicher Freigabe ausführen
       if (!opts.approved && isCriticalAction(actionName)) {
-        const description = describeCritical(parsed.tag, actionName, parsed.payload);
-        pending.push({ tag: parsed.tag, action: actionName, payload: parsed.payload, description });
+        const description = describeCritical(
+          parsed.tag,
+          actionName,
+          parsed.payload
+        );
+        pending.push({
+          tag: parsed.tag,
+          action: actionName,
+          payload: parsed.payload,
+          description,
+        });
         roundSteps.push({
-          kind: parsed.tag, action: actionName, label: `Freigabe nötig · ${actionName}`,
+          kind: parsed.tag,
+          action: actionName,
+          label: `Freigabe nötig · ${actionName}`,
           result: `NICHT AUSGEFÜHRT – diese Aktion braucht die ausdrückliche Freigabe von Stefan: ${description}. Frage ihn in einem Satz, ob du sie ausführen darfst, und führe sie erst nach einem klaren Ja aus.`,
         });
         continue;
@@ -385,7 +514,10 @@ export async function runAgentLoop(
       steps.push(step);
     }
 
-    opts.messages.push({ role: "assistant", content: text || "(Werkzeuge werden ausgeführt)" });
+    opts.messages.push({
+      role: "assistant",
+      content: text || "(Werkzeuge werden ausgeführt)",
+    });
     opts.messages.push({
       role: "user",
       content: `[Ergebnisse deiner Werkzeuge – der Nutzer sieht diese Nachricht nicht]\n\n${formatObservations(roundSteps)}\n\nWenn du für die Aufgabe noch Daten brauchst, nutze weitere Aktionsblöcke. Wenn du alles hast, formuliere jetzt die endgültige Antwort – ohne Aktionsblöcke, mit den konkreten Zahlen und Namen aus den Ergebnissen. Schliesse mit genau einem konkreten Vorschlag für den nächsten Schritt.`,
@@ -399,7 +531,7 @@ export async function runAgentLoop(
   let finalText = ensureNextStep(current.trim(), steps);
   // Sicherheitsnetz: Fragt Jarvis nicht selbst nach, ergänzen wir die Rückfrage
   if (pending.length > 0 && !hasNextStep(finalText)) {
-    const list = pending.map((p) => `• ${p.description}`).join("\n");
+    const list = pending.map(p => `• ${p.description}`).join("\n");
     finalText = `${finalText}\n\nDafür brauche ich deine Freigabe:\n${list}\n\nSoll ich das ausführen?`;
   }
   return { text: finalText, steps, rounds, pending };
@@ -409,6 +541,6 @@ export function formatStepLog(steps: AgentStep[]): string {
   if (steps.length === 0) return "";
   // Eigener Marker, den das Frontend als aufklappbares Protokoll rendert.
   // Bewusst kein HTML, damit die Markdown-Ausgabe sauber bleibt.
-  const lines = steps.map((s) => s.label);
+  const lines = steps.map(s => s.label);
   return `\n\n${STEP_LOG_MARKER}${lines.join(" | ")}`;
 }

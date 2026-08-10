@@ -33,7 +33,11 @@
   "shortcuts": [
     { "name": "Neues Gespräch", "short_name": "Chat", "url": "/chat" },
     { "name": "Widget-Modus", "short_name": "Widget", "url": "/?widget=1" },
-    { "name": "Sprachnotiz", "short_name": "Sprachnotiz", "url": "/voice-notes" },
+    {
+      "name": "Sprachnotiz",
+      "short_name": "Sprachnotiz",
+      "url": "/voice-notes"
+    },
     { "name": "Aufgaben", "short_name": "Aufgaben", "url": "/tasks" }
   ]
 }

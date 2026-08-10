@@ -6,20 +6,52 @@ import type { TrpcContext } from "./_core/context";
 vi.mock("./db", () => ({
   createNote: vi.fn().mockResolvedValue({ id: 1 }),
   getNotesByUser: vi.fn().mockResolvedValue([
-    { id: 1, userId: 1, title: "Test-Notiz", content: "Inhalt", tags: "test", createdAt: new Date(), updatedAt: new Date() },
+    {
+      id: 1,
+      userId: 1,
+      title: "Test-Notiz",
+      content: "Inhalt",
+      tags: "test",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ]),
-  getNoteById: vi.fn().mockResolvedValue({ id: 1, userId: 1, title: "Test-Notiz", content: "Inhalt", tags: null, createdAt: new Date(), updatedAt: new Date() }),
+  getNoteById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    title: "Test-Notiz",
+    content: "Inhalt",
+    tags: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   updateNote: vi.fn().mockResolvedValue(undefined),
   deleteNote: vi.fn().mockResolvedValue(undefined),
   createTask: vi.fn().mockResolvedValue({ id: 1 }),
   getTasksByUser: vi.fn().mockResolvedValue([
-    { id: 1, userId: 1, title: "Test-Aufgabe", description: null, completed: false, priority: "medium", dueDate: null, createdAt: new Date(), updatedAt: new Date() },
+    {
+      id: 1,
+      userId: 1,
+      title: "Test-Aufgabe",
+      description: null,
+      completed: false,
+      priority: "medium",
+      dueDate: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
   ]),
   updateTask: vi.fn().mockResolvedValue(undefined),
   deleteTask: vi.fn().mockResolvedValue(undefined),
   createConversation: vi.fn().mockResolvedValue({ id: 1 }),
   getConversationsByUser: vi.fn().mockResolvedValue([]),
-  getConversationById: vi.fn().mockResolvedValue({ id: 1, userId: 1, title: "Test", createdAt: new Date(), updatedAt: new Date() }),
+  getConversationById: vi.fn().mockResolvedValue({
+    id: 1,
+    userId: 1,
+    title: "Test",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
   getMessagesByConversation: vi.fn().mockResolvedValue([]),
   addMessage: vi.fn().mockResolvedValue({ id: 1 }),
   deleteConversation: vi.fn().mockResolvedValue(undefined),
@@ -29,11 +61,18 @@ vi.mock("./db", () => ({
 }));
 
 vi.mock("./storage", () => ({
-  storagePut: vi.fn().mockResolvedValue({ key: "test-key", url: "/manus-storage/test-key" }),
+  storagePut: vi
+    .fn()
+    .mockResolvedValue({ key: "test-key", url: "/manus-storage/test-key" }),
 }));
 
 vi.mock("./_core/voiceTranscription", () => ({
-  transcribeAudio: vi.fn().mockResolvedValue({ text: "Transkribierter Text", language: "de", duration: 2, segments: [] }),
+  transcribeAudio: vi.fn().mockResolvedValue({
+    text: "Transkribierter Text",
+    language: "de",
+    duration: 2,
+    segments: [],
+  }),
 }));
 
 function makeCtx(userId = 1): TrpcContext {
@@ -65,13 +104,20 @@ describe("Jarvis – Notizen-Router", () => {
 
   it("erstellt eine neue Notiz", async () => {
     const caller = appRouter.createCaller(makeCtx());
-    const result = await caller.notes.create({ title: "Neue Notiz", content: "Inhalt hier", tags: "test" });
+    const result = await caller.notes.create({
+      title: "Neue Notiz",
+      content: "Inhalt hier",
+      tags: "test",
+    });
     expect(result).toHaveProperty("id");
   });
 
   it("aktualisiert eine Notiz", async () => {
     const caller = appRouter.createCaller(makeCtx());
-    const result = await caller.notes.update({ id: 1, title: "Aktualisierter Titel" });
+    const result = await caller.notes.update({
+      id: 1,
+      title: "Aktualisierter Titel",
+    });
     expect(result).toEqual({ success: true });
   });
 
@@ -91,13 +137,19 @@ describe("Jarvis – Aufgaben-Router", () => {
 
   it("erstellt eine neue Aufgabe", async () => {
     const caller = appRouter.createCaller(makeCtx());
-    const result = await caller.tasks.create({ title: "Neue Aufgabe", priority: "high" });
+    const result = await caller.tasks.create({
+      title: "Neue Aufgabe",
+      priority: "high",
+    });
     expect(result).toHaveProperty("id");
   });
 
   it("markiert eine Aufgabe als erledigt", async () => {
     const caller = appRouter.createCaller(makeCtx());
-    const result = await caller.tasks.toggleComplete({ id: 1, completed: true });
+    const result = await caller.tasks.toggleComplete({
+      id: 1,
+      completed: true,
+    });
     expect(result).toEqual({ success: true });
   });
 
@@ -117,7 +169,9 @@ describe("Jarvis – Chat-Router", () => {
 
   it("erstellt ein neues Gespräch", async () => {
     const caller = appRouter.createCaller(makeCtx());
-    const result = await caller.chat.createConversation({ title: "Neues Gespräch" });
+    const result = await caller.chat.createConversation({
+      title: "Neues Gespräch",
+    });
     expect(result).toHaveProperty("id");
   });
 

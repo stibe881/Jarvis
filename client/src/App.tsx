@@ -30,20 +30,20 @@ function Router() {
         <Route path={"/"} component={JarvisChat} />
         <Route path={"/chat"} component={JarvisChat} />
         <Route path={"/notes"} component={JarvisNotes} />
-      <Route path={"/tasks"} component={JarvisTasks} />
-      <Route path={"/calendar"} component={JarvisCalendar} />
-      <Route path={"/memory"} component={JarvisMemory} />
-      <Route path={"/profile"} component={JarvisProfile} />
-      <Route path={"/gross-ict"} component={GrossIct} />
-      <Route path={"/sonnenberg"} component={SonnenbergIct} />
-      <Route path={"/app"} component={AppDashboard} />
-      <Route path={"/templates"} component={JarvisTemplates} />
-      <Route path={"/voice-notes"} component={JarvisVoiceNotes} />
-      <Route path={"/delegation"} component={JarvisDelegation} />
-      <Route path={"/integrations"} component={JarvisIntegrations} />
-      <Route path={"/shortcuts"} component={JarvisShortcuts} />
-      <Route path={"/customer"} component={CustomerDossier} />
-      <Route path={"/404"} component={NotFound} />
+        <Route path={"/tasks"} component={JarvisTasks} />
+        <Route path={"/calendar"} component={JarvisCalendar} />
+        <Route path={"/memory"} component={JarvisMemory} />
+        <Route path={"/profile"} component={JarvisProfile} />
+        <Route path={"/gross-ict"} component={GrossIct} />
+        <Route path={"/sonnenberg"} component={SonnenbergIct} />
+        <Route path={"/app"} component={AppDashboard} />
+        <Route path={"/templates"} component={JarvisTemplates} />
+        <Route path={"/voice-notes"} component={JarvisVoiceNotes} />
+        <Route path={"/delegation"} component={JarvisDelegation} />
+        <Route path={"/integrations"} component={JarvisIntegrations} />
+        <Route path={"/shortcuts"} component={JarvisShortcuts} />
+        <Route path={"/customer"} component={CustomerDossier} />
+        <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
     </JarvisLayout>
@@ -53,9 +53,7 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="dark"
-      >
+      <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster theme="dark" />
           <Router />

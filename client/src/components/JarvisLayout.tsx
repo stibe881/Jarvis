@@ -2,7 +2,28 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
-import { MessageSquare, StickyNote, CheckSquare, LogOut, Cpu, Menu, X, CalendarDays, Brain, Settings, Briefcase, Building2, LayoutDashboard, MoreHorizontal, FileText, Mic, UserPlus, Plug, Smartphone, IdCard } from "lucide-react";
+import {
+  MessageSquare,
+  StickyNote,
+  CheckSquare,
+  LogOut,
+  Cpu,
+  Menu,
+  X,
+  CalendarDays,
+  Brain,
+  Settings,
+  Briefcase,
+  Building2,
+  LayoutDashboard,
+  MoreHorizontal,
+  FileText,
+  Mic,
+  UserPlus,
+  Plug,
+  Smartphone,
+  IdCard,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import { useAppBadge } from "@/hooks/useAppBadge";
@@ -49,7 +70,11 @@ const navItems = [
   { href: "/profile", label: "Profil", icon: Settings },
 ];
 
-export default function JarvisLayout({ children }: { children: React.ReactNode }) {
+export default function JarvisLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -61,7 +86,10 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
   // Mehr-Menü schliessen wenn ausserhalb geklickt
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+      if (
+        moreMenuRef.current &&
+        !moreMenuRef.current.contains(e.target as Node)
+      ) {
         setMoreMenuOpen(false);
       }
     };
@@ -74,7 +102,9 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <JarvisOrb size={80} />
-          <p className="font-jarvis text-primary text-sm tracking-widest animate-pulse">INITIALISIERUNG...</p>
+          <p className="font-jarvis text-primary text-sm tracking-widest animate-pulse">
+            INITIALISIERUNG...
+          </p>
         </div>
       </div>
     );
@@ -86,11 +116,16 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
         <div className="flex flex-col items-center gap-8 p-8 w-full max-w-sm">
           <JarvisOrb size={120} />
           <div className="text-center">
-            <h1 className="font-jarvis text-4xl font-bold text-primary jarvis-glow-text mb-2">JARVIS</h1>
-            <p className="text-muted-foreground text-sm tracking-widest">PERSÖNLICHER KI-ASSISTENT</p>
+            <h1 className="font-jarvis text-4xl font-bold text-primary jarvis-glow-text mb-2">
+              JARVIS
+            </h1>
+            <p className="text-muted-foreground text-sm tracking-widest">
+              PERSÖNLICHER KI-ASSISTENT
+            </p>
           </div>
           <p className="text-foreground/70 text-center text-sm">
-            Dein intelligenter Assistent powered by Claude. Bitte melde dich an, um fortzufahren.
+            Dein intelligenter Assistent powered by Claude. Bitte melde dich an,
+            um fortzufahren.
           </p>
           <Button
             onClick={() => startLogin()}
@@ -104,7 +139,8 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
   }
 
   const isActive = (href: string) =>
-    location === href || (href === "/" && (location === "/chat" || location === "/"));
+    location === href ||
+    (href === "/" && (location === "/chat" || location === "/"));
 
   // ── Widget-Modus: nur Chat, ohne Sidebar und Bottom-Nav ──
   if (isWidget) {
@@ -113,7 +149,9 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
         <header className="flex items-center justify-between px-3 py-2 border-b border-border bg-sidebar flex-shrink-0">
           <div className="flex items-center gap-2">
             <JarvisOrb size={22} />
-            <span className="font-jarvis text-sm font-bold text-primary jarvis-glow-text">JARVIS</span>
+            <span className="font-jarvis text-sm font-bold text-primary jarvis-glow-text">
+              JARVIS
+            </span>
           </div>
           <a
             href="/"
@@ -123,7 +161,9 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
             VOLLANSICHT
           </a>
         </header>
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">{children}</main>
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {children}
+        </main>
       </div>
     );
   }
@@ -134,7 +174,9 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-sidebar flex-shrink-0">
         <div className="flex items-center gap-2">
           <JarvisOrb size={28} />
-          <span className="font-jarvis text-base font-bold text-primary jarvis-glow-text">JARVIS</span>
+          <span className="font-jarvis text-base font-bold text-primary jarvis-glow-text">
+            JARVIS
+          </span>
         </div>
         <button
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -168,10 +210,14 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
           <div className="px-3 pb-3 border-t border-border pt-3">
             <div className="flex items-center gap-3 px-4 py-2 mb-2">
               <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0">
-                <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+                <span className="text-primary text-xs font-bold">
+                  {user?.name?.[0]?.toUpperCase() ?? "U"}
+                </span>
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
+                <p className="text-sm font-medium text-foreground truncate">
+                  {user?.name ?? "Nutzer"}
+                </p>
               </div>
             </div>
             <Button
@@ -195,23 +241,34 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
             <div className="flex items-center gap-3">
               <JarvisOrb size={36} />
               <div>
-                <h1 className="font-jarvis text-lg font-bold text-primary jarvis-glow-text">JARVIS</h1>
-                <p className="text-xs text-muted-foreground tracking-widest">KI-ASSISTENT</p>
+                <h1 className="font-jarvis text-lg font-bold text-primary jarvis-glow-text">
+                  JARVIS
+                </h1>
+                <p className="text-xs text-muted-foreground tracking-widest">
+                  KI-ASSISTENT
+                </p>
               </div>
             </div>
           </div>
           <nav className="flex-1 p-4 space-y-1">
             {navItems.map(({ href, label, icon: Icon }) => (
               <Link key={href} href={href}>
-                <div className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
-                  isActive(href)
-                    ? "bg-primary/20 text-primary jarvis-border"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                )}>
-                  <Icon size={18} className={isActive(href) ? "text-primary" : ""} />
+                <div
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+                    isActive(href)
+                      ? "bg-primary/20 text-primary jarvis-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  )}
+                >
+                  <Icon
+                    size={18}
+                    className={isActive(href) ? "text-primary" : ""}
+                  />
                   {label}
-                  {isActive(href) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />}
+                  {isActive(href) && (
+                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />
+                  )}
                 </div>
               </Link>
             ))}
@@ -219,11 +276,17 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
           <div className="p-4 border-t border-border">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-                <span className="text-primary text-xs font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+                <span className="text-primary text-xs font-bold">
+                  {user?.name?.[0]?.toUpperCase() ?? "U"}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{user?.name ?? "Nutzer"}</p>
-                <p className="text-xs text-muted-foreground truncate">{user?.email ?? ""}</p>
+                <p className="text-sm font-medium text-foreground truncate">
+                  {user?.name ?? "Nutzer"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {user?.email ?? ""}
+                </p>
               </div>
             </div>
             <Button
@@ -248,13 +311,19 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
       <nav className="md:hidden flex-shrink-0 flex items-center justify-around border-t border-border bg-sidebar py-1 px-2 safe-area-bottom">
         {primaryNav.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href}>
-            <div className={cn(
-              "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all min-w-[56px]",
-              isActive(href) ? "text-primary" : "text-muted-foreground"
-            )}>
+            <div
+              className={cn(
+                "flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg transition-all min-w-[56px]",
+                isActive(href) ? "text-primary" : "text-muted-foreground"
+              )}
+            >
               <Icon size={20} />
-              <span className="text-[9px] font-medium tracking-wide leading-tight">{label}</span>
-              {isActive(href) && <span className="w-1 h-1 rounded-full bg-primary" />}
+              <span className="text-[9px] font-medium tracking-wide leading-tight">
+                {label}
+              </span>
+              {isActive(href) && (
+                <span className="w-1 h-1 rounded-full bg-primary" />
+              )}
             </div>
           </Link>
         ))}
@@ -268,32 +337,47 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
             )}
           >
             <MoreHorizontal size={20} />
-            <span className="text-[9px] font-medium tracking-wide leading-tight">Mehr</span>
+            <span className="text-[9px] font-medium tracking-wide leading-tight">
+              Mehr
+            </span>
           </button>
           {/* Mehr-Menü Popup */}
           {moreMenuOpen && (
             <div className="absolute bottom-full right-0 mb-2 w-52 bg-sidebar border border-border rounded-xl shadow-2xl z-50 overflow-hidden">
-              {navItems.filter(n => !primaryNav.some(p => p.href === n.href)).map(({ href, label, icon: Icon }) => (
-                <Link key={href} href={href}>
-                  <div
-                    onClick={() => setMoreMenuOpen(false)}
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all",
-                      isActive(href) ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                    )}
-                  >
-                    <Icon size={16} />
-                    {label}
-                    {isActive(href) && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
-                  </div>
-                </Link>
-              ))}
+              {navItems
+                .filter(n => !primaryNav.some(p => p.href === n.href))
+                .map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href}>
+                    <div
+                      onClick={() => setMoreMenuOpen(false)}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all",
+                        isActive(href)
+                          ? "bg-primary/20 text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <Icon size={16} />
+                      {label}
+                      {isActive(href) && (
+                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />
+                      )}
+                    </div>
+                  </Link>
+                ))}
               <div className="border-t border-border px-4 py-3 flex items-center gap-3">
                 <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0">
-                  <span className="text-primary text-[10px] font-bold">{user?.name?.[0]?.toUpperCase() ?? "U"}</span>
+                  <span className="text-primary text-[10px] font-bold">
+                    {user?.name?.[0]?.toUpperCase() ?? "U"}
+                  </span>
                 </div>
-                <span className="text-xs text-muted-foreground truncate flex-1">{user?.name ?? "Nutzer"}</span>
-                <button onClick={() => logout()} className="text-muted-foreground hover:text-destructive">
+                <span className="text-xs text-muted-foreground truncate flex-1">
+                  {user?.name ?? "Nutzer"}
+                </span>
+                <button
+                  onClick={() => logout()}
+                  className="text-muted-foreground hover:text-destructive"
+                >
                   <LogOut size={14} />
                 </button>
               </div>
@@ -307,7 +391,10 @@ export default function JarvisLayout({ children }: { children: React.ReactNode }
 
 export function JarvisOrb({ size = 48 }: { size?: number }) {
   return (
-    <div className="relative flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+    <div
+      className="relative flex items-center justify-center flex-shrink-0"
+      style={{ width: size, height: size }}
+    >
       <div
         className="absolute inset-0 rounded-full border-2 border-primary/30 animate-jarvis-spin"
         style={{ borderTopColor: "oklch(0.65 0.22 220)" }}

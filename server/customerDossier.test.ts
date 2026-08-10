@@ -1,13 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { customerLabel, formatDossier, type CustomerDossier } from "./routers/appIntegration";
+import {
+  customerLabel,
+  formatDossier,
+  type CustomerDossier,
+} from "./routers/appIntegration";
 
 describe("Kunden-Dossier – Anzeigename", () => {
   it("bevorzugt den Firmennamen", () => {
-    expect(customerLabel({ company_name: "Muster AG", first_name: "Max", last_name: "Muster" })).toBe("Muster AG");
+    expect(
+      customerLabel({
+        company_name: "Muster AG",
+        first_name: "Max",
+        last_name: "Muster",
+      })
+    ).toBe("Muster AG");
   });
 
   it("fällt auf Vor- und Nachname zurück", () => {
-    expect(customerLabel({ first_name: "Max", last_name: "Muster" })).toBe("Max Muster");
+    expect(customerLabel({ first_name: "Max", last_name: "Muster" })).toBe(
+      "Max Muster"
+    );
   });
 
   it("gibt Unbekannt zurück, wenn nichts vorhanden ist", () => {
@@ -18,25 +30,56 @@ describe("Kunden-Dossier – Anzeigename", () => {
 
 function makeDossier(): CustomerDossier {
   return {
-    customer: { id: "abc", company_name: "Muster AG", email: "info@muster.ch", phone: "+41 41 111 22 33" },
+    customer: {
+      id: "abc",
+      company_name: "Muster AG",
+      email: "info@muster.ch",
+      phone: "+41 41 111 22 33",
+    },
     label: "Muster AG",
     tickets: [
-      { title: "Drucker defekt", status: "open", priority: "high", created_at: "2026-08-01T10:00:00Z" },
-      { title: "Passwort zurücksetzen", status: "closed", priority: "low", created_at: "2026-07-20T10:00:00Z" },
+      {
+        title: "Drucker defekt",
+        status: "open",
+        priority: "high",
+        created_at: "2026-08-01T10:00:00Z",
+      },
+      {
+        title: "Passwort zurücksetzen",
+        status: "closed",
+        priority: "low",
+        created_at: "2026-07-20T10:00:00Z",
+      },
     ],
     quotes: [{ status: "sent", total: 2500 }],
     invoices: [
-      { invoice_number: "R-2026-001", status: "open", due_date: "2026-07-01", total: 1200 },
-      { invoice_number: "R-2026-002", status: "paid", due_date: "2026-06-01", total: 800 },
+      {
+        invoice_number: "R-2026-001",
+        status: "open",
+        due_date: "2026-07-01",
+        total: 1200,
+      },
+      {
+        invoice_number: "R-2026-002",
+        status: "paid",
+        due_date: "2026-06-01",
+        total: 800,
+      },
     ],
     projects: [{ title: "Webseite", status: "active" }],
     contracts: [{ title: "Wartungsvertrag", status: "active" }],
     stats: {
-      openTickets: 1, totalTickets: 2,
-      openInvoiceCount: 1, openInvoiceAmount: 1200, paidInvoiceAmount: 800,
-      overdueCount: 1, overdueAmount: 1200,
-      openQuoteCount: 1, openQuoteAmount: 2500,
-      activeProjects: 1, revenueTotal: 800,
+      openTickets: 1,
+      totalTickets: 2,
+      openInvoiceCount: 1,
+      openInvoiceAmount: 1200,
+      paidInvoiceAmount: 800,
+      overdueCount: 1,
+      overdueAmount: 1200,
+      openQuoteCount: 1,
+      openQuoteAmount: 2500,
+      activeProjects: 1,
+      revenueTotal: 800,
     },
   };
 }
