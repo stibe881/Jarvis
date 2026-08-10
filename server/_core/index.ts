@@ -141,17 +141,30 @@ async function startServer() {
   // Probing. Unter Passenger würde ein Probe-Server über die gepatchte
   // listen()-Methode sogar den vom Prozessmanager erwarteten Socket belegen.
   // Nur im lokalen Dev (kein PORT gesetzt) suchen wir einen freien Port.
-  const envPort = process.env.PORT;
+  // Manche Panels (z.B. Hetzner konsoleH) übergeben den Port nicht als
+  // Umgebungsvariable, sondern als Aufrufargument: `node dist/index.js 40123`.
+  // Lauschen wir dann auf dem falschen Port, findet der Webserver nichts und
+  // meldet nur 503 – ohne jeden Hinweis im Log. Deshalb beide Wege prüfen.
+  const argPort = process.argv.slice(2).find(a => /^\d{2,5}$/.test(a));
+  const envPort = process.env.PORT || argPort;
+
   if (envPort) {
     // Rein numerische Werte als TCP-Port, alles andere als Socket-Pfad behandeln.
     const listenTarget: string | number = /^\d+$/.test(envPort)
       ? Number(envPort)
       : envPort;
+    const quelle = process.env.PORT ? "PORT-Variable" : "Aufrufargument";
     server.listen(listenTarget, () => {
-      logger.info(`Server running (listening on ${listenTarget})`);
+      logger.info(
+        `Server running (listening on ${listenTarget}, via ${quelle})`
+      );
     });
   } else {
     const port = await findAvailablePort(3000);
+    logger.warn(
+      "Kein Port vorgegeben (weder PORT noch Argument) – nutze automatisch " +
+        `${port}. Hinter einem Webserver ist das meist die Ursache für 503.`
+    );
     server.listen(port, () => {
       logger.info(`Server running on http://localhost:${port}/`);
     });
