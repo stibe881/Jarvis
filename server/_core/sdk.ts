@@ -35,10 +35,15 @@ const GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserI
 
 class OAuthService {
   constructor(private client: ReturnType<typeof axios.create>) {
-    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
-    if (!ENV.oAuthServerUrl) {
+    if (ENV.oAuthServerUrl) {
+      console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    } else if (process.env.APP_PASSWORD) {
+      // Self-Hosting mit lokalem Passwort-Login: Der Plattform-OAuth wird
+      // bewusst nicht genutzt – das ist kein Fehler.
+      console.log("[OAuth] Nicht konfiguriert – lokaler Passwort-Login aktiv.");
+    } else {
       console.error(
-        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+        "[OAuth] Kein Login konfiguriert: APP_PASSWORD (lokal) oder OAUTH_SERVER_URL setzen."
       );
     }
   }
