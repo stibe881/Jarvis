@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Streamdown } from "streamdown";
 
 /**
  * All content in this page are only for example, replace with your own feature implementation
@@ -13,7 +13,7 @@ export default function Home() {
   // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
   // startLogin() during render (no href={startLogin()}) — it mints a one-time
   // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+  const { user, loading, error, isAuthenticated, logout } = useAuth();
 
   // If theme is switchable in App.tsx, we can implement theme toggling like this:
   // const { theme, toggleTheme } = useTheme();

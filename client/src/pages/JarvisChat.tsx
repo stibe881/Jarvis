@@ -6,8 +6,22 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import {
-  Send, Mic, MicOff, Volume2, VolumeX, Plus, Trash2,
-  Paperclip, Globe, X, FileText, Loader2, ChevronLeft, MessageSquare, Wrench, ChevronDown
+  Send,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Plus,
+  Trash2,
+  Paperclip,
+  Globe,
+  X,
+  FileText,
+  Loader2,
+  ChevronLeft,
+  MessageSquare,
+  Wrench,
+  ChevronDown,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { detectWakeWord } from "@shared/wakeWord";
@@ -46,27 +60,44 @@ function AssistantMessage({ content }: { content: string }) {
   // aus dem Gedächtnis-Kontext und gehören nicht in die Antwort.
   const roh = idx >= 0 ? content.slice(0, idx).trim() : content;
   const text = removeInternalTags(roh);
-  const steps = idx >= 0
-    ? content.slice(idx + STEP_LOG_MARKER.length).split(" | ").map((s) => s.trim()).filter(Boolean)
-    : [];
+  const steps =
+    idx >= 0
+      ? content
+          .slice(idx + STEP_LOG_MARKER.length)
+          .split(" | ")
+          .map(s => s.trim())
+          .filter(Boolean)
+      : [];
 
   return (
     <>
-      <Streamdown className="prose prose-invert prose-sm max-w-none">{text}</Streamdown>
+      <Streamdown className="prose prose-invert prose-sm max-w-none">
+        {text}
+      </Streamdown>
       {steps.length > 0 && (
         <div className="mt-3 border-t border-border/60 pt-2">
           <button
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => setOpen(o => !o)}
             className="flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-primary"
           >
             <Wrench size={11} />
-            {steps.length} {steps.length === 1 ? "Schritt" : "Schritte"} ausgeführt
-            <ChevronDown size={11} className={cn("transition-transform duration-200", open && "rotate-180")} />
+            {steps.length} {steps.length === 1 ? "Schritt" : "Schritte"}{" "}
+            ausgeführt
+            <ChevronDown
+              size={11}
+              className={cn(
+                "transition-transform duration-200",
+                open && "rotate-180"
+              )}
+            />
           </button>
           {open && (
             <ul className="mt-1.5 space-y-1">
               {steps.map((s, i) => (
-                <li key={i} className="flex gap-2 text-[11px] text-muted-foreground">
+                <li
+                  key={i}
+                  className="flex gap-2 text-[11px] text-muted-foreground"
+                >
                   <span className="text-primary/60">{i + 1}.</span>
                   <span className="font-mono">{s}</span>
                 </li>
@@ -85,8 +116,10 @@ function JarvisChatInner() {
   const saveSpeechMode = trpc.profile.update.useMutation();
   const { user } = useAuth();
   // Widget-Modus (?widget=1): kompakte Ansicht ohne Gesprächsliste
-  const [isWidget] = useState(() =>
-    typeof window !== "undefined" && new URLSearchParams(window.location.search).get("widget") === "1"
+  const [isWidget] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("widget") === "1"
   );
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -97,12 +130,23 @@ function JarvisChatInner() {
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const ttsEnabledRef = useRef(true);
   // Zeichen-Budget der Sprachausgabe (ElevenLabs Free-Plan: 10'000 Zeichen/Monat)
-  const [ttsUsage, setTtsUsage] = useState<{ charsUsed: number; limit: number; remaining: number; percentUsed: number; level: string } | null>(null);
+  const [ttsUsage, setTtsUsage] = useState<{
+    charsUsed: number;
+    limit: number;
+    remaining: number;
+    percentUsed: number;
+    level: string;
+  } | null>(null);
   const [ttsResetAt, setTtsResetAt] = useState<number | null>(null);
   const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
   const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
-  const [uploadedFile, setUploadedFile] = useState<{ url: string; key: string; name: string; mime: string } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<{
+    url: string;
+    key: string;
+    name: string;
+    mime: string;
+  } | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [showConvSidebar, setShowConvSidebar] = useState(false);
@@ -119,7 +163,7 @@ function JarvisChatInner() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicesLoadedRef = useRef(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const startListeningRef = useRef<(() => void) | null>(null); // Ref für Circular-Dep-Vermeidung
   // Synchrone Sperre: State-Updates greifen zu spät für schnelle Folgeaufrufe
   const isBusyRef = useRef(false);
@@ -264,7 +308,11 @@ function JarvisChatInner() {
 
     // Lautstärke-Kette gleich beim Freischalten aufbauen, damit die erste
     // Antwort schon gleich laut klingt wie alle folgenden
-    try { attachElementToChain(); } catch { /* ignorieren */ }
+    try {
+      attachElementToChain();
+    } catch {
+      /* ignorieren */
+    }
 
     // 2) Zusätzlich das Audio-Element „anwärmen" (stumm, ohne echte Quelle),
     //    damit spätere play()-Aufrufe als erlaubt gelten.
@@ -273,14 +321,22 @@ function JarvisChatInner() {
       el.muted = true;
       const p = el.play();
       if (p && typeof p.then === "function") await p.catch(() => undefined);
-      try { el.pause(); } catch { /* ignorieren */ }
+      try {
+        el.pause();
+      } catch {
+        /* ignorieren */
+      }
       el.muted = false;
-    } catch { /* ignorieren */ }
+    } catch {
+      /* ignorieren */
+    }
 
     // Ohne WebAudio-Unterstützung gilt die Freigabe trotzdem als erteilt –
     // der eigentliche Beweis ist die erste erfolgreiche Wiedergabe.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const hasWebAudio = Boolean((window as any).AudioContext || (window as any).webkitAudioContext);
+    const hasWebAudio = Boolean(
+      (window as any).AudioContext || (window as any).webkitAudioContext
+    );
     audioUnlockedRef.current = ok || !hasWebAudio;
     return audioUnlockedRef.current;
   }, [getAudioEl, attachElementToChain, getAudioCtx]);
@@ -292,7 +348,7 @@ function JarvisChatInner() {
   const resumeListeningAfterSpeech = useCallback(() => {
     if (autoListenRef.current || wakeWordModeRef.current) {
       wantAutoListenRef.current = true;
-      setAutoListenTick((t) => t + 1);
+      setAutoListenTick(t => t + 1);
     }
   }, []);
 
@@ -301,86 +357,114 @@ function JarvisChatInner() {
    * `<audio>.play()` ohne direkte Nutzeraktion ablehnen (v.a. iOS/Safari).
    * Liefert true, wenn die Wiedergabe gestartet wurde.
    */
-  const playViaWebAudio = useCallback(async (data: ArrayBuffer, onDone: () => void): Promise<boolean> => {
-    try {
-      const ctx = getAudioCtx();
-      if (!ctx) return false;
-      if (ctx.state === "suspended") await ctx.resume();
-      if (ctx.state !== "running") return false;
-      const buffer = await ctx.decodeAudioData(data.slice(0));
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      // Über dieselbe Lautstärke-Kette wie der Hauptweg, damit beide
-      // Wege gleich laut klingen
-      const chain = getAudioChain();
-      if (chain) source.connect(chain.input);
-      else source.connect(ctx.destination);
-      source.onended = onDone;
-      source.start(0);
-      audioUnlockedRef.current = true;
-      return true;
-    } catch (e) {
-      console.error("[WebAudio-Wiedergabe]", e);
-      return false;
-    }
-  }, [getAudioCtx, getAudioChain]);
-
-  const playElevenLabsAudio = useCallback((base64: string) => {
-    const el = getAudioEl();
-    let url: string | null = null;
-    const finish = () => {
-      setIsSpeaking(false);
-      if (url) { URL.revokeObjectURL(url); url = null; }
-      elAudioRef.current = null;
-      resumeListeningAfterSpeech();
-    };
-    try {
-      // Laufende Wiedergabe beenden
-      try { el.pause(); } catch { /* ignorieren */ }
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: "audio/mpeg" });
-      url = URL.createObjectURL(blob);
-      el.src = url;
-      el.muted = false;
-      el.volume = 1;
-      // Auch dieser Weg läuft über die Lautstärke-Kette
-      attachElementToChain();
-      el.onended = finish;
-      el.onerror = finish;
-      elAudioRef.current = el;
-      setIsSpeaking(true);
-      const p = el.play();
-      if (p && typeof p.catch === "function") {
-        p.then(() => { audioUnlockedRef.current = true; }).catch((err: unknown) => {
-          console.error("[Audio blockiert]", err);
-          // Ausweichweg: über WebAudio abspielen. Das funktioniert auf iOS
-          // auch dann, wenn <audio>.play() abgelehnt wird.
-          void (async () => {
-            const played = await playViaWebAudio(bytes.buffer as ArrayBuffer, finish);
-            if (played) return;
-            // Auch das ging nicht: Zustand zurücksetzen, damit nichts hängt
-            finish();
-            audioUnlockedRef.current = false;
-            ttsUnlockedRef.current = false;
-            setTtsUnlocked(false);
-            toast.error("Der Browser hat den Ton blockiert. Tippe einmal auf «Sprachausgabe aktivieren».", { duration: 6000 });
-          })();
-        });
+  const playViaWebAudio = useCallback(
+    async (data: ArrayBuffer, onDone: () => void): Promise<boolean> => {
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return false;
+        if (ctx.state === "suspended") await ctx.resume();
+        if (ctx.state !== "running") return false;
+        const buffer = await ctx.decodeAudioData(data.slice(0));
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        // Über dieselbe Lautstärke-Kette wie der Hauptweg, damit beide
+        // Wege gleich laut klingen
+        const chain = getAudioChain();
+        if (chain) source.connect(chain.input);
+        else source.connect(ctx.destination);
+        source.onended = onDone;
+        source.start(0);
+        audioUnlockedRef.current = true;
+        return true;
+      } catch (e) {
+        console.error("[WebAudio-Wiedergabe]", e);
+        return false;
       }
-    } catch (e) {
-      console.error("[ElevenLabs Audio]", e);
-      finish();
-    }
-  }, [getAudioEl, resumeListeningAfterSpeech, playViaWebAudio, attachElementToChain]);
+    },
+    [getAudioCtx, getAudioChain]
+  );
+
+  const playElevenLabsAudio = useCallback(
+    (base64: string) => {
+      const el = getAudioEl();
+      let url: string | null = null;
+      const finish = () => {
+        setIsSpeaking(false);
+        if (url) {
+          URL.revokeObjectURL(url);
+          url = null;
+        }
+        elAudioRef.current = null;
+        resumeListeningAfterSpeech();
+      };
+      try {
+        // Laufende Wiedergabe beenden
+        try {
+          el.pause();
+        } catch {
+          /* ignorieren */
+        }
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: "audio/mpeg" });
+        url = URL.createObjectURL(blob);
+        el.src = url;
+        el.muted = false;
+        el.volume = 1;
+        // Auch dieser Weg läuft über die Lautstärke-Kette
+        attachElementToChain();
+        el.onended = finish;
+        el.onerror = finish;
+        elAudioRef.current = el;
+        setIsSpeaking(true);
+        const p = el.play();
+        if (p && typeof p.catch === "function") {
+          p.then(() => {
+            audioUnlockedRef.current = true;
+          }).catch((err: unknown) => {
+            console.error("[Audio blockiert]", err);
+            // Ausweichweg: über WebAudio abspielen. Das funktioniert auf iOS
+            // auch dann, wenn <audio>.play() abgelehnt wird.
+            void (async () => {
+              const played = await playViaWebAudio(
+                bytes.buffer as ArrayBuffer,
+                finish
+              );
+              if (played) return;
+              // Auch das ging nicht: Zustand zurücksetzen, damit nichts hängt
+              finish();
+              audioUnlockedRef.current = false;
+              ttsUnlockedRef.current = false;
+              setTtsUnlocked(false);
+              toast.error(
+                "Der Browser hat den Ton blockiert. Tippe einmal auf «Sprachausgabe aktivieren».",
+                { duration: 6000 }
+              );
+            })();
+          });
+        }
+      } catch (e) {
+        console.error("[ElevenLabs Audio]", e);
+        finish();
+      }
+    },
+    [
+      getAudioEl,
+      resumeListeningAfterSpeech,
+      playViaWebAudio,
+      attachElementToChain,
+    ]
+  );
 
   // Stimmen vorladen
   useEffect(() => {
     if ("speechSynthesis" in window) {
       window.speechSynthesis.getVoices();
       if (window.speechSynthesis.onvoiceschanged !== undefined) {
-        window.speechSynthesis.onvoiceschanged = () => { voicesLoadedRef.current = true; };
+        window.speechSynthesis.onvoiceschanged = () => {
+          voicesLoadedRef.current = true;
+        };
       }
     }
   }, []);
@@ -389,9 +473,13 @@ function JarvisChatInner() {
   // "always"     = bei jeder Antwort
   // "voice-only" = nur wenn die Frage per Sprache kam (Standard, spart Guthaben)
   // "never"      = nie sprechen
-  const [speechMode, setSpeechMode] = useState<"always" | "voice-only" | "never">("voice-only");
+  const [speechMode, setSpeechMode] = useState<
+    "always" | "voice-only" | "never"
+  >("voice-only");
   const speechModeRef = useRef<"always" | "voice-only" | "never">("voice-only");
-  useEffect(() => { speechModeRef.current = speechMode; }, [speechMode]);
+  useEffect(() => {
+    speechModeRef.current = speechMode;
+  }, [speechMode]);
   // Quelle einer zurückgestellten Nachricht, damit die Sprachausgabe stimmt
   const queuedSourceRef = useRef<"sprache" | "tippen">("tippen");
 
@@ -400,154 +488,223 @@ function JarvisChatInner() {
 
   // Ausweichweg (tRPC-Mutation) per Ref, damit speakText ihn nutzen kann,
   // ohne dass eine Abhängigkeitsschleife entsteht.
-  const speakViaMutationRef = useRef<((clean: string, voiceId: string | undefined) => void) | null>(null);
+  const speakViaMutationRef = useRef<
+    ((clean: string, voiceId: string | undefined) => void) | null
+  >(null);
 
   /**
    * Browser-Stimme als Ersatz, wenn ElevenLabs nicht verfügbar ist (etwa bei
    * aufgebrauchtem Guthaben). Besser eine einfache Stimme als Schweigen.
    */
-  const speakViaBrowser = useCallback((clean: string) => {
-    if (!("speechSynthesis" in window)) { setIsSpeaking(false); resumeListeningAfterSpeech(); return; }
-    window.speechSynthesis.cancel();
-    // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
-    // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
-    // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
-    // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
-    const gesprochen = clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
-    const utterance = new SpeechSynthesisUtterance(gesprochen);
-    // Tiefe, ruhige Stimme – so nah wie möglich am Jarvis-Klang
-    utterance.lang = "de-DE";
-    utterance.rate = 0.92;
-    utterance.pitch = 0.75;
-    // Feste Lautstärke, damit der Ersatzweg nicht lauter oder leiser ist
-    utterance.volume = 1;
-    const stimmen = window.speechSynthesis.getVoices();
-    const bevorzugt = stimmen.find(v => /stefan|markus|conrad/i.test(v.name) && v.lang.startsWith("de"))
-      ?? stimmen.find(v => v.lang.startsWith("de"));
-    if (bevorzugt) utterance.voice = bevorzugt;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
-    utterance.onerror = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
-    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
-  }, [resumeListeningAfterSpeech]);
+  const speakViaBrowser = useCallback(
+    (clean: string) => {
+      if (!("speechSynthesis" in window)) {
+        setIsSpeaking(false);
+        resumeListeningAfterSpeech();
+        return;
+      }
+      window.speechSynthesis.cancel();
+      // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
+      // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
+      // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
+      // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
+      const gesprochen =
+        clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
+      const utterance = new SpeechSynthesisUtterance(gesprochen);
+      // Tiefe, ruhige Stimme – so nah wie möglich am Jarvis-Klang
+      utterance.lang = "de-DE";
+      utterance.rate = 0.92;
+      utterance.pitch = 0.75;
+      // Feste Lautstärke, damit der Ersatzweg nicht lauter oder leiser ist
+      utterance.volume = 1;
+      const stimmen = window.speechSynthesis.getVoices();
+      const bevorzugt =
+        stimmen.find(
+          v => /stefan|markus|conrad/i.test(v.name) && v.lang.startsWith("de")
+        ) ?? stimmen.find(v => v.lang.startsWith("de"));
+      if (bevorzugt) utterance.voice = bevorzugt;
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        resumeListeningAfterSpeech();
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        resumeListeningAfterSpeech();
+      };
+      setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+    },
+    [resumeListeningAfterSpeech]
+  );
 
   // TTS-Funktion
-  const speakText = useCallback((text: string) => {
-    if (!ttsEnabledRef.current) return;
-    // Nur grob vorreinigen – das Server-Modul kürzt satzweise und rechnet das Budget ab
-    const clean = text
-      // Schritt-Protokoll und interne Kategorie-Markierungen nie mitsprechen
-      .replace(/⟦schritte⟧[\s\S]*$/g, " ")
-      .replace(/\s*\[(?:person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar)\]/gi, "")
-      .replace(/```[\s\S]*?```/g, " ")
-      .replace(/\n+/g, " ")
-      .replace(/\s+([.,;:!?])/g, "$1")
-      .trim()
-      .slice(0, 2500);
-    if (!clean) return;
-    const voiceId = profile?.elevenLabsVoiceId ?? undefined;
+  const speakText = useCallback(
+    (text: string) => {
+      if (!ttsEnabledRef.current) return;
+      // Nur grob vorreinigen – das Server-Modul kürzt satzweise und rechnet das Budget ab
+      const clean = text
+        // Schritt-Protokoll und interne Kategorie-Markierungen nie mitsprechen
+        .replace(/⟦schritte⟧[\s\S]*$/g, " ")
+        .replace(
+          /\s*\[(?:person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar)\]/gi,
+          ""
+        )
+        .replace(/```[\s\S]*?```/g, " ")
+        .replace(/\n+/g, " ")
+        .replace(/\s+([.,;:!?])/g, "$1")
+        .trim()
+        .slice(0, 2500);
+      if (!clean) return;
+      const voiceId = profile?.elevenLabsVoiceId ?? undefined;
 
-    // Schnellster Weg: das Audio-Element lädt direkt von der Stream-Adresse.
-    // Der Browser beginnt zu spielen, sobald genug Daten da sind – die Datei
-    // muss nicht erst vollständig geladen werden. Vorher wurde die komplette
-    // MP3 erzeugt, base64-kodiert und übertragen (gemessen rund 4 Sekunden).
-    const el = getAudioEl();
-    const finish = () => { setIsSpeaking(false); elAudioRef.current = null; resumeListeningAfterSpeech(); };
-    try { el.pause(); } catch { /* ignorieren */ }
-    el.onended = finish;
-    el.onerror = null;
-    el.muted = false;
-    el.volume = 1;
-    // Über die Lautstärke-Kette leiten, damit jede Antwort gleich laut klingt
-    attachElementToChain();
-    elAudioRef.current = el;
-    setIsSpeaking(true);
-
-    void (async () => {
+      // Schnellster Weg: das Audio-Element lädt direkt von der Stream-Adresse.
+      // Der Browser beginnt zu spielen, sobald genug Daten da sind – die Datei
+      // muss nicht erst vollständig geladen werden. Vorher wurde die komplette
+      // MP3 erzeugt, base64-kodiert und übertragen (gemessen rund 4 Sekunden).
+      const el = getAudioEl();
+      const finish = () => {
+        setIsSpeaking(false);
+        elAudioRef.current = null;
+        resumeListeningAfterSpeech();
+      };
       try {
-        // Zuerst prüfen, ob überhaupt Guthaben vorhanden ist. Sonst würde das
-        // Audio-Element eine Fehlerseite laden und Jarvis bliebe still.
-        const vorabPruefung = await fetch("/api/tts/stream", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ text: "x", shorten: true, checkOnly: true }),
-        }).catch(() => null);
-        if (vorabPruefung && vorabPruefung.status === 429) {
-          toast.warning("Sprachausgabe-Guthaben aufgebraucht – Jarvis nutzt vorübergehend die Browser-Stimme.");
-          refetchUsageRef.current?.();
-          speakViaBrowser(clean);
-          return;
-        }
-
-        // Adresse mit Text als Abfrageparameter: dadurch kann das
-        // Audio-Element selbst laden und fortschreitend abspielen.
-        const params = new URLSearchParams({ text: clean, shorten: "true" });
-        if (voiceId) params.set("voiceId", voiceId);
-        const streamUrl = `/api/tts/stream?${params.toString()}`;
-
-        let fehlerBehandelt = false;
-        const beiFehler = () => {
-          if (fehlerBehandelt) return;
-          fehlerBehandelt = true;
-          console.warn("[TTS-Stream] Wiedergabe fehlgeschlagen, nutze Browser-Stimme");
-          speakViaBrowser(clean);
-        };
-
-        el.src = streamUrl;
-        el.onended = finish;
-        el.onerror = beiFehler;
-        await el.play();
-        audioUnlockedRef.current = true;
-        // Verbrauchsanzeige nachziehen: der Server hat die Zeichen gebucht.
-        // Kopfzeilen sind bei `audio.src` nicht lesbar, daher kurz nachfragen.
-        setTimeout(() => { refetchUsageRef.current?.(); }, 900);
-      } catch (e) {
-        console.error("[TTS-Stream]", e);
-        // Ausweichweg: Browser-Stimme, damit Jarvis nicht verstummt
-        speakViaBrowser(clean);
+        el.pause();
+      } catch {
+        /* ignorieren */
       }
-    })();
-  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId, speakViaBrowser, attachElementToChain]);
+      el.onended = finish;
+      el.onerror = null;
+      el.muted = false;
+      el.volume = 1;
+      // Über die Lautstärke-Kette leiten, damit jede Antwort gleich laut klingt
+      attachElementToChain();
+      elAudioRef.current = el;
+      setIsSpeaking(true);
+
+      void (async () => {
+        try {
+          // Zuerst prüfen, ob überhaupt Guthaben vorhanden ist. Sonst würde das
+          // Audio-Element eine Fehlerseite laden und Jarvis bliebe still.
+          const vorabPruefung = await fetch("/api/tts/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ text: "x", shorten: true, checkOnly: true }),
+          }).catch(() => null);
+          if (vorabPruefung && vorabPruefung.status === 429) {
+            toast.warning(
+              "Sprachausgabe-Guthaben aufgebraucht – Jarvis nutzt vorübergehend die Browser-Stimme."
+            );
+            refetchUsageRef.current?.();
+            speakViaBrowser(clean);
+            return;
+          }
+
+          // Adresse mit Text als Abfrageparameter: dadurch kann das
+          // Audio-Element selbst laden und fortschreitend abspielen.
+          const params = new URLSearchParams({ text: clean, shorten: "true" });
+          if (voiceId) params.set("voiceId", voiceId);
+          const streamUrl = `/api/tts/stream?${params.toString()}`;
+
+          let fehlerBehandelt = false;
+          const beiFehler = () => {
+            if (fehlerBehandelt) return;
+            fehlerBehandelt = true;
+            console.warn(
+              "[TTS-Stream] Wiedergabe fehlgeschlagen, nutze Browser-Stimme"
+            );
+            speakViaBrowser(clean);
+          };
+
+          el.src = streamUrl;
+          el.onended = finish;
+          el.onerror = beiFehler;
+          await el.play();
+          audioUnlockedRef.current = true;
+          // Verbrauchsanzeige nachziehen: der Server hat die Zeichen gebucht.
+          // Kopfzeilen sind bei `audio.src` nicht lesbar, daher kurz nachfragen.
+          setTimeout(() => {
+            refetchUsageRef.current?.();
+          }, 900);
+        } catch (e) {
+          console.error("[TTS-Stream]", e);
+          // Ausweichweg: Browser-Stimme, damit Jarvis nicht verstummt
+          speakViaBrowser(clean);
+        }
+      })();
+    },
+    [
+      getAudioEl,
+      resumeListeningAfterSpeech,
+      profile?.elevenLabsVoiceId,
+      speakViaBrowser,
+      attachElementToChain,
+    ]
+  );
 
   /** Ausweichweg über die tRPC-Mutation (langsamer, aber robust). */
-  const speakViaMutation = useCallback((clean: string, voiceId: string | undefined) => {
-    elTtsMutation.mutate({ text: clean, voiceId, shorten: true }, {
-      onSuccess: (data) => {
-        playElevenLabsAudio(data.audio);
-        if (data.usage) setTtsUsage(data.usage);
-        if (data.usage && data.usage.level === "critical") {
-          toast.warning(`Sprachausgabe-Budget fast aufgebraucht: ${data.usage.remaining} Zeichen übrig.`);
+  const speakViaMutation = useCallback(
+    (clean: string, voiceId: string | undefined) => {
+      elTtsMutation.mutate(
+        { text: clean, voiceId, shorten: true },
+        {
+          onSuccess: data => {
+            playElevenLabsAudio(data.audio);
+            if (data.usage) setTtsUsage(data.usage);
+            if (data.usage && data.usage.level === "critical") {
+              toast.warning(
+                `Sprachausgabe-Budget fast aufgebraucht: ${data.usage.remaining} Zeichen übrig.`
+              );
+            }
+          },
+          onError: err => {
+            // Budget aufgebraucht: klarer Hinweis statt stiller Fallback
+            if (err.message.includes("Budget")) {
+              toast.error(
+                "Sprachausgabe-Budget für diesen Monat aufgebraucht. Antworten erscheinen weiterhin im Chat."
+              );
+              resumeListeningAfterSpeech();
+              return;
+            }
+            console.error("[TTS]", err);
+            // Fallback: Web Speech API
+            if (!("speechSynthesis" in window)) {
+              resumeListeningAfterSpeech();
+              return;
+            }
+            window.speechSynthesis.cancel();
+            // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
+            // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
+            // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
+            // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
+            const gesprochen =
+              clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
+            const utterance = new SpeechSynthesisUtterance(gesprochen);
+            utterance.lang = "de-DE";
+            utterance.rate = 0.9;
+            utterance.pitch = 0.8;
+            utterance.volume = 1;
+            utterance.onstart = () => setIsSpeaking(true);
+            utterance.onend = () => {
+              setIsSpeaking(false);
+              resumeListeningAfterSpeech();
+            };
+            utterance.onerror = () => {
+              setIsSpeaking(false);
+              resumeListeningAfterSpeech();
+            };
+            setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+          },
         }
-      },
-      onError: (err) => {
-        // Budget aufgebraucht: klarer Hinweis statt stiller Fallback
-        if (err.message.includes("Budget")) {
-          toast.error("Sprachausgabe-Budget für diesen Monat aufgebraucht. Antworten erscheinen weiterhin im Chat.");
-          resumeListeningAfterSpeech();
-          return;
-        }
-        console.error("[TTS]", err);
-        // Fallback: Web Speech API
-        if (!("speechSynthesis" in window)) { resumeListeningAfterSpeech(); return; }
-        window.speechSynthesis.cancel();
-        // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
-    // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
-    // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
-    // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
-    const gesprochen = clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
-    const utterance = new SpeechSynthesisUtterance(gesprochen);
-        utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80; utterance.volume = 1;
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          resumeListeningAfterSpeech();
-        };
-        utterance.onerror = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
-        setTimeout(() => window.speechSynthesis.speak(utterance), 0);
-      },
-    });
-  }, [elTtsMutation, playElevenLabsAudio, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId]);
+      );
+    },
+    [
+      elTtsMutation,
+      playElevenLabsAudio,
+      resumeListeningAfterSpeech,
+      profile?.elevenLabsVoiceId,
+    ]
+  );
 
   // Ausweichweg per Ref bereitstellen (wird in speakText genutzt)
   useEffect(() => {
@@ -575,7 +732,9 @@ function JarvisChatInner() {
     speakText("Sehr wohl, Sir. Systeme bereit.");
     // Hinweis, was der gewählte Modus bedeutet
     if (speechModeRef.current === "voice-only") {
-      toast.info("Jarvis spricht nur bei Sprachbedienung. Zum Umschalten den Lautsprecher antippen.");
+      toast.info(
+        "Jarvis spricht nur bei Sprachbedienung. Zum Umschalten den Lautsprecher antippen."
+      );
     }
   }, [unlockAudio, speakText]);
 
@@ -585,13 +744,20 @@ function JarvisChatInner() {
       return;
     }
     // Durchschalten: immer → nur bei Sprachbedienung → nie → immer
-    const reihenfolge: Array<"always" | "voice-only" | "never"> = ["always", "voice-only", "never"];
-    const next = reihenfolge[(reihenfolge.indexOf(speechMode) + 1) % reihenfolge.length];
+    const reihenfolge: Array<"always" | "voice-only" | "never"> = [
+      "always",
+      "voice-only",
+      "never",
+    ];
+    const next =
+      reihenfolge[(reihenfolge.indexOf(speechMode) + 1) % reihenfolge.length];
     setSpeechMode(next);
     speechModeRef.current = next;
     localStorage.setItem("jarvis-speech-mode", next);
     // Zusätzlich im Profil ablegen, damit die Wahl auch am iPhone gilt
-    saveSpeechMode.mutate({ speechMode: next === "voice-only" ? "voiceOnly" : next });
+    saveSpeechMode.mutate({
+      speechMode: next === "voice-only" ? "voiceOnly" : next,
+    });
 
     // "nie" schaltet die Ausgabe komplett ab und stoppt eine laufende Wiedergabe
     const aktiv = next !== "never";
@@ -599,14 +765,19 @@ function JarvisChatInner() {
     ttsEnabledRef.current = aktiv;
     if (!aktiv) {
       window.speechSynthesis?.cancel();
-      try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+      try {
+        audioElRef.current?.pause();
+      } catch {
+        /* ignorieren */
+      }
       elAudioRef.current = null;
       setIsSpeaking(false);
     }
 
     const texte = {
       always: "Jarvis spricht bei jeder Antwort.",
-      "voice-only": "Jarvis spricht nur, wenn du ihn per Sprache fragst – das schont das Guthaben.",
+      "voice-only":
+        "Jarvis spricht nur, wenn du ihn per Sprache fragst – das schont das Guthaben.",
       never: "Sprachausgabe aus. Antworten erscheinen nur im Chat.",
     } as const;
     toast.info(texte[next]);
@@ -617,11 +788,16 @@ function JarvisChatInner() {
   useEffect(() => {
     // Im Profil wird "voiceOnly" geschrieben, im Chat "voice-only"
     const ausProfil = profile?.speechMode
-      ? (profile.speechMode === "voiceOnly" ? "voice-only" : profile.speechMode) as "always" | "voice-only" | "never"
+      ? ((profile.speechMode === "voiceOnly"
+          ? "voice-only"
+          : profile.speechMode) as "always" | "voice-only" | "never")
       : null;
     const lokal = localStorage.getItem("jarvis-speech-mode");
-    const modus = ausProfil
-      ?? (lokal === "always" || lokal === "voice-only" || lokal === "never" ? lokal : null);
+    const modus =
+      ausProfil ??
+      (lokal === "always" || lokal === "voice-only" || lokal === "never"
+        ? lokal
+        : null);
     if (!modus) return;
     setSpeechMode(modus);
     speechModeRef.current = modus;
@@ -634,7 +810,7 @@ function JarvisChatInner() {
   const { data: conversations } = trpc.chat.listConversations.useQuery();
   const { data: suggestions } = trpc.chat.suggestions.useQuery();
   const createConvMutation = trpc.chat.createConversation.useMutation({
-    onSuccess: (data) => {
+    onSuccess: data => {
       utils.chat.listConversations.invalidate();
       if (data?.id) setActiveConvId(data.id);
     },
@@ -652,8 +828,13 @@ function JarvisChatInner() {
   );
 
   // Zeichen-Budget der Sprachausgabe laden
-  const { data: usageData, refetch: refetchUsage } = trpc.elevenlabs.usage.useQuery();
-  useEffect(() => { refetchUsageRef.current = () => { void refetchUsage(); }; }, [refetchUsage]);
+  const { data: usageData, refetch: refetchUsage } =
+    trpc.elevenlabs.usage.useQuery();
+  useEffect(() => {
+    refetchUsageRef.current = () => {
+      void refetchUsage();
+    };
+  }, [refetchUsage]);
   useEffect(() => {
     if (usageData) {
       setTtsUsage(usageData);
@@ -672,112 +853,149 @@ function JarvisChatInner() {
   }, [messages, interimText]);
 
   // Kern-Funktion: Nachricht senden
-  const sendMessageFromText = useCallback(async (
-    text: string,
-    file?: typeof uploadedFile,
-    quelle: "sprache" | "tippen" = "tippen",
-  ) => {
-    if (!text.trim() && !file) return;
-    // Läuft noch eine Antwort? Dann Text merken und nach dem Ende automatisch senden,
-    // statt ihn stillschweigend zu verwerfen (das war die Ursache für „nur eine Antwort").
-    if (isBusyRef.current) {
-      queuedTextRef.current = text.trim();
-      queuedSourceRef.current = quelle;
-      toast.info("Ich beantworte noch die letzte Frage – deine neue Nachricht folgt gleich.");
-      return;
-    }
-    isBusyRef.current = true;
-
-    let convId = activeConvId;
-    try {
-      if (!convId) {
-        const result = await createConvMutation.mutateAsync({});
-        convId = result?.id ?? null;
-        if (convId) setActiveConvId(convId);
+  const sendMessageFromText = useCallback(
+    async (
+      text: string,
+      file?: typeof uploadedFile,
+      quelle: "sprache" | "tippen" = "tippen"
+    ) => {
+      if (!text.trim() && !file) return;
+      // Läuft noch eine Antwort? Dann Text merken und nach dem Ende automatisch senden,
+      // statt ihn stillschweigend zu verwerfen (das war die Ursache für „nur eine Antwort").
+      if (isBusyRef.current) {
+        queuedTextRef.current = text.trim();
+        queuedSourceRef.current = quelle;
+        toast.info(
+          "Ich beantworte noch die letzte Frage – deine neue Nachricht folgt gleich."
+        );
+        return;
       }
-    } catch (e) {
-      console.error("[createConversation]", e);
-    }
-    if (!convId) {
-      isBusyRef.current = false;
-      toast.error("Gespräch konnte nicht gestartet werden. Bitte erneut versuchen.");
-      return;
-    }
+      isBusyRef.current = true;
 
-    const userMsg: Message = { role: "user", content: text, fileUrl: file?.url, fileName: file?.name };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsStreaming(true);
-    const assistantMsg: Message = { role: "assistant", content: "" };
-    setMessages((prev) => [...prev, assistantMsg]);
-
-    // Optionale Web-Suche
-    let searchResults: Array<{ title: string; snippet: string; url: string }> = [];
-    if (searchEnabled && text.trim()) {
+      let convId = activeConvId;
       try {
-        const sr = await searchMutation.mutateAsync({ query: text });
-        searchResults = sr.results;
-      } catch { /* ignorieren */ }
-    }
+        if (!convId) {
+          const result = await createConvMutation.mutateAsync({});
+          convId = result?.id ?? null;
+          if (convId) setActiveConvId(convId);
+        }
+      } catch (e) {
+        console.error("[createConversation]", e);
+      }
+      if (!convId) {
+        isBusyRef.current = false;
+        toast.error(
+          "Gespräch konnte nicht gestartet werden. Bitte erneut versuchen."
+        );
+        return;
+      }
 
-    try {
-      const result = await sendMessageMutation.mutateAsync({
-        conversationId: convId,
-        message: text,
-        fileUrl: file?.url ?? undefined,
-        fileName: file?.name ?? undefined,
-        searchResults,
-      });
+      const userMsg: Message = {
+        role: "user",
+        content: text,
+        fileUrl: file?.url,
+        fileName: file?.name,
+      };
+      setMessages(prev => [...prev, userMsg]);
+      setIsStreaming(true);
+      const assistantMsg: Message = { role: "assistant", content: "" };
+      setMessages(prev => [...prev, assistantMsg]);
 
-      const fullText = result.response;
-      utils.chat.listConversations.invalidate();
+      // Optionale Web-Suche
+      let searchResults: Array<{
+        title: string;
+        snippet: string;
+        url: string;
+      }> = [];
+      if (searchEnabled && text.trim()) {
+        try {
+          const sr = await searchMutation.mutateAsync({ query: text });
+          searchResults = sr.results;
+        } catch {
+          /* ignorieren */
+        }
+      }
 
-      // Sprachausgabe SOFORT anstossen – parallel zum Einblenden des Textes.
-      // Vorher wurde erst der ganze Text eingeblendet und danach die Tondatei
-      // erzeugt; dadurch entstand eine spürbare Pause bis zum Sprechen.
-      //
-      // Der gewählte Modus entscheidet, ob überhaupt gesprochen wird. «nur bei
-      // Sprachbedienung» schont das Monatsguthaben deutlich, weil getippte
-      // Nachrichten stumm bleiben.
-      const modus = speechModeRef.current;
-      const darfSprechen = modus === "always" || (modus === "voice-only" && quelle === "sprache");
-      if (fullText && darfSprechen) speakText(fullText);
+      try {
+        const result = await sendMessageMutation.mutateAsync({
+          conversationId: convId,
+          message: text,
+          fileUrl: file?.url ?? undefined,
+          fileName: file?.name ?? undefined,
+          searchResults,
+        });
 
-      // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
-      // Abbrechbar, damit eine neue Anfrage nicht warten muss.
-      const runId = ++streamRunIdRef.current;
-      const words = fullText.split(" ");
-      const delay = Math.max(6, Math.min(30, 1000 / Math.max(words.length, 1)));
-      let displayed = "";
-      for (let i = 0; i < words.length; i++) {
-        if (streamRunIdRef.current !== runId) break; // abgebrochen
-        displayed += (i > 0 ? " " : "") + words[i];
-        const snap = displayed;
-        setMessages((prev) => {
+        const fullText = result.response;
+        utils.chat.listConversations.invalidate();
+
+        // Sprachausgabe SOFORT anstossen – parallel zum Einblenden des Textes.
+        // Vorher wurde erst der ganze Text eingeblendet und danach die Tondatei
+        // erzeugt; dadurch entstand eine spürbare Pause bis zum Sprechen.
+        //
+        // Der gewählte Modus entscheidet, ob überhaupt gesprochen wird. «nur bei
+        // Sprachbedienung» schont das Monatsguthaben deutlich, weil getippte
+        // Nachrichten stumm bleiben.
+        const modus = speechModeRef.current;
+        const darfSprechen =
+          modus === "always" ||
+          (modus === "voice-only" && quelle === "sprache");
+        if (fullText && darfSprechen) speakText(fullText);
+
+        // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
+        // Abbrechbar, damit eine neue Anfrage nicht warten muss.
+        const runId = ++streamRunIdRef.current;
+        const words = fullText.split(" ");
+        const delay = Math.max(
+          6,
+          Math.min(30, 1000 / Math.max(words.length, 1))
+        );
+        let displayed = "";
+        for (let i = 0; i < words.length; i++) {
+          if (streamRunIdRef.current !== runId) break; // abgebrochen
+          displayed += (i > 0 ? " " : "") + words[i];
+          const snap = displayed;
+          setMessages(prev => {
+            const updated = [...prev];
+            if (updated.length === 0) return prev;
+            updated[updated.length - 1] = {
+              ...updated[updated.length - 1],
+              content: snap,
+            };
+            return updated;
+          });
+          await new Promise(r => setTimeout(r, delay));
+        }
+        // Sicherstellen, dass immer der vollständige Text steht
+        setMessages(prev => {
           const updated = [...prev];
           if (updated.length === 0) return prev;
-          updated[updated.length - 1] = { ...updated[updated.length - 1], content: snap };
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: fullText,
+          };
           return updated;
         });
-        await new Promise(r => setTimeout(r, delay));
+      } catch (err) {
+        console.error("[sendMessage] Fehler:", err);
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Fehler: ${msg.slice(0, 120)}`);
+        setMessages(prev => prev.slice(0, -1));
+      } finally {
+        isBusyRef.current = false;
+        setIsStreaming(false);
+        utils.chat.getMessages.invalidate({ conversationId: convId });
       }
-      // Sicherstellen, dass immer der vollständige Text steht
-      setMessages((prev) => {
-        const updated = [...prev];
-        if (updated.length === 0) return prev;
-        updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
-        return updated;
-      });
-    } catch (err) {
-      console.error("[sendMessage] Fehler:", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      toast.error(`Fehler: ${msg.slice(0, 120)}`);
-      setMessages((prev) => prev.slice(0, -1));
-    } finally {
-      isBusyRef.current = false;
-      setIsStreaming(false);
-      utils.chat.getMessages.invalidate({ conversationId: convId });
-    }
-  }, [activeConvId, searchEnabled, createConvMutation, searchMutation, sendMessageMutation, speakText, utils]);
+    },
+    [
+      activeConvId,
+      searchEnabled,
+      createConvMutation,
+      searchMutation,
+      sendMessageMutation,
+      speakText,
+      utils,
+    ]
+  );
 
   // In der Warteschlange stehende Nachricht senden, sobald die Antwort fertig ist
   useEffect(() => {
@@ -786,7 +1004,9 @@ function JarvisChatInner() {
     if (queued) {
       queuedTextRef.current = null;
       const quelle = queuedSourceRef.current;
-      const timer = setTimeout(() => { sendMessageFromText(queued, undefined, quelle); }, 250);
+      const timer = setTimeout(() => {
+        sendMessageFromText(queued, undefined, quelle);
+      }, 250);
       return () => clearTimeout(timer);
     }
   }, [isStreaming, sendMessageFromText]);
@@ -795,11 +1015,15 @@ function JarvisChatInner() {
   useEffect(() => {
     if (!wantAutoListenRef.current) return;
     if (isStreaming || isSpeaking) return;
-    if (!autoListenRef.current && !wakeWordModeRef.current) { wantAutoListenRef.current = false; return; }
+    if (!autoListenRef.current && !wakeWordModeRef.current) {
+      wantAutoListenRef.current = false;
+      return;
+    }
     wantAutoListenRef.current = false;
     const timer = setTimeout(() => {
       const wanted = autoListenRef.current || wakeWordModeRef.current;
-      if (wanted && !isBusyRef.current && !isListeningRef.current) startListeningRef.current?.();
+      if (wanted && !isBusyRef.current && !isListeningRef.current)
+        startListeningRef.current?.();
     }, 500);
     return () => clearTimeout(timer);
   }, [autoListenTick, isStreaming, isSpeaking]);
@@ -811,7 +1035,11 @@ function JarvisChatInner() {
     if (!autoListenRef.current && !wakeWordModeRef.current) return;
     if (isSpeaking || isListeningRef.current || isBusyRef.current) return;
     const timer = setTimeout(() => {
-      if ((autoListenRef.current || wakeWordModeRef.current) && !isListeningRef.current && !isBusyRef.current) {
+      if (
+        (autoListenRef.current || wakeWordModeRef.current) &&
+        !isListeningRef.current &&
+        !isBusyRef.current
+      ) {
         startListeningRef.current?.();
       }
     }, 900);
@@ -837,8 +1065,16 @@ function JarvisChatInner() {
   useEffect(() => {
     return () => {
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
-      try { recognitionRef.current?.abort(); } catch { /* ignorieren */ }
-      try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* ignorieren */
+      }
+      try {
+        audioElRef.current?.pause();
+      } catch {
+        /* ignorieren */
+      }
       window.speechSynthesis?.cancel();
     };
   }, []);
@@ -854,10 +1090,10 @@ function JarvisChatInner() {
   const createAndStartRecognition = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
-    const SpeechRecognitionAPI = w.SpeechRecognition || w.webkitSpeechRecognition;
+    const SpeechRecognitionAPI =
+      w.SpeechRecognition || w.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognition: SpeechRecognitionInstance = new SpeechRecognitionAPI();
     recognition.lang = "de-CH"; // Schweizerdeutsch bevorzugt, fällt auf Hochdeutsch zurück
     recognition.continuous = false;
@@ -868,7 +1104,10 @@ function JarvisChatInner() {
       isListeningRef.current = true;
       setIsListening(true);
       setInterimText("");
-      if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
     };
 
     recognition.onresult = (event: any) => {
@@ -897,7 +1136,7 @@ function JarvisChatInner() {
           if (!detection.detected) {
             // Kein Aktivierungswort – einfach weiterlauschen
             wantAutoListenRef.current = true;
-            setAutoListenTick((t) => t + 1);
+            setAutoListenTick(t => t + 1);
             return;
           }
           if (detection.rest) {
@@ -909,7 +1148,7 @@ function JarvisChatInner() {
           wakeArmedRef.current = true;
           setWakeArmed(true);
           wantAutoListenRef.current = true;
-          setAutoListenTick((t) => t + 1);
+          setAutoListenTick(t => t + 1);
           return;
         }
 
@@ -932,7 +1171,9 @@ function JarvisChatInner() {
       setInterimText("");
       recognitionRef.current = null;
       if (event.error === "not-allowed") {
-        toast.error("Mikrofon-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben.");
+        toast.error(
+          "Mikrofon-Zugriff verweigert. Bitte in den Browser-Einstellungen erlauben."
+        );
       } else if (event.error === "no-speech") {
         // Kein Fehler bei Stille – einfach ignorieren
       } else if (event.error !== "aborted") {
@@ -951,7 +1192,7 @@ function JarvisChatInner() {
       // Wake-Word-Modus: dauerhaft weiterlauschen, solange nichts läuft
       if (wakeWordModeRef.current && !isBusyRef.current) {
         wantAutoListenRef.current = true;
-        setAutoListenTick((t) => t + 1);
+        setAutoListenTick(t => t + 1);
       }
     };
 
@@ -962,10 +1203,17 @@ function JarvisChatInner() {
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
       watchdogRef.current = setTimeout(() => {
         if (!isListeningRef.current) {
-          try { recognition.abort(); } catch { /* ignorieren */ }
-          if (recognitionRef.current === recognition) recognitionRef.current = null;
+          try {
+            recognition.abort();
+          } catch {
+            /* ignorieren */
+          }
+          if (recognitionRef.current === recognition)
+            recognitionRef.current = null;
           setIsListening(false);
-          toast.error("Das Mikrofon hat nicht gestartet. Bitte nochmals antippen.");
+          toast.error(
+            "Das Mikrofon hat nicht gestartet. Bitte nochmals antippen."
+          );
         }
       }, 3000);
     } catch {
@@ -973,7 +1221,9 @@ function JarvisChatInner() {
       setIsListening(false);
       recognitionRef.current = null;
       // Häufigster Grund: die alte Instanz läuft noch. Kurz warten, dann erneut.
-      setTimeout(() => { if (!isListeningRef.current) createAndStartRecognitionRef.current?.(); }, 400);
+      setTimeout(() => {
+        if (!isListeningRef.current) createAndStartRecognitionRef.current?.();
+      }, 400);
     }
   }, [sendMessageFromText]);
 
@@ -992,7 +1242,11 @@ function JarvisChatInner() {
 
     // Laufende Sprachausgabe beenden, damit sie nicht mit aufgenommen wird
     window.speechSynthesis?.cancel();
-    try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+    try {
+      audioElRef.current?.pause();
+    } catch {
+      /* ignorieren */
+    }
     elAudioRef.current = null;
     setIsSpeaking(false);
 
@@ -1003,8 +1257,18 @@ function JarvisChatInner() {
     if (old) {
       recognitionRef.current = null;
       isListeningRef.current = false;
-      try { old.onend = null; old.onresult = null; old.onerror = null; } catch { /* ignorieren */ }
-      try { old.abort(); } catch { /* ignorieren */ }
+      try {
+        old.onend = null;
+        old.onresult = null;
+        old.onerror = null;
+      } catch {
+        /* ignorieren */
+      }
+      try {
+        old.abort();
+      } catch {
+        /* ignorieren */
+      }
       setTimeout(() => createAndStartRecognition(), 250);
       return;
     }
@@ -1014,7 +1278,11 @@ function JarvisChatInner() {
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* ignorieren */ }
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        /* ignorieren */
+      }
       recognitionRef.current = null;
     }
     isListeningRef.current = false;
@@ -1053,19 +1321,35 @@ function JarvisChatInner() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) { toast.error("Datei zu groß (max. 10 MB)"); return; }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Datei zu groß (max. 10 MB)");
+      return;
+    }
     setIsUploading(true);
     try {
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(",")[1];
-        const result = await uploadMutation.mutateAsync({ fileName: file.name, fileBase64: base64, mimeType: file.type });
-        setUploadedFile({ url: result.url, key: result.key, name: result.fileName, mime: result.mimeType });
+        const result = await uploadMutation.mutateAsync({
+          fileName: file.name,
+          fileBase64: base64,
+          mimeType: file.type,
+        });
+        setUploadedFile({
+          url: result.url,
+          key: result.key,
+          name: result.fileName,
+          mime: result.mimeType,
+        });
         toast.success(`${file.name} hochgeladen`);
       };
       reader.readAsDataURL(file);
-    } catch { toast.error("Upload fehlgeschlagen"); }
-    finally { setIsUploading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
+    } catch {
+      toast.error("Upload fehlgeschlagen");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   /**
@@ -1073,55 +1357,90 @@ function JarvisChatInner() {
    * `resume` steuert, ob danach im Hands-free-/Wake-Word-Modus wieder zugehört
    * werden soll – beim ausdrücklichen Stoppen durch Stefan bewusst nicht.
    */
-  const stopSpeaking = useCallback((resume = false) => {
-    window.speechSynthesis?.cancel();
-    try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
-    elAudioRef.current = null;
-    setIsSpeaking(false);
-    if (resume) resumeListeningAfterSpeech();
-  }, [resumeListeningAfterSpeech]);
+  const stopSpeaking = useCallback(
+    (resume = false) => {
+      window.speechSynthesis?.cancel();
+      try {
+        audioElRef.current?.pause();
+      } catch {
+        /* ignorieren */
+      }
+      elAudioRef.current = null;
+      setIsSpeaking(false);
+      if (resume) resumeListeningAfterSpeech();
+    },
+    [resumeListeningAfterSpeech]
+  );
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       {/* Mobile Overlay */}
       {showConvSidebar && !isWidget && (
-        <div className="md:hidden fixed inset-0 z-30 bg-black/60" onClick={() => setShowConvSidebar(false)} />
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/60"
+          onClick={() => setShowConvSidebar(false)}
+        />
       )}
 
       {/* Conversation Sidebar */}
-      <div className={cn(
-        "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
-        "md:w-52 md:flex-shrink-0 md:relative md:translate-x-0",
-        "fixed top-0 bottom-0 left-0 z-40 w-72",
-        showConvSidebar ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-        isWidget && "hidden"
-      )}>
+      <div
+        className={cn(
+          "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
+          "md:w-52 md:flex-shrink-0 md:relative md:translate-x-0",
+          "fixed top-0 bottom-0 left-0 z-40 w-72",
+          showConvSidebar
+            ? "translate-x-0"
+            : "-translate-x-full md:translate-x-0",
+          isWidget && "hidden"
+        )}
+      >
         <div className="p-3 border-b border-border flex items-center gap-2">
           <Button
-            onClick={() => { setActiveConvId(null); setMessages([]); createConvMutation.mutate({}); setShowConvSidebar(false); }}
+            onClick={() => {
+              setActiveConvId(null);
+              setMessages([]);
+              createConvMutation.mutate({});
+              setShowConvSidebar(false);
+            }}
             size="sm"
             className="flex-1 gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
           >
             <Plus size={14} /> NEUES GESPRÄCH
           </Button>
-          <button className="md:hidden text-muted-foreground hover:text-primary p-1" onClick={() => setShowConvSidebar(false)}>
+          <button
+            className="md:hidden text-muted-foreground hover:text-primary p-1"
+            onClick={() => setShowConvSidebar(false)}
+            aria-label="Seitenleiste schließen"
+          >
             <ChevronLeft size={18} />
           </button>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {conversations?.map((conv) => (
+            {conversations?.map(conv => (
               <div
                 key={conv.id}
                 className={cn(
                   "group flex items-center gap-2 px-2 py-2 rounded text-xs cursor-pointer transition-all",
-                  activeConvId === conv.id ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                  activeConvId === conv.id
+                    ? "bg-primary/20 text-primary"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}
-                onClick={() => { setActiveConvId(conv.id); setShowConvSidebar(false); }}
+                onClick={() => {
+                  setActiveConvId(conv.id);
+                  setShowConvSidebar(false);
+                }}
               >
                 <span className="flex-1 truncate">{conv.title}</span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); deleteConvMutation.mutate({ id: conv.id }); if (activeConvId === conv.id) { setActiveConvId(null); setMessages([]); } }}
+                  onClick={e => {
+                    e.stopPropagation();
+                    deleteConvMutation.mutate({ id: conv.id });
+                    if (activeConvId === conv.id) {
+                      setActiveConvId(null);
+                      setMessages([]);
+                    }
+                  }}
                   className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                 >
                   <Trash2 size={12} />
@@ -1135,15 +1454,28 @@ function JarvisChatInner() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className={cn("flex items-center gap-2 border-b border-border", isWidget ? "px-3 py-2" : "px-3 md:px-6 py-3")}>
+        <div
+          className={cn(
+            "flex items-center gap-2 border-b border-border",
+            isWidget ? "px-3 py-2" : "px-3 md:px-6 py-3"
+          )}
+        >
           {!isWidget && (
-            <button className="md:hidden text-muted-foreground hover:text-primary p-1 flex-shrink-0" onClick={() => setShowConvSidebar(true)}>
+            <button
+              className="md:hidden text-muted-foreground hover:text-primary p-1 flex-shrink-0"
+              onClick={() => setShowConvSidebar(true)}
+              aria-label="Gespräche anzeigen"
+            >
               <MessageSquare size={18} />
             </button>
           )}
           {isWidget ? (
             <Button
-              onClick={() => { setActiveConvId(null); setMessages([]); createConvMutation.mutate({}); }}
+              onClick={() => {
+                setActiveConvId(null);
+                setMessages([]);
+                createConvMutation.mutate({});
+              }}
               size="sm"
               variant="ghost"
               className="gap-1 text-primary hover:bg-primary/20 px-2"
@@ -1155,44 +1487,85 @@ function JarvisChatInner() {
             <JarvisOrb size={28} />
           )}
           <div className="min-w-0">
-            {!isWidget && <h2 className="font-jarvis text-sm font-bold text-primary">JARVIS</h2>}
-            <p className="text-xs text-muted-foreground truncate">
-              {isStreaming ? <span className="text-primary animate-pulse">Denkt nach...</span>
-               : isListening ? <span className="text-green-400 animate-pulse">Hört zu...</span>
-               : isSpeaking ? <span className="text-cyan-400 animate-pulse">Spricht...</span>
-               : "Bereit"}
+            {!isWidget && (
+              <h2 className="font-jarvis text-sm font-bold text-primary">
+                JARVIS
+              </h2>
+            )}
+            <p
+              className="text-xs text-muted-foreground truncate"
+              aria-live="polite"
+              role="status"
+            >
+              {isStreaming ? (
+                <span className="text-primary animate-pulse">
+                  Denkt nach...
+                </span>
+              ) : isListening ? (
+                <span className="text-green-400 animate-pulse">Hört zu...</span>
+              ) : isSpeaking ? (
+                <span className="text-cyan-400 animate-pulse">Spricht...</span>
+              ) : (
+                "Bereit"
+              )}
             </p>
           </div>
           <div className="ml-auto flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => setSearchEnabled(!searchEnabled)}
-              className={cn("gap-1 text-xs px-2", searchEnabled ? "text-primary" : "text-muted-foreground")} title="Web-Suche">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSearchEnabled(!searchEnabled)}
+              className={cn(
+                "gap-1 text-xs px-2",
+                searchEnabled ? "text-primary" : "text-muted-foreground"
+              )}
+              title="Web-Suche"
+            >
               <Globe size={14} />
-              <span className="hidden sm:inline">{searchEnabled ? "Suche AN" : "Suche AUS"}</span>
+              <span className="hidden sm:inline">
+                {searchEnabled ? "Suche AN" : "Suche AUS"}
+              </span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={isSpeaking ? () => stopSpeaking(false) : toggleTts}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={isSpeaking ? () => stopSpeaking(false) : toggleTts}
               className={cn(
                 "gap-1 text-xs px-2 border",
-                ttsUnlocked && ttsEnabled ? "text-primary border-primary/30 bg-primary/10" : "text-muted-foreground border-transparent",
+                ttsUnlocked && ttsEnabled
+                  ? "text-primary border-primary/30 bg-primary/10"
+                  : "text-muted-foreground border-transparent"
               )}
               title={
-                speechMode === "always" ? "Sprachausgabe: bei jeder Antwort (antippen zum Wechseln)"
-                : speechMode === "voice-only" ? "Sprachausgabe: nur bei Sprachbedienung – schont das Guthaben (antippen zum Wechseln)"
-                : "Sprachausgabe: aus (antippen zum Wechseln)"
-              }>
+                speechMode === "always"
+                  ? "Sprachausgabe: bei jeder Antwort (antippen zum Wechseln)"
+                  : speechMode === "voice-only"
+                    ? "Sprachausgabe: nur bei Sprachbedienung – schont das Guthaben (antippen zum Wechseln)"
+                    : "Sprachausgabe: aus (antippen zum Wechseln)"
+              }
+            >
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
               <span className="hidden sm:inline">
-                {isSpeaking ? "Stopp"
-                  : !ttsUnlocked ? "🔇 AUS"
-                  : speechMode === "always" ? "🔊 Immer"
-                  : speechMode === "voice-only" ? "🎤 Nur Sprache"
-                  : "🔇 Aus"}
+                {isSpeaking
+                  ? "Stopp"
+                  : !ttsUnlocked
+                    ? "🔇 AUS"
+                    : speechMode === "always"
+                      ? "🔊 Immer"
+                      : speechMode === "voice-only"
+                        ? "🎤 Nur Sprache"
+                        : "🔇 Aus"}
               </span>
               <span className="sm:hidden">
-                {isSpeaking ? "■"
-                  : !ttsUnlocked ? ""
-                  : speechMode === "always" ? "∞"
-                  : speechMode === "voice-only" ? "🎤"
-                  : ""}
+                {isSpeaking
+                  ? "■"
+                  : !ttsUnlocked
+                    ? ""
+                    : speechMode === "always"
+                      ? "∞"
+                      : speechMode === "voice-only"
+                        ? "🎤"
+                        : ""}
               </span>
             </Button>
             {/* Zeichen-Budget der Sprachausgabe */}
@@ -1201,28 +1574,39 @@ function JarvisChatInner() {
                 title={
                   ttsUsage.level === "exhausted"
                     ? `Guthaben aufgebraucht (${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen). Jarvis nutzt die Browser-Stimme.` +
-                      (ttsResetAt ? ` Neues Guthaben ab ${new Date(ttsResetAt).toLocaleDateString("de-CH")}.` : "")
+                      (ttsResetAt
+                        ? ` Neues Guthaben ab ${new Date(ttsResetAt).toLocaleDateString("de-CH")}.`
+                        : "")
                     : `Sprachausgabe: ${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen verbraucht` +
-                      (ttsResetAt ? `, Rücksetzung am ${new Date(ttsResetAt).toLocaleDateString("de-CH")}` : "")
+                      (ttsResetAt
+                        ? `, Rücksetzung am ${new Date(ttsResetAt).toLocaleDateString("de-CH")}`
+                        : "")
                 }
                 className={cn(
                   "rounded-full border px-2 py-0.5 text-[10px] tabular-nums",
-                  ttsUsage.level === "exhausted" || ttsUsage.level === "critical"
+                  ttsUsage.level === "exhausted" ||
+                    ttsUsage.level === "critical"
                     ? "border-destructive/40 text-destructive"
                     : ttsUsage.level === "warn"
-                    ? "border-yellow-500/40 text-yellow-400"
-                    : "border-border text-muted-foreground"
+                      ? "border-yellow-500/40 text-yellow-400"
+                      : "border-border text-muted-foreground"
                 )}
               >
                 {ttsUsage.level === "exhausted" ? (
                   <>
-                    <span className="hidden md:inline">Guthaben leer – Browser-Stimme</span>
+                    <span className="hidden md:inline">
+                      Guthaben leer – Browser-Stimme
+                    </span>
                     <span className="md:hidden">0%</span>
                   </>
                 ) : (
                   <>
-                    <span className="hidden md:inline">{ttsUsage.remaining.toLocaleString("de-CH")} Zeichen übrig</span>
-                    <span className="md:hidden">{Math.max(0, 100 - ttsUsage.percentUsed)}%</span>
+                    <span className="hidden md:inline">
+                      {ttsUsage.remaining.toLocaleString("de-CH")} Zeichen übrig
+                    </span>
+                    <span className="md:hidden">
+                      {Math.max(0, 100 - ttsUsage.percentUsed)}%
+                    </span>
                   </>
                 )}
               </span>
@@ -1231,7 +1615,10 @@ function JarvisChatInner() {
         </div>
 
         {/* Messages */}
-        <ScrollArea className="flex-1 px-3 md:px-6 py-4" ref={scrollRef as React.RefObject<HTMLDivElement>}>
+        <ScrollArea
+          className="flex-1 px-3 md:px-6 py-4"
+          ref={scrollRef as React.RefObject<HTMLDivElement>}
+        >
           {/* TTS-Unlock-Banner */}
           {!ttsUnlocked && (
             <div className="mx-auto max-w-sm mb-4 mt-2">
@@ -1243,8 +1630,13 @@ function JarvisChatInner() {
                   <Volume2 size={16} className="text-primary" />
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-semibold text-primary">Sprachausgabe aktivieren</p>
-                  <p className="text-xs text-muted-foreground">Einmal antippen – danach spricht Jarvis auch bei Sprachbedienung</p>
+                  <p className="text-xs font-semibold text-primary">
+                    Sprachausgabe aktivieren
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Einmal antippen – danach spricht Jarvis auch bei
+                    Sprachbedienung
+                  </p>
                 </div>
               </button>
             </div>
@@ -1256,17 +1648,37 @@ function JarvisChatInner() {
                 <h3 className="font-jarvis text-2xl font-bold text-primary jarvis-glow-text mb-2">
                   Hallo{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
                 </h3>
-                <p className="text-muted-foreground">Wie kann ich dir heute helfen?</p>
+                <p className="text-muted-foreground">
+                  Wie kann ich dir heute helfen?
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3 w-full px-4">
-                {(suggestions ?? [
-                  { label: "Was steht heute an?", promptText: "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung." },
-                  { label: "Offene Rechnungen zeigen", promptText: "Zeige mir alle offenen Rechnungen." },
-                  { label: "Offene Tickets zeigen", promptText: "Welche Tickets sind noch offen?" },
-                  { label: "Termine diese Woche", promptText: "Welche Termine habe ich diese Woche?" },
-                ]).map((s) => (
-                  <button key={s.label} onClick={() => setInput(s.promptText)}
-                    className="text-left p-3 rounded-lg jarvis-card text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all">
+                {(
+                  suggestions ?? [
+                    {
+                      label: "Was steht heute an?",
+                      promptText:
+                        "Was steht heute an? Erstelle mir eine priorisierte Tagesplanung.",
+                    },
+                    {
+                      label: "Offene Rechnungen zeigen",
+                      promptText: "Zeige mir alle offenen Rechnungen.",
+                    },
+                    {
+                      label: "Offene Tickets zeigen",
+                      promptText: "Welche Tickets sind noch offen?",
+                    },
+                    {
+                      label: "Termine diese Woche",
+                      promptText: "Welche Termine habe ich diese Woche?",
+                    },
+                  ]
+                ).map(s => (
+                  <button
+                    key={s.label}
+                    onClick={() => setInput(s.promptText)}
+                    className="text-left p-3 rounded-lg jarvis-card text-sm text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all"
+                  >
                     {s.label}
                   </button>
                 ))}
@@ -1275,15 +1687,30 @@ function JarvisChatInner() {
           ) : (
             <div className="space-y-4 pb-4">
               {messages.map((msg, i) => (
-                <div key={i} className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}>
-                  {msg.role === "assistant" && <div className="flex-shrink-0 mt-1"><JarvisOrb size={28} /></div>}
-                  <div className={cn(
-                    "max-w-[80%] rounded-xl px-4 py-3 text-sm",
-                    msg.role === "user" ? "bg-primary/20 text-foreground border border-primary/30 ml-auto" : "bg-card border border-border text-foreground"
-                  )}>
+                <div
+                  key={i}
+                  className={cn(
+                    "flex gap-3",
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {msg.role === "assistant" && (
+                    <div className="flex-shrink-0 mt-1">
+                      <JarvisOrb size={28} />
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "max-w-[80%] rounded-xl px-4 py-3 text-sm",
+                      msg.role === "user"
+                        ? "bg-primary/20 text-foreground border border-primary/30 ml-auto"
+                        : "bg-card border border-border text-foreground"
+                    )}
+                  >
                     {msg.fileName && (
                       <div className="flex items-center gap-2 mb-2 text-xs text-primary/80 border-b border-border pb-2">
-                        <FileText size={12} />{msg.fileName}
+                        <FileText size={12} />
+                        {msg.fileName}
                       </div>
                     )}
                     {msg.role === "assistant" ? (
@@ -1291,13 +1718,24 @@ function JarvisChatInner() {
                     ) : (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     )}
-                    {msg.role === "assistant" && !msg.content && isStreaming && (
-                      <div className="flex gap-1 items-center">
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "0ms" }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "150ms" }} />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: "300ms" }} />
-                      </div>
-                    )}
+                    {msg.role === "assistant" &&
+                      !msg.content &&
+                      isStreaming && (
+                        <div className="flex gap-1 items-center">
+                          <div
+                            className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                            style={{ animationDelay: "0ms" }}
+                          />
+                          <div
+                            className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          />
+                          <div
+                            className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          />
+                        </div>
+                      )}
                   </div>
                 </div>
               ))}
@@ -1309,7 +1747,6 @@ function JarvisChatInner() {
                   </div>
                 </div>
               )}
-
             </div>
           )}
         </ScrollArea>
@@ -1320,7 +1757,12 @@ function JarvisChatInner() {
             <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary">
               <FileText size={12} />
               <span className="flex-1 truncate">{uploadedFile.name}</span>
-              <button onClick={() => setUploadedFile(null)} className="hover:text-destructive"><X size={12} /></button>
+              <button
+                onClick={() => setUploadedFile(null)}
+                className="hover:text-destructive"
+              >
+                <X size={12} />
+              </button>
             </div>
           )}
 
@@ -1334,52 +1776,70 @@ function JarvisChatInner() {
                   isListening
                     ? "bg-red-500/20 border-2 border-red-500 text-red-400 scale-110 animate-pulse"
                     : isSpeaking
-                    ? "bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 scale-105"
-                    : "bg-primary/20 border-2 border-primary/50 text-primary hover:bg-primary/30 hover:scale-105 active:scale-95",
+                      ? "bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400 scale-105"
+                      : "bg-primary/20 border-2 border-primary/50 text-primary hover:bg-primary/30 hover:scale-105 active:scale-95",
                   isStreaming && "opacity-50 cursor-not-allowed"
                 )}
                 title={isListening ? "Aufnahme stoppen" : "Jarvis sprechen"}
               >
-              {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+                {isListening ? <MicOff size={28} /> : <Mic size={28} />}
               </button>
               <div className="flex items-center gap-2">
-              {/* Kontinuierlicher Zuhör-Modus Toggle */}
-              <button
-                onClick={() => {
-                  const next = !autoListen;
-                  setAutoListen(next);
-                  autoListenRef.current = next;
-                  if (next && !isListening && !isBusyRef.current) {
-                    startListening();
-                  } else if (!next) {
-                    stopListening();
-                  }
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
-                  autoListen
-                    ? "bg-primary/20 border-primary/50 text-primary"
-                    : "bg-transparent border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                )}
-                title="Kontinuierlicher Zuhör-Modus"
-              >
-                <div className={cn("w-1.5 h-1.5 rounded-full", autoListen ? "bg-primary animate-pulse" : "bg-muted-foreground")} />
-                {autoListen ? "Hands-free AN" : "Hands-free"}
-              </button>
-              {/* Wake-Word-Modus */}
-              <button
-                onClick={toggleWakeWord}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
-                  wakeWordMode
-                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
-                    : "bg-transparent border-border text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-300"
-                )}
-                title="Jarvis lauscht dauerhaft und reagiert auf «Hey Jarvis»"
-              >
-                <div className={cn("w-1.5 h-1.5 rounded-full", wakeWordMode ? "bg-cyan-400 animate-pulse" : "bg-muted-foreground")} />
-                {wakeWordMode ? (wakeArmed ? "Ich höre …" : "«Hey Jarvis» AN") : "«Hey Jarvis»"}
-              </button>
+                {/* Kontinuierlicher Zuhör-Modus Toggle */}
+                <button
+                  onClick={() => {
+                    const next = !autoListen;
+                    setAutoListen(next);
+                    autoListenRef.current = next;
+                    if (next && !isListening && !isBusyRef.current) {
+                      startListening();
+                    } else if (!next) {
+                      stopListening();
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
+                    autoListen
+                      ? "bg-primary/20 border-primary/50 text-primary"
+                      : "bg-transparent border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
+                  )}
+                  title="Kontinuierlicher Zuhör-Modus"
+                >
+                  <div
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      autoListen
+                        ? "bg-primary animate-pulse"
+                        : "bg-muted-foreground"
+                    )}
+                  />
+                  {autoListen ? "Hands-free AN" : "Hands-free"}
+                </button>
+                {/* Wake-Word-Modus */}
+                <button
+                  onClick={toggleWakeWord}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
+                    wakeWordMode
+                      ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
+                      : "bg-transparent border-border text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-300"
+                  )}
+                  title="Jarvis lauscht dauerhaft und reagiert auf «Hey Jarvis»"
+                >
+                  <div
+                    className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      wakeWordMode
+                        ? "bg-cyan-400 animate-pulse"
+                        : "bg-muted-foreground"
+                    )}
+                  />
+                  {wakeWordMode
+                    ? wakeArmed
+                      ? "Ich höre …"
+                      : "«Hey Jarvis» AN"
+                    : "«Hey Jarvis»"}
+                </button>
               </div>
             </div>
           )}
@@ -1388,29 +1848,71 @@ function JarvisChatInner() {
             <div className="flex-1 relative">
               <Textarea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={isListening ? "Höre zu..." : "Frag Jarvis etwas... (Enter zum Senden)"}
+                placeholder={
+                  isListening
+                    ? "Höre zu..."
+                    : "Frag Jarvis etwas... (Enter zum Senden)"
+                }
                 className="min-h-[52px] max-h-[200px] resize-none bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-primary/50"
                 disabled={isListening}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileUpload} accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg,.webp" />
-              <Button variant="ghost" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isUploading}
-                className="h-8 w-8 text-muted-foreground hover:text-primary" title="Datei hochladen">
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileUpload}
+                accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg,.webp"
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                title="Datei hochladen"
+                aria-label="Datei hochladen"
+              >
+                {isUploading ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Paperclip size={14} />
+                )}
               </Button>
               {input.trim() && (
-                <Button variant="ghost" size="icon" onClick={isListening ? stopListening : startListening}
-                  className={cn("h-8 w-8", isListening ? "text-red-400 animate-pulse" : "text-muted-foreground hover:text-primary")}
-                  title={isListening ? "Aufnahme stoppen" : "Spracheingabe"}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={isListening ? stopListening : startListening}
+                  className={cn(
+                    "h-8 w-8",
+                    isListening
+                      ? "text-red-400 animate-pulse"
+                      : "text-muted-foreground hover:text-primary"
+                  )}
+                  title={isListening ? "Aufnahme stoppen" : "Spracheingabe"}
+                  aria-label={
+                    isListening ? "Aufnahme stoppen" : "Spracheingabe starten"
+                  }
+                >
                   {isListening ? <MicOff size={14} /> : <Mic size={14} />}
                 </Button>
               )}
-              <Button size="icon" onClick={sendMessage} disabled={!input.trim() && !uploadedFile}
-                className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90">
-                {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              <Button
+                size="icon"
+                onClick={sendMessage}
+                disabled={!input.trim() && !uploadedFile}
+                className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
+                aria-label="Nachricht senden"
+              >
+                {isStreaming ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Send size={14} />
+                )}
               </Button>
             </div>
           </div>
