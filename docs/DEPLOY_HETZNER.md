@@ -5,18 +5,22 @@ Für Domain **ai-gross-ict.ch** auf Hetzner Managed Webhosting mit Node.js
 
 ## ⚠️ Wichtige Voraussetzungen zuerst lesen
 
-Diese App ist auf einer Plattform (Manus/Forge) entstanden und nutzt zwei
-externe Dienste. **Ohne die läuft Login bzw. die KI nicht:**
+Die App läuft **unabhängig von der ursprünglichen Plattform (Manus/Forge)**:
+Die KI nutzt deinen eigenen Anthropic-Key, der Login ein lokales Passwort.
 
-| Variable                                                            | Wofür                                      | Ohne sie …                        |
-| ------------------------------------------------------------------- | ------------------------------------------ | --------------------------------- |
-| `OAUTH_SERVER_URL` (+ `VITE_APP_ID`, `JWT_SECRET`, `OWNER_OPEN_ID`) | Login/Auth über den Plattform-OAuth-Server | **kein Login möglich**            |
-| `BUILT_IN_FORGE_API_URL` + `BUILT_IN_FORGE_API_KEY`                 | LLM-/Claude-Anbindung                      | **Chat/KI antwortet nicht**       |
-| `DATABASE_URL`                                                      | MySQL (hast du schon)                      | Server startet nicht (Produktion) |
+| Variable            | Wofür                                  | Ohne sie …                        |
+| ------------------- | -------------------------------------- | --------------------------------- |
+| `DATABASE_URL`      | MySQL-Verbindung                       | Server startet nicht (Produktion) |
+| `JWT_SECRET`        | Signieren des Session-Cookies          | Server startet nicht (Produktion) |
+| `ANTHROPIC_API_KEY` | KI/Chat (Claude, direkt bei Anthropic) | **Chat/KI antwortet nicht**       |
+| `APP_PASSWORD`      | Lokaler Login                          | **kein Login möglich**            |
 
-Prüfe, ob du diese Werte hast (z. B. aus der bisherigen Plattform-Umgebung).
-Sind OAuth/Forge nicht mehr erreichbar, muss dieser Teil auf einen eigenen
-Auth-/LLM-Weg umgebaut werden – das ist ein separates Projekt.
+`JWT_SECRET` kannst du selbst erzeugen: `openssl rand -hex 32`.
+Der Anthropic-Key kommt aus <https://console.anthropic.com/settings/keys>.
+
+> Die alten Plattform-Variablen (`OAUTH_SERVER_URL`, `VITE_APP_ID`,
+> `BUILT_IN_FORGE_API_KEY`) werden **nicht mehr gebraucht**. Sind sie gesetzt,
+> nutzt die App weiterhin den alten Weg – lass sie beim Self-Hosting einfach weg.
 
 **Node-Version:** mindestens **20.11** (der Code nutzt `import.meta.dirname`).
 In Plesk Node 20 LTS oder 22 wählen.
@@ -92,12 +96,12 @@ NODE_ENV=production
 DATABASE_URL=mysql://jqviwy_0:PASSWORT@m0s8.your-database.de:3306/jarvis
 JWT_SECRET=<dein-jwt-secret>
 
-# Plattform-Anbindung (für Login und KI erforderlich):
-OAUTH_SERVER_URL=<...>
-VITE_APP_ID=<...>
-OWNER_OPEN_ID=<...>
-BUILT_IN_FORGE_API_URL=<...>
-BUILT_IN_FORGE_API_KEY=<...>
+# KI (eigener Anthropic-Key – ersetzt die Plattform-Anbindung):
+ANTHROPIC_API_KEY=<dein-anthropic-key>
+
+# Login (lokales Passwort – ersetzt den Plattform-OAuth):
+APP_PASSWORD=<dein-wunschpasswort>
+OWNER_NAME=Stefan
 
 # Optionale Features:
 ELEVENLABS_API_KEY=<...>

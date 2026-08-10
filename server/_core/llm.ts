@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { anthropicEnabled, invokeViaAnthropic } from "./anthropicLlm";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -343,6 +344,11 @@ const fetchWithBackoff = async (
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
+  // Bevorzugt die direkte Anthropic-Anbindung (eigener API-Key). Nur wenn kein
+  // ANTHROPIC_API_KEY gesetzt ist, wird der alte Forge-Proxy genutzt.
+  if (anthropicEnabled()) {
+    return invokeViaAnthropic(params);
+  }
   assertApiKey();
 
   const {

@@ -21,8 +21,15 @@ import JarvisIntegrations from "./pages/JarvisIntegrations";
 import JarvisShortcuts from "./pages/JarvisShortcuts";
 import CustomerDossier from "./pages/CustomerDossier";
 import OnboardingWizard from "./components/OnboardingWizard";
+import Login from "./pages/Login";
 
 function Router() {
+  // Die Login-Seite liegt bewusst ausserhalb des Layouts: sie muss ohne
+  // angemeldete Sitzung erreichbar sein.
+  if (window.location.pathname === "/login") {
+    return <Login />;
+  }
+
   return (
     <JarvisLayout>
       <OnboardingWizard />

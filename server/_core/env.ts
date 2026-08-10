@@ -32,6 +32,13 @@ const envSchema = z.object({
   BUILT_IN_FORGE_API_URL: z.string().optional(),
   BUILT_IN_FORGE_API_KEY: z.string().optional(),
 
+  // Direkte KI-Anbindung (eigener Anthropic-Key statt Plattform-Proxy)
+  ANTHROPIC_API_KEY: z.string().optional(),
+
+  // Lokaler Passwort-Login (ersetzt den Plattform-OAuth beim Self-Hosting).
+  APP_PASSWORD: z.string().optional(),
+  OWNER_NAME: z.string().optional(),
+
   // Optionale Integrationen
   ELEVENLABS_API_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
@@ -65,6 +72,9 @@ const values = parsed.success
       OWNER_OPEN_ID: RAW.OWNER_OPEN_ID,
       BUILT_IN_FORGE_API_URL: RAW.BUILT_IN_FORGE_API_URL,
       BUILT_IN_FORGE_API_KEY: RAW.BUILT_IN_FORGE_API_KEY,
+      ANTHROPIC_API_KEY: RAW.ANTHROPIC_API_KEY,
+      APP_PASSWORD: RAW.APP_PASSWORD,
+      OWNER_NAME: RAW.OWNER_NAME,
       ELEVENLABS_API_KEY: RAW.ELEVENLABS_API_KEY,
       GOOGLE_CLIENT_ID: RAW.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: RAW.GOOGLE_CLIENT_SECRET,
@@ -94,11 +104,7 @@ export const ENV = {
 export const env = values;
 
 // Für den Betrieb zwingend erforderliche Variablen.
-const REQUIRED_KEYS = [
-  "DATABASE_URL",
-  "JWT_SECRET",
-  "BUILT_IN_FORGE_API_KEY",
-] as const;
+const REQUIRED_KEYS = ["DATABASE_URL", "JWT_SECRET"] as const;
 
 // Optionale Integrationen: Fehlen deaktiviert nur das jeweilige Feature.
 const OPTIONAL_GROUPS: Record<string, readonly string[]> = {
@@ -124,6 +130,17 @@ export function validateEnv(): void {
   const missingRequired = REQUIRED_KEYS.filter(key => !RAW[key]);
   if (missingRequired.length > 0) {
     const msg = `[env] Fehlende Pflicht-Umgebungsvariablen: ${missingRequired.join(", ")}`;
+    if (values.NODE_ENV === "production") {
+      throw new Error(msg);
+    }
+    console.warn(`${msg} (im Entwicklungsmodus toleriert)`);
+  }
+
+  // Mindestens ein LLM-Backend muss konfiguriert sein: eigener Anthropic-Key
+  // (bevorzugt) oder der alte Forge-Proxy.
+  if (!RAW.ANTHROPIC_API_KEY && !RAW.BUILT_IN_FORGE_API_KEY) {
+    const msg =
+      "[env] Kein LLM-Backend konfiguriert: ANTHROPIC_API_KEY (empfohlen) oder BUILT_IN_FORGE_API_KEY setzen";
     if (values.NODE_ENV === "production") {
       throw new Error(msg);
     }

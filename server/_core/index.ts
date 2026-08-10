@@ -7,6 +7,7 @@ import { httpLogger, logger } from "./logger";
 import { apiLimiter, publicEndpointLimiter, ttsLimiter } from "./rateLimit";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerLocalAuthRoutes } from "./localAuth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
@@ -62,6 +63,10 @@ async function startServer() {
 
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  // Lokaler Passwort-Login (Self-Hosting); Brute-Force-Schutz über das
+  // strenge Limit für öffentliche Endpunkte.
+  app.use("/api/auth/login", publicEndpointLimiter);
+  registerLocalAuthRoutes(app);
   // Google Calendar OAuth Callback
   app.get("/api/oauth/google/callback", handleGoogleOAuthCallback);
   // Spotify OAuth Callback

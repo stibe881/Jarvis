@@ -15,6 +15,16 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 export const startLogin = () => {
   const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
   const appId = import.meta.env.VITE_APP_ID;
+
+  // Self-Hosting-Betrieb: Ist kein Plattform-OAuth konfiguriert, führt der
+  // Login auf die lokale Passwortseite statt auf einen externen Auth-Server.
+  if (!oauthPortalUrl || !appId) {
+    if (window.location.pathname !== "/login") {
+      window.location.href = "/login";
+    }
+    return;
+  }
+
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
 
   const nonce = crypto.randomUUID();
