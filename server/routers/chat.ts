@@ -639,7 +639,13 @@ ${langStr}
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.`;
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} (ISO: ${new Date().toISOString().split("T")[0]}).
+
+ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
+1. Rohes Alter = heutiges Jahr − Geburtsjahr.
+2. Hat der Geburtstag (Monat + Tag) dieses Jahr noch NICHT stattgefunden → Alter = Rohes Alter − 1, Geburtstag steht noch bevor.
+3. Hat der Geburtstag dieses Jahr bereits stattgefunden → Alter = Rohes Alter, Geburtstag war bereits.
+4. Kalendereinträge rund um einen Geburtstag sind NICHT zwingend veraltet – prüfe das Datum, bevor du einen Eintrag als «veraltet» bezeichnest.`;
           // Weiter mit dem Rest des System-Prompts (Kalender/Gedächtnis-Aktionen)
           const grossIctContext = `
 
@@ -837,7 +843,13 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} (ISO: ${new Date().toISOString().split("T")[0]}).
+
+ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
+1. Rohes Alter = heutiges Jahr − Geburtsjahr.
+2. Hat der Geburtstag (Monat + Tag) dieses Jahr noch NICHT stattgefunden → Alter = Rohes Alter − 1, Geburtstag steht noch bevor.
+3. Hat der Geburtstag dieses Jahr bereits stattgefunden → Alter = Rohes Alter, Geburtstag war bereits.
+4. Kalendereinträge rund um einen Geburtstag sind NICHT zwingend veraltet – prüfe das Datum, bevor du einen Eintrag als «veraltet» bezeichnest.
 
 ${CORE_AGENT_INSTRUCTIONS}
 
