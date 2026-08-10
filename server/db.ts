@@ -20,6 +20,7 @@ import {
   promptStats,
   webhookKeys, webhookEvents,
 } from "../drizzle/schema";
+import { spotifyTokens, deviceCommands } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -479,4 +480,92 @@ export async function getWebhookEventsByUser(userId: number, limit = 50) {
   if (!db) return [];
   return db.select().from(webhookEvents)
     .where(eq(webhookEvents.userId, userId)).orderBy(desc(webhookEvents.createdAt)).limit(limit);
+}
+
+// ─── Spotify-Tokens ───────────────────────────────────────────────────────────
+
+export async function getSpotifyToken(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(spotifyTokens).where(eq(spotifyTokens.userId, userId)).limit(1);
+  return rows[0];
+}
+
+export async function upsertSpotifyToken(data: {
+  userId: number;
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt: number;
+  scope?: string | null;
+  displayName?: string | null;
+  product?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(spotifyTokens).values(data).onDuplicateKeyUpdate({
+    set: {
+      accessToken: data.accessToken,
+      ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+      expiresAt: data.expiresAt,
+      scope: data.scope ?? null,
+      displayName: data.displayName ?? null,
+      product: data.product ?? null,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+export async function deleteSpotifyToken(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(spotifyTokens).where(eq(spotifyTokens.userId, userId));
+}
+
+// ─── Geräte-Befehle (iOS-Kurzbefehle) ─────────────────────────────────────────
+
+export async function createDeviceCommand(userId: number, type: string, payload: unknown, summary: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Keine Datenbankverbindung");
+  const [result] = await db.insert(deviceCommands)
+    .values({ userId, type, payload: JSON.stringify(payload), summary })
+    .$returningId();
+  return result;
+}
+
+/** Holt alle wartenden Befehle und markiert sie als ausgeliefert. */
+export async function claimPendingDeviceCommands(userId: number, limit = 10) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(deviceCommands)
+    .where(and(eq(deviceCommands.userId, userId), eq(deviceCommands.status, "pending")))
+    .orderBy(deviceCommands.createdAt)
+    .limit(limit);
+  for (const row of rows) {
+    await db.update(deviceCommands)
+      .set({ status: "delivered", deliveredAt: Date.now() })
+      .where(eq(deviceCommands.id, row.id));
+  }
+  return rows;
+}
+
+export async function getDeviceCommandsByUser(userId: number, limit = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(deviceCommands)
+    .where(eq(deviceCommands.userId, userId))
+    .orderBy(desc(deviceCommands.createdAt))
+    .limit(limit);
+}
+
+export async function markDeviceCommandDone(id: number, userId: number, status: "done" | "failed" = "done") {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(deviceCommands).set({ status })
+    .where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
+}
+
+export async function deleteDeviceCommand(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(deviceCommands).where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
 }

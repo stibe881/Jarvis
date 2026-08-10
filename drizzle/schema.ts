@@ -282,3 +282,34 @@ export const webhookEvents = mysqlTable("webhook_events", {
 });
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type InsertWebhookEvent = typeof webhookEvents.$inferInsert;
+
+// ── Spotify-Tokens (pro Nutzer) ───────────────────────────────────────────────
+export const spotifyTokens = mysqlTable("spotify_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken"),
+  expiresAt: int("expiresAt").notNull(), // Unix timestamp in Sekunden
+  scope: text("scope"),
+  displayName: varchar("displayName", { length: 255 }),
+  product: varchar("product", { length: 32 }), // premium | free
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type SpotifyToken = typeof spotifyTokens.$inferSelect;
+export type InsertSpotifyToken = typeof spotifyTokens.$inferInsert;
+
+// ── Befehls-Queue für iOS-Kurzbefehle (WhatsApp, Wecker, Timer) ───────────────
+export const deviceCommands = mysqlTable("device_commands", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  // whatsapp | alarm | timer | reminder | speak
+  type: varchar("type", { length: 32 }).notNull(),
+  payload: text("payload").notNull(), // JSON-Parameter
+  summary: varchar("summary", { length: 255 }), // lesbare Kurzbeschreibung
+  status: mysqlEnum("status", ["pending", "delivered", "done", "failed"]).default("pending").notNull(),
+  deliveredAt: bigint("deliveredAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DeviceCommand = typeof deviceCommands.$inferSelect;
+export type InsertDeviceCommand = typeof deviceCommands.$inferInsert;

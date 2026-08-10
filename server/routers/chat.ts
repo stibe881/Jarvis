@@ -16,6 +16,8 @@ import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
+import { executeSpotifyAction } from "./spotify";
+import { queueDeviceCommand } from "./deviceCommands";
 import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
 
 // ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
@@ -403,6 +405,29 @@ STATUS-WERTE in der App:
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
+
+MUSIK (Spotify): Stefan kann sein Spotify-Konto verbinden. Wenn er Musik hören will, füge GENAU EINEN spotify_action-Block ein:
+<spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
+<spotify_action>{"action":"play","query":"Deep Focus","type":"playlist"}</spotify_action>
+<spotify_action>{"action":"play"}</spotify_action>            // Wiedergabe fortsetzen
+<spotify_action>{"action":"pause"}</spotify_action>
+<spotify_action>{"action":"next"}</spotify_action>
+<spotify_action>{"action":"previous"}</spotify_action>
+<spotify_action>{"action":"volume","level":40}</spotify_action>
+<spotify_action>{"action":"shuffle","enabled":true}</spotify_action>
+<spotify_action>{"action":"current"}</spotify_action>          // was läuft gerade
+<spotify_action>{"action":"search","query":"Jazz","type":"playlist"}</spotify_action>
+<spotify_action>{"action":"playlists"}</spotify_action>
+<spotify_action>{"action":"devices"}</spotify_action>
+type kann track, album, playlist oder artist sein. Zeige NIE den rohen spotify_action-Block.
+
+IPHONE (über Kurzbefehle): Stefan kann Jarvis bitten, WhatsApp-Nachrichten zu senden oder Wecker/Timer zu stellen.
+Diese Befehle landen in einer Warteschlange, die sein iPhone abholt. Füge GENAU EINEN device_action-Block ein:
+<device_action>{"type":"whatsapp","recipient":"Bine","message":"Ich komme etwas später"}</device_action>
+<device_action>{"type":"alarm","time":"06:30","label":"Aufstehen"}</device_action>
+<device_action>{"type":"timer","minutes":15,"label":"Pause"}</device_action>
+<device_action>{"type":"reminder","message":"Rechnung Muster AG prüfen","time":"14:00"}</device_action>
+Wenn Angaben fehlen (Empfänger, Text, Uhrzeit), frage zuerst nach. Zeige NIE den rohen device_action-Block.
 ${profileContext}${calendarContext}${memoryContext}`;
 
           // LLM aufrufen mit Profil-Kontext
@@ -470,6 +495,34 @@ ${profileContext}${calendarContext}${memoryContext}`;
               const appResult = await executeAppAction(appAct, appParams);
               fullResponse2 = fullResponse2 + "\n\n" + appResult;
             } catch (e) { console.error("[AppAction Profil-Pfad]", e); }
+          }
+          // ── spotify_action-Blöcke ausführen ──────────────────────────────
+          const spotRxP = /<spotify_action>([\s\S]*?)<\/spotify_action>/g;
+          const spotMatchesP: RegExpExecArray[] = [];
+          let sxP: RegExpExecArray | null;
+          while ((sxP = spotRxP.exec(fullResponse2)) !== null) spotMatchesP.push(sxP as RegExpExecArray);
+          fullResponse2 = fullResponse2.replace(/<spotify_action>[\s\S]*?<\/spotify_action>/g, "").trim();
+          for (const match of spotMatchesP) {
+            try {
+              const sd = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
+              const { action: spotAct, ...spotParams } = sd;
+              const spotResult = await executeSpotifyAction(userId, spotAct, spotParams);
+              fullResponse2 = (fullResponse2 ? fullResponse2 + "\n\n" : "") + spotResult;
+            } catch (e) { console.error("[SpotifyAction]", e); }
+          }
+          // ── device_action-Blöcke ausführen (iOS-Kurzbefehle) ─────────────
+          const devRxP = /<device_action>([\s\S]*?)<\/device_action>/g;
+          const devMatchesP: RegExpExecArray[] = [];
+          let dxP: RegExpExecArray | null;
+          while ((dxP = devRxP.exec(fullResponse2)) !== null) devMatchesP.push(dxP as RegExpExecArray);
+          fullResponse2 = fullResponse2.replace(/<device_action>[\s\S]*?<\/device_action>/g, "").trim();
+          for (const match of devMatchesP) {
+            try {
+              const dd = JSON.parse(match[1].trim()) as { type: string; [k: string]: unknown };
+              const { type: devType, ...devParams } = dd;
+              const devResult = await queueDeviceCommand(userId, devType, devParams);
+              fullResponse2 = (fullResponse2 ? fullResponse2 + "\n\n" : "") + devResult;
+            } catch (e) { console.error("[DeviceAction]", e); }
           }
           const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
           if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
@@ -544,6 +597,19 @@ STATUS-WERTE in der App:
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
+
+MUSIK (Spotify): Füge bei Musikwünschen GENAU EINEN spotify_action-Block ein:
+<spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
+<spotify_action>{"action":"pause"}</spotify_action> / {"action":"next"} / {"action":"previous"}
+<spotify_action>{"action":"volume","level":40}</spotify_action>
+<spotify_action>{"action":"current"}</spotify_action> / {"action":"playlists"} / {"action":"devices"}
+type kann track, album, playlist oder artist sein. Zeige NIE den rohen Block.
+
+IPHONE (Kurzbefehle): Für WhatsApp-Nachrichten, Wecker und Timer GENAU EINEN device_action-Block:
+<device_action>{"type":"whatsapp","recipient":"Bine","message":"Ich komme später"}</device_action>
+<device_action>{"type":"alarm","time":"06:30","label":"Aufstehen"}</device_action>
+<device_action>{"type":"timer","minutes":15}</device_action>
+Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
 ${calendarContext}${memoryContext}`;
 
       type LLMMessage = { role: "system" | "user" | "assistant"; content: string | Array<{ type: string; text?: string; image_url?: { url: string } }> };
@@ -628,6 +694,38 @@ ${calendarContext}${memoryContext}`;
           console.log("[AppAction] Result:", appResult.slice(0, 200));
           cleanResponse = cleanResponse + "\n\n" + appResult;
         } catch (e) { console.error("[AppAction sendMessage]", e); }
+      }
+
+      // ── spotify_action-Blöcke ausführen ─────────────────────────────────
+      const spotSource = cleanResponse.includes("<spotify_action>") ? cleanResponse : fullResponse;
+      const spotRx = /<spotify_action>([\s\S]*?)<\/spotify_action>/g;
+      const spotM: RegExpExecArray[] = [];
+      let sx: RegExpExecArray | null;
+      while ((sx = spotRx.exec(spotSource)) !== null) spotM.push(sx);
+      cleanResponse = cleanResponse.replace(/<spotify_action>[\s\S]*?<\/spotify_action>/g, "").trim();
+      for (const match of spotM) {
+        try {
+          const sd = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
+          const { action: spotAct, ...spotParams } = sd;
+          const spotResult = await executeSpotifyAction(userId, spotAct, spotParams);
+          cleanResponse = (cleanResponse ? cleanResponse + "\n\n" : "") + spotResult;
+        } catch (e) { console.error("[SpotifyAction sendMessage]", e); }
+      }
+
+      // ── device_action-Blöcke ausführen (iOS-Kurzbefehle) ────────────────
+      const devSource = cleanResponse.includes("<device_action>") ? cleanResponse : fullResponse;
+      const devRx = /<device_action>([\s\S]*?)<\/device_action>/g;
+      const devM: RegExpExecArray[] = [];
+      let dx: RegExpExecArray | null;
+      while ((dx = devRx.exec(devSource)) !== null) devM.push(dx);
+      cleanResponse = cleanResponse.replace(/<device_action>[\s\S]*?<\/device_action>/g, "").trim();
+      for (const match of devM) {
+        try {
+          const dd = JSON.parse(match[1].trim()) as { type: string; [k: string]: unknown };
+          const { type: devType, ...devParams } = dd;
+          const devResult = await queueDeviceCommand(userId, devType, devParams);
+          cleanResponse = (cleanResponse ? cleanResponse + "\n\n" : "") + devResult;
+        } catch (e) { console.error("[DeviceAction sendMessage]", e); }
       }
 
       // Antwort speichern

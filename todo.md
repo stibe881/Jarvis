@@ -61,10 +61,10 @@
 - [x] Wochenbericht-Cron nach Deployment anlegen (Freitag 16:00 Zürich, task_uid QFvDg6RoXpcDWUCmp8nt6E)
 
 ## Phase 4 – Geräte- und Musiksteuerung
-- [ ] Spotify OAuth (Client ID/Secret, Refresh-Token-Speicherung)
-- [ ] Spotify-Steuerung: abspielen, pausieren, weiter, Playlist/Song suchen, Lautstärke
-- [ ] Chat-Integration: spotify_action-Block (z.B. "Spiele Coldplay")
-- [ ] iPhone-Anbindung über Kurzbefehle: Befehls-Queue-Endpoint
-- [ ] WhatsApp-Nachricht senden über Kurzbefehl-Automation
-- [ ] Wecker/Timer stellen über Kurzbefehl-Automation
+- [x] Spotify OAuth (Client ID/Secret, Refresh-Token-Speicherung)
+- [x] Spotify-Steuerung: abspielen, pausieren, weiter, Playlist/Song suchen, Lautstärke
+- [x] Chat-Integration: spotify_action-Block (z.B. "Spiele Coldplay")
+- [x] iPhone-Anbindung über Kurzbefehle: Befehls-Queue-Endpoint
+- [x] WhatsApp-Nachricht senden über Kurzbefehl-Automation
+- [x] Wecker/Timer stellen über Kurzbefehl-Automation
 - [ ] Einrichtungsanleitung für iOS-Kurzbefehle

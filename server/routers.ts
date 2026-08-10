@@ -17,6 +17,8 @@ import { templatesRouter } from "./routers/templates";
 import { delegationRouter } from "./routers/delegation";
 import { voiceNotesRouter } from "./routers/voiceNotes";
 import { webhooksRouter } from "./routers/webhooks";
+import { spotifyRouter } from "./routers/spotify";
+import { deviceRouter } from "./routers/deviceCommands";
 
 export const appRouter = router({
   system: systemRouter,
@@ -45,6 +47,8 @@ export const appRouter = router({
   delegation: delegationRouter,
   voiceNotes: voiceNotesRouter,
   webhooks: webhooksRouter,
+  spotify: spotifyRouter,
+  device: deviceRouter,
 });
 
 export type AppRouter = typeof appRouter;

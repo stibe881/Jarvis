@@ -13,6 +13,8 @@ import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
 import { handleMorningBriefing } from "../routers/morningBriefing";
 import { handleWeeklyReport } from "../routers/weeklyReport";
 import { handleJarvisWebhook } from "../routers/webhookEndpoint";
+import { handleSpotifyOAuthCallback } from "../routers/spotify";
+import { handleDeviceCommandsFetch, handleDeviceCommandDone } from "../routers/deviceEndpoint";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -43,6 +45,8 @@ async function startServer() {
   registerOAuthRoutes(app);
   // Google Calendar OAuth Callback
   app.get("/api/oauth/google/callback", handleGoogleOAuthCallback);
+  // Spotify OAuth Callback
+  app.get("/api/oauth/spotify/callback", handleSpotifyOAuthCallback);
   // Jarvis Chat Streaming (SSE) – beide Pfade registrieren
   const streamHandler = async (req: express.Request, res: express.Response) => {
     const ctx = await createContext({ req, res } as Parameters<typeof createContext>[0]);
@@ -61,6 +65,9 @@ async function startServer() {
   app.post("/api/scheduled/weekly-report", handleWeeklyReport);
   // Öffentlicher Webhook-Eingang für externe Dienste (API-Key-geschützt)
   app.post("/api/webhook/jarvis", handleJarvisWebhook);
+  // Befehls-Queue für iOS-Kurzbefehle (API-Key-geschützt)
+  app.get("/api/device/commands", handleDeviceCommandsFetch);
+  app.post("/api/device/commands/done", handleDeviceCommandDone);
   // tRPC API
   app.use(
     "/api/trpc",
