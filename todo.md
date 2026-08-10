@@ -91,3 +91,5 @@
 - [x] Sprachausgabe-Zustand wird bei Erfolg, Fehler, blockierter Wiedergabe und aufgebrauchtem Budget zurückgesetzt und löst das Weiterhören zentral aus; beim ausdrücklichen Stopp bleibt es bewusst aus
 - [x] Freigabe-Status wird nur nach tatsächlich erlaubter Wiedergabe gesetzt und bei Blockade überall zurückgenommen
 - [x] Prüfpfad für zwei aufeinanderfolgende Spracheingaben dokumentiert (DIAGNOSE_SPRACHE.md)
+- [x] BUG: «Sprachausgabe aktivieren» meldete immer «Ton blockiert» – die Freigabe nutzte eine ungültige MP3-Daten-URL. Jetzt Freigabe über WebAudio (stiller Puffer) plus Anwärmen des Audio-Elements, mit hörbarer Probeansage als Bestätigung
+- [x] Ausweichweg: schlägt `<audio>.play()` fehl, wird die Antwort über WebAudio abgespielt (wichtig für iOS/Safari)

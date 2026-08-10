@@ -139,6 +139,10 @@ function JarvisChatInner() {
   // blockiert die Autoplay-Sperre die Sprachausgabe bei Spracheingabe.
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const audioUnlockedRef = useRef(false);
+  // WebAudio-Kontext: zuverlässigste Methode, die Tonausgabe auf iOS/Safari
+  // per Nutzeraktion freizuschalten (ein kurzer stiller Puffer genügt).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const audioCtxRef = useRef<any>(null);
 
   /** Liefert das dauerhaft genutzte Audio-Element (wird nur einmal erzeugt). */
   const getAudioEl = useCallback(() => {
@@ -156,21 +160,45 @@ function JarvisChatInner() {
    * Liefert true, sobald der Browser die Wiedergabe erlaubt hat.
    */
   const unlockAudio = useCallback(async (): Promise<boolean> => {
-    const el = getAudioEl();
+    let ok = false;
+
+    // 1) WebAudio freischalten – funktioniert auf iOS zuverlässig
     try {
-      // Ein Sekundenbruchteil Stille genügt als Freigabe
-      el.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA";
-      el.muted = true;
-      await el.play();
-      el.pause();
-      el.muted = false;
-      audioUnlockedRef.current = true;
-      return true;
-    } catch {
-      el.muted = false;
-      audioUnlockedRef.current = false;
-      return false;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const Ctx = w.AudioContext || w.webkitAudioContext;
+      if (Ctx) {
+        if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+        const ctx = audioCtxRef.current;
+        if (ctx.state === "suspended") await ctx.resume();
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+        ok = ctx.state === "running";
+      }
+    } catch (e) {
+      console.error("[WebAudio-Freigabe]", e);
     }
+
+    // 2) Zusätzlich das Audio-Element „anwärmen" (stumm, ohne echte Quelle),
+    //    damit spätere play()-Aufrufe als erlaubt gelten.
+    try {
+      const el = getAudioEl();
+      el.muted = true;
+      const p = el.play();
+      if (p && typeof p.then === "function") await p.catch(() => undefined);
+      try { el.pause(); } catch { /* ignorieren */ }
+      el.muted = false;
+    } catch { /* ignorieren */ }
+
+    // Ohne WebAudio-Unterstützung gilt die Freigabe trotzdem als erteilt –
+    // der eigentliche Beweis ist die erste erfolgreiche Wiedergabe.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const hasWebAudio = Boolean((window as any).AudioContext || (window as any).webkitAudioContext);
+    audioUnlockedRef.current = ok || !hasWebAudio;
+    return audioUnlockedRef.current;
   }, [getAudioEl]);
 
   /**
@@ -181,6 +209,35 @@ function JarvisChatInner() {
     if (autoListenRef.current || wakeWordModeRef.current) {
       wantAutoListenRef.current = true;
       setAutoListenTick((t) => t + 1);
+    }
+  }, []);
+
+  /**
+   * Spielt Audio über WebAudio ab. Ausweichweg für Browser, die
+   * `<audio>.play()` ohne direkte Nutzeraktion ablehnen (v.a. iOS/Safari).
+   * Liefert true, wenn die Wiedergabe gestartet wurde.
+   */
+  const playViaWebAudio = useCallback(async (data: ArrayBuffer, onDone: () => void): Promise<boolean> => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const w = window as any;
+      const Ctx = w.AudioContext || w.webkitAudioContext;
+      if (!Ctx) return false;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+      if (ctx.state !== "running") return false;
+      const buffer = await ctx.decodeAudioData(data.slice(0));
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.onended = onDone;
+      source.start(0);
+      audioUnlockedRef.current = true;
+      return true;
+    } catch (e) {
+      console.error("[WebAudio-Wiedergabe]", e);
+      return false;
     }
   }, []);
 
@@ -211,21 +268,25 @@ function JarvisChatInner() {
       if (p && typeof p.catch === "function") {
         p.then(() => { audioUnlockedRef.current = true; }).catch((err: unknown) => {
           console.error("[Audio blockiert]", err);
-          // Zustand sauber zurücksetzen, sonst bleibt „Spricht..." hängen und
-          // die Spracherkennung startet nie wieder.
-          finish();
-          // Freigabe ist offensichtlich nicht (mehr) gültig: Status überall zurücksetzen
-          audioUnlockedRef.current = false;
-          ttsUnlockedRef.current = false;
-          setTtsUnlocked(false);
-          toast.error("Der Browser hat den Ton blockiert. Tippe einmal auf «Sprachausgabe aktivieren».", { duration: 6000 });
+          // Ausweichweg: über WebAudio abspielen. Das funktioniert auf iOS
+          // auch dann, wenn <audio>.play() abgelehnt wird.
+          void (async () => {
+            const played = await playViaWebAudio(bytes.buffer as ArrayBuffer, finish);
+            if (played) return;
+            // Auch das ging nicht: Zustand zurücksetzen, damit nichts hängt
+            finish();
+            audioUnlockedRef.current = false;
+            ttsUnlockedRef.current = false;
+            setTtsUnlocked(false);
+            toast.error("Der Browser hat den Ton blockiert. Tippe einmal auf «Sprachausgabe aktivieren».", { duration: 6000 });
+          })();
         });
       }
     } catch (e) {
       console.error("[ElevenLabs Audio]", e);
       finish();
     }
-  }, [getAudioEl, resumeListeningAfterSpeech]);
+  }, [getAudioEl, resumeListeningAfterSpeech, playViaWebAudio]);
 
   // Stimmen vorladen
   useEffect(() => {
@@ -281,27 +342,25 @@ function JarvisChatInner() {
   const unlockTts = useCallback(async () => {
     // Wichtigster Teil: das HTML-Audio-Element freigeben, damit ElevenLabs
     // auch bei Sprachbedienung abspielen darf.
-    const ok = await unlockAudio();
+    await unlockAudio();
     if ("speechSynthesis" in window) {
       const unlock = new SpeechSynthesisUtterance("");
       window.speechSynthesis.speak(unlock);
       window.speechSynthesis.getVoices();
       voicesLoadedRef.current = true;
     }
-    // Status nur setzen, wenn der Browser die Wiedergabe wirklich erlaubt hat.
-    // Sonst bleibt der Hinweis stehen, statt fälschlich «AN» zu zeigen.
-    if (!ok) {
-      ttsUnlockedRef.current = false;
-      setTtsUnlocked(false);
-      toast.error("Der Browser hat den Ton blockiert. Bitte erneut antippen oder die Ton-Einstellungen prüfen.");
-      return;
-    }
+    // Freigabe gilt jetzt als erteilt. Der endgültige Beweis ist die erste
+    // echte Wiedergabe – schlägt die fehl, erscheint der Hinweis erneut.
     ttsUnlockedRef.current = true;
     ttsEnabledRef.current = true;
     setTtsUnlocked(true);
     setTtsEnabled(true);
-    toast.success("Sprachausgabe aktiviert.");
-  }, [unlockAudio]);
+    // Kurze Probeansage, damit Stefan sofort hört, dass es funktioniert
+    elTtsMutation.mutate({ text: "Sprachausgabe aktiv. Ich bin bereit.", voiceId: profile?.elevenLabsVoiceId ?? undefined, shorten: false }, {
+      onSuccess: (data) => { playElevenLabsAudio(data.audio); if (data.usage) setTtsUsage(data.usage); },
+      onError: (err) => { console.error("[Probeansage]", err); toast.success("Sprachausgabe aktiviert."); },
+    });
+  }, [unlockAudio, elTtsMutation, playElevenLabsAudio, profile?.elevenLabsVoiceId]);
 
   const toggleTts = useCallback(() => {
     if (!ttsUnlockedRef.current) {

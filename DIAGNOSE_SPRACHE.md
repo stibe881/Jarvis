@@ -20,6 +20,11 @@
    setzen den Zustand nicht immer zurück.
 
 ## Lösung
+- **Korrektur (2. Runde):** Die erste Fassung der Freigabe nutzte eine ungültige
+  MP3-Daten-URL. Auf dem iPhone schlug sie deshalb immer fehl und meldete
+  «Der Browser hat den Ton blockiert». Die Freigabe erfolgt jetzt über einen
+  stillen WebAudio-Puffer; zusätzlich wird die Antwort bei abgelehntem
+  `<audio>.play()` über WebAudio abgespielt.
 - Ein einziges Audio-Element wird wiederverwendet und einmalig per Nutzerklick
   freigegeben (Banner «Sprachausgabe aktivieren» **oder** Mikrofon-Knopf).
   Der Freigabe-Status wird nur gesetzt, wenn der Browser die Wiedergabe wirklich
