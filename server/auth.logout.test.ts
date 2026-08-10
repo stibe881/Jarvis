@@ -54,10 +54,12 @@ describe("auth.logout", () => {
     expect(result).toEqual({ success: true });
     expect(clearedCookies).toHaveLength(1);
     expect(clearedCookies[0]?.name).toBe(COOKIE_NAME);
+    // Ohne konfigurierten Plattform-OAuth (OAUTH_SERVER_URL) läuft die App
+    // self-hosted first-party: SameSite=Lax. "none" gilt nur im iframe-Betrieb.
     expect(clearedCookies[0]?.options).toMatchObject({
       maxAge: -1,
       secure: true,
-      sameSite: "none",
+      sameSite: "lax",
       httpOnly: true,
       path: "/",
     });
