@@ -180,7 +180,10 @@ class SDKServer {
     return this.signSession(
       {
         openId,
-        appId: ENV.appId,
+        // Self-Hosting hat keine Plattform-App-ID (VITE_APP_ID). verifySession
+        // verwirft Tokens mit leerer appId – ohne Fallback wäre jedes frisch
+        // ausgestellte Login-Token sofort ungültig (Symptom: Login-Schleife).
+        appId: ENV.appId || "jarvis-selfhosted",
         name: options.name || "",
       },
       options
