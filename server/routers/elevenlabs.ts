@@ -59,12 +59,17 @@ export const elevenLabsRouter = router({
         },
         body: JSON.stringify({
           text: spoken,
-          model_id: "eleven_multilingual_v2", // Unterstützt Deutsch/Schweizerdeutsch
+          // Gleiches Modell und gleiche Einstellungen wie im Stream-Weg
+          // (server/routers/ttsStream.ts). Sonst klingt Jarvis je nach
+          // genutztem Weg unterschiedlich laut.
+          model_id: "eleven_flash_v2_5",
           voice_settings: {
-            stability: 0.5,
+            // Höhere Stabilität, kein Stil-Anteil und kein Speaker-Boost:
+            // ElevenLabs variiert damit Betonung und Lautheit weniger stark
+            stability: 0.75,
             similarity_boost: 0.8,
-            style: 0.2,
-            use_speaker_boost: true,
+            style: 0,
+            use_speaker_boost: false,
           },
         }),
       });

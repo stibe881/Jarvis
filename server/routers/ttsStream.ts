@@ -81,7 +81,16 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
       body: JSON.stringify({
         text: spoken,
         model_id: "eleven_flash_v2_5",
-        voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.2, use_speaker_boost: true },
+        // Höhere Stabilität und kein Stil-Anteil: ElevenLabs variiert damit die
+        // Betonung weniger stark, wodurch aufeinanderfolgende Antworten
+        // gleichmässiger laut klingen. `use_speaker_boost` bleibt aus, weil es
+        // die Lautheit je nach Aufnahme unterschiedlich stark anhebt.
+        voice_settings: {
+          stability: 0.75,
+          similarity_boost: 0.8,
+          style: 0,
+          use_speaker_boost: false,
+        },
       }),
     });
 

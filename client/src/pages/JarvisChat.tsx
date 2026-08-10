@@ -156,10 +156,87 @@ function JarvisChatInner() {
     if (!audioElRef.current) {
       const el = new Audio();
       el.preload = "auto";
+      // Feste Grundlautstärke: verhindert, dass einzelne Antworten
+      // spürbar lauter oder leiser kommen als andere.
+      el.volume = 1;
+      // Nötig, damit das Element über WebAudio geleitet werden darf
+      el.crossOrigin = "anonymous";
       audioElRef.current = el;
     }
     return audioElRef.current;
   }, []);
+
+  /**
+   * Gemeinsame Lautstärke-Kette für alle Wiedergabewege.
+   *
+   * ElevenLabs liefert je nach Text unterschiedlich laute Aufnahmen. Ohne
+   * Ausgleich klingt jede Antwort anders laut. Ein Kompressor dämpft laute
+   * Stellen, ein fester Verstärker hebt das Ergebnis wieder an – damit ist
+   * die wahrgenommene Lautstärke über alle Antworten hinweg gleich.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const audioChainRef = useRef<{ input: any; ctx: any } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mediaSourceRef = useRef<any>(null);
+
+  /** Erzeugt (einmalig) den Audio-Kontext. */
+  const getAudioCtx = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any;
+    const Ctx = w.AudioContext || w.webkitAudioContext;
+    if (!Ctx) return null;
+    if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+    return audioCtxRef.current;
+  }, []);
+
+  /**
+   * Liefert den Eingang der Lautstärke-Kette. Alles, was hier hineingeht,
+   * klingt gleich laut.
+   */
+  const getAudioChain = useCallback(() => {
+    const ctx = getAudioCtx();
+    if (!ctx) return null;
+    if (audioChainRef.current?.ctx === ctx) return audioChainRef.current;
+
+    // Kompressor: dämpft Spitzen, damit leise und laute Aufnahmen sich annähern
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.value = -24;
+    compressor.knee.value = 12;
+    compressor.ratio.value = 4;
+    compressor.attack.value = 0.003;
+    compressor.release.value = 0.25;
+
+    // Verstärker: hebt das komprimierte Signal auf ein einheitliches Niveau
+    const gain = ctx.createGain();
+    gain.value = 1;
+    gain.gain.value = 1.6;
+
+    compressor.connect(gain);
+    gain.connect(ctx.destination);
+
+    audioChainRef.current = { input: compressor, ctx };
+    return audioChainRef.current;
+  }, [getAudioCtx]);
+
+  /**
+   * Verbindet das Audio-Element mit der Lautstärke-Kette. Das darf pro
+   * Element nur einmal passieren, deshalb wird die Quelle gemerkt.
+   */
+  const attachElementToChain = useCallback(() => {
+    const ctx = getAudioCtx();
+    const chain = getAudioChain();
+    if (!ctx || !chain) return;
+    if (mediaSourceRef.current) return;
+    try {
+      const el = getAudioEl();
+      const source = ctx.createMediaElementSource(el);
+      source.connect(chain.input);
+      mediaSourceRef.current = source;
+    } catch (e) {
+      // Manche Browser erlauben das nicht – dann bleibt es beim direkten Ton
+      console.warn("[Lautstärke-Kette]", e);
+    }
+  }, [getAudioCtx, getAudioChain, getAudioEl]);
 
   /**
    * Gibt die Tonausgabe frei. Muss aus einem echten Klick heraus aufgerufen
@@ -171,12 +248,8 @@ function JarvisChatInner() {
 
     // 1) WebAudio freischalten – funktioniert auf iOS zuverlässig
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      const Ctx = w.AudioContext || w.webkitAudioContext;
-      if (Ctx) {
-        if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
-        const ctx = audioCtxRef.current;
+      const ctx = getAudioCtx();
+      if (ctx) {
         if (ctx.state === "suspended") await ctx.resume();
         const buffer = ctx.createBuffer(1, 1, 22050);
         const source = ctx.createBufferSource();
@@ -188,6 +261,10 @@ function JarvisChatInner() {
     } catch (e) {
       console.error("[WebAudio-Freigabe]", e);
     }
+
+    // Lautstärke-Kette gleich beim Freischalten aufbauen, damit die erste
+    // Antwort schon gleich laut klingt wie alle folgenden
+    try { attachElementToChain(); } catch { /* ignorieren */ }
 
     // 2) Zusätzlich das Audio-Element „anwärmen" (stumm, ohne echte Quelle),
     //    damit spätere play()-Aufrufe als erlaubt gelten.
@@ -206,7 +283,7 @@ function JarvisChatInner() {
     const hasWebAudio = Boolean((window as any).AudioContext || (window as any).webkitAudioContext);
     audioUnlockedRef.current = ok || !hasWebAudio;
     return audioUnlockedRef.current;
-  }, [getAudioEl]);
+  }, [getAudioEl, attachElementToChain, getAudioCtx]);
 
   /**
    * Nach dem Sprechen wieder zuhören – zentral, damit jeder Weg (Erfolg,
@@ -226,18 +303,18 @@ function JarvisChatInner() {
    */
   const playViaWebAudio = useCallback(async (data: ArrayBuffer, onDone: () => void): Promise<boolean> => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const w = window as any;
-      const Ctx = w.AudioContext || w.webkitAudioContext;
-      if (!Ctx) return false;
-      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
-      const ctx = audioCtxRef.current;
+      const ctx = getAudioCtx();
+      if (!ctx) return false;
       if (ctx.state === "suspended") await ctx.resume();
       if (ctx.state !== "running") return false;
       const buffer = await ctx.decodeAudioData(data.slice(0));
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      // Über dieselbe Lautstärke-Kette wie der Hauptweg, damit beide
+      // Wege gleich laut klingen
+      const chain = getAudioChain();
+      if (chain) source.connect(chain.input);
+      else source.connect(ctx.destination);
       source.onended = onDone;
       source.start(0);
       audioUnlockedRef.current = true;
@@ -246,7 +323,7 @@ function JarvisChatInner() {
       console.error("[WebAudio-Wiedergabe]", e);
       return false;
     }
-  }, []);
+  }, [getAudioCtx, getAudioChain]);
 
   const playElevenLabsAudio = useCallback((base64: string) => {
     const el = getAudioEl();
@@ -267,6 +344,9 @@ function JarvisChatInner() {
       url = URL.createObjectURL(blob);
       el.src = url;
       el.muted = false;
+      el.volume = 1;
+      // Auch dieser Weg läuft über die Lautstärke-Kette
+      attachElementToChain();
       el.onended = finish;
       el.onerror = finish;
       elAudioRef.current = el;
@@ -293,7 +373,7 @@ function JarvisChatInner() {
       console.error("[ElevenLabs Audio]", e);
       finish();
     }
-  }, [getAudioEl, resumeListeningAfterSpeech, playViaWebAudio]);
+  }, [getAudioEl, resumeListeningAfterSpeech, playViaWebAudio, attachElementToChain]);
 
   // Stimmen vorladen
   useEffect(() => {
@@ -339,6 +419,8 @@ function JarvisChatInner() {
     utterance.lang = "de-DE";
     utterance.rate = 0.92;
     utterance.pitch = 0.75;
+    // Feste Lautstärke, damit der Ersatzweg nicht lauter oder leiser ist
+    utterance.volume = 1;
     const stimmen = window.speechSynthesis.getVoices();
     const bevorzugt = stimmen.find(v => /stefan|markus|conrad/i.test(v.name) && v.lang.startsWith("de"))
       ?? stimmen.find(v => v.lang.startsWith("de"));
@@ -375,6 +457,9 @@ function JarvisChatInner() {
     el.onended = finish;
     el.onerror = null;
     el.muted = false;
+    el.volume = 1;
+    // Über die Lautstärke-Kette leiten, damit jede Antwort gleich laut klingt
+    attachElementToChain();
     elAudioRef.current = el;
     setIsSpeaking(true);
 
@@ -423,7 +508,7 @@ function JarvisChatInner() {
         speakViaBrowser(clean);
       }
     })();
-  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId, speakViaBrowser]);
+  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId, speakViaBrowser, attachElementToChain]);
 
   /** Ausweichweg über die tRPC-Mutation (langsamer, aber robust). */
   const speakViaMutation = useCallback((clean: string, voiceId: string | undefined) => {
@@ -452,7 +537,7 @@ function JarvisChatInner() {
     // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
     const gesprochen = clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
     const utterance = new SpeechSynthesisUtterance(gesprochen);
-        utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80;
+        utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80; utterance.volume = 1;
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => {
           setIsSpeaking(false);

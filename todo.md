@@ -106,3 +106,7 @@
 - [x] Sprachmodus im Profil gespeichert (neue Spalte `speechMode` in user_profiles): Einstellung gilt jetzt auf allen Geräten, lokale Speicherung dient nur als Rückfall beim Laden
 - [x] Sehr lange Antworten: Jarvis spricht eine Kurzfassung aus Anfang, Hinweis «Die vollständige Antwort steht im Chat» und Schlusssatz (damit die Rückfrage hörbar bleibt) statt mitten im Text abzubrechen
 - [x] Kurzfassungslogik in shared/cleanText.ts verschoben: ElevenLabs-Stimme und Browser-Stimme nutzen jetzt dieselbe Logik, damit beide gleich klingen (Browser-Stimme mit höherem Limit, weil sie nichts kostet)
+
+## Lautstärke der Sprachausgabe
+
+- [x] BUG behoben: Die Lautstärke war bei jeder Sprachausgabe unterschiedlich. Zwei Ursachen: (1) die beiden Server-Wege nutzten unterschiedliche Modelle und `use_speaker_boost: true`, das die Lautheit je nach Aufnahme unterschiedlich stark anhebt – jetzt beide auf eleven_flash_v2_5 mit stability 0.75, style 0 und ohne Speaker-Boost; (2) im Browser lief der Ton ohne Ausgleich direkt zur Ausgabe – jetzt laufen alle Wege (Audio-Element, WebAudio-Ausweichweg) durch eine gemeinsame Kette aus Kompressor und festem Verstärker, und die Browser-Stimme hat feste Lautstärke
