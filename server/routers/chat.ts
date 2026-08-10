@@ -377,6 +377,12 @@ LESEN:
 <app_action>{"action":"list_expenses"}</app_action>
 <app_action>{"action":"list_products"}</app_action>
 <app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
+<app_action>{"action":"customer_dossier","customer":"Muster AG"}</app_action>
+
+KUNDEN-DOSSIER: Wenn Stefan eine Gesamtuebersicht zu einem Kunden moechte (z.B. "Erzaehl mir alles ueber Muster AG",
+"Wie steht es mit Kunde X", "Lagebeurteilung Muster AG"), nutze customer_dossier. Das liefert Stammdaten,
+offene Rechnungen mit Betraegen, ueberfaellige Posten, Angebote, Tickets, Projekte und Vertraege in einem Block.
+Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als naechsten Schritt empfiehlst.
 
 ERSTELLEN:
 <app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
@@ -569,6 +575,12 @@ LESEN:
 <app_action>{"action":"list_expenses"}</app_action>
 <app_action>{"action":"list_products"}</app_action>
 <app_action>{"action":"list_project_tasks","project_id":"uuid-hier"}</app_action>
+<app_action>{"action":"customer_dossier","customer":"Muster AG"}</app_action>
+
+KUNDEN-DOSSIER: Wenn Stefan eine Gesamtuebersicht zu einem Kunden moechte (z.B. "Erzaehl mir alles ueber Muster AG",
+"Wie steht es mit Kunde X", "Lagebeurteilung Muster AG"), nutze customer_dossier. Das liefert Stammdaten,
+offene Rechnungen mit Betraegen, ueberfaellige Posten, Angebote, Tickets, Projekte und Vertraege in einem Block.
+Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als naechsten Schritt empfiehlst.
 
 ERSTELLEN:
 <app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>

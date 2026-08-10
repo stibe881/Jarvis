@@ -47,6 +47,182 @@ export async function getCustomer(id: string) {
   return rows[0] ?? null;
 }
 
+/** Anzeigename eines Kundendatensatzes. */
+export function customerLabel(c: Record<string, unknown> | null): string {
+  if (!c) return "Unbekannt";
+  const company = typeof c.company_name === "string" ? c.company_name.trim() : "";
+  if (company) return company;
+  const first = typeof c.first_name === "string" ? c.first_name : "";
+  const last = typeof c.last_name === "string" ? c.last_name : "";
+  const name = `${first} ${last}`.trim();
+  return name || "Unbekannt";
+}
+
+/**
+ * Kunden-Dossier: fasst alle Daten eines Kunden zusammen –
+ * Stammdaten, Tickets, Angebote, Rechnungen, Projekte, Verträge.
+ */
+export type CustomerDossier = {
+  customer: Record<string, unknown>;
+  label: string;
+  tickets: Record<string, unknown>[];
+  quotes: Record<string, unknown>[];
+  invoices: Record<string, unknown>[];
+  projects: Record<string, unknown>[];
+  contracts: Record<string, unknown>[];
+  stats: {
+    openTickets: number;
+    totalTickets: number;
+    openInvoiceCount: number;
+    openInvoiceAmount: number;
+    paidInvoiceAmount: number;
+    overdueCount: number;
+    overdueAmount: number;
+    openQuoteCount: number;
+    openQuoteAmount: number;
+    activeProjects: number;
+    revenueTotal: number;
+  };
+};
+
+/** Findet einen Kunden über die ID oder – wenn keine ID vorliegt – per Namenssuche. */
+export async function findCustomer(idOrName: string): Promise<Record<string, unknown> | null> {
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrName);
+  if (looksLikeUuid) {
+    const byId = await getCustomer(idOrName);
+    if (byId) return byId;
+  }
+  const results = await listCustomers(5, idOrName);
+  return Array.isArray(results) && results.length > 0 ? results[0] : null;
+}
+
+function num(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+}
+
+export async function getCustomerDossier(idOrName: string): Promise<CustomerDossier | null> {
+  const customer = await findCustomer(idOrName);
+  if (!customer) return null;
+  const id = String(customer.id);
+
+  // Alle zugehörigen Datensätze parallel laden; einzelne Fehler sollen das
+  // Dossier nicht verhindern (z.B. wenn eine Tabelle anders heisst).
+  const safe = async <T>(fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { return await fn(); } catch { return fallback; }
+  };
+
+  const [tickets, quotes, invoices, projects, contracts] = await Promise.all([
+    safe(() => sbFetch(`/tickets?customer_id=eq.${id}&order=created_at.desc&limit=50`) as Promise<Record<string, unknown>[]>, []),
+    safe(() => sbFetch(`/quotes?customer_id=eq.${id}&order=created_at.desc&limit=50`) as Promise<Record<string, unknown>[]>, []),
+    safe(() => sbFetch(`/invoices?customer_id=eq.${id}&order=created_at.desc&limit=50`) as Promise<Record<string, unknown>[]>, []),
+    safe(() => sbFetch(`/projects?customer_id=eq.${id}&order=created_at.desc&limit=50`) as Promise<Record<string, unknown>[]>, []),
+    safe(() => sbFetch(`/contracts?customer_id=eq.${id}&order=created_at.desc&limit=50`) as Promise<Record<string, unknown>[]>, []),
+  ]);
+
+  const today = new Date().toISOString().split("T")[0];
+  const openInvoices = invoices.filter((i) => ["open", "sent"].includes(String(i.status)));
+  const paidInvoices = invoices.filter((i) => String(i.status) === "paid");
+  const overdue = openInvoices.filter((i) => typeof i.due_date === "string" && i.due_date < today);
+  const openQuotes = quotes.filter((q) => ["draft", "sent"].includes(String(q.status)));
+
+  const amount = (row: Record<string, unknown>) =>
+    num(row.total ?? row.total_amount ?? row.amount ?? row.gross_total);
+
+  return {
+    customer,
+    label: customerLabel(customer),
+    tickets,
+    quotes,
+    invoices,
+    projects,
+    contracts,
+    stats: {
+      openTickets: tickets.filter((t) => ["open", "in_progress"].includes(String(t.status))).length,
+      totalTickets: tickets.length,
+      openInvoiceCount: openInvoices.length,
+      openInvoiceAmount: openInvoices.reduce((s, i) => s + amount(i), 0),
+      paidInvoiceAmount: paidInvoices.reduce((s, i) => s + amount(i), 0),
+      overdueCount: overdue.length,
+      overdueAmount: overdue.reduce((s, i) => s + amount(i), 0),
+      openQuoteCount: openQuotes.length,
+      openQuoteAmount: openQuotes.reduce((s, q) => s + amount(q), 0),
+      activeProjects: projects.filter((p) => String(p.status) === "active").length,
+      revenueTotal: paidInvoices.reduce((s, i) => s + amount(i), 0),
+    },
+  };
+}
+
+/** Formatiert das Dossier als lesbaren Text für die Chat-Antwort. */
+export function formatDossier(d: CustomerDossier): string {
+  const chf = (n: number) => `CHF ${n.toLocaleString("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const date = (v: unknown) => {
+    if (typeof v !== "string") return "";
+    const parsed = new Date(v);
+    return Number.isNaN(parsed.getTime()) ? "" : parsed.toLocaleDateString("de-CH");
+  };
+  const c = d.customer;
+  const lines: string[] = [];
+
+  lines.push(`## Kunden-Dossier: ${d.label}`);
+  const contact: string[] = [];
+  if (typeof c.email === "string" && c.email) contact.push(`E-Mail: ${c.email}`);
+  if (typeof c.phone === "string" && c.phone) contact.push(`Telefon: ${c.phone}`);
+  const addr = [c.address, `${c.postal_code ?? ""} ${c.city ?? ""}`.trim()].filter((x) => typeof x === "string" && x).join(", ");
+  if (addr) contact.push(`Adresse: ${addr}`);
+  if (contact.length > 0) lines.push(contact.join(" · "));
+
+  lines.push("");
+  lines.push("**Lage auf einen Blick**");
+  lines.push(`- Offene Rechnungen: ${d.stats.openInvoiceCount} (${chf(d.stats.openInvoiceAmount)})`);
+  if (d.stats.overdueCount > 0) {
+    lines.push(`- Davon überfällig: ${d.stats.overdueCount} (${chf(d.stats.overdueAmount)})`);
+  }
+  lines.push(`- Bezahlter Umsatz: ${chf(d.stats.revenueTotal)}`);
+  lines.push(`- Offene Angebote: ${d.stats.openQuoteCount} (${chf(d.stats.openQuoteAmount)})`);
+  lines.push(`- Offene Tickets: ${d.stats.openTickets} von ${d.stats.totalTickets} insgesamt`);
+  lines.push(`- Laufende Projekte: ${d.stats.activeProjects}`);
+
+  if (d.tickets.length > 0) {
+    lines.push("");
+    lines.push("**Letzte Tickets**");
+    for (const t of d.tickets.slice(0, 5)) {
+      lines.push(`- ${t.title ?? "Ohne Titel"} – ${t.status ?? "?"}${t.priority ? ` (${t.priority})` : ""}${date(t.created_at) ? `, ${date(t.created_at)}` : ""}`);
+    }
+  }
+
+  if (d.invoices.length > 0) {
+    lines.push("");
+    lines.push("**Letzte Rechnungen**");
+    for (const i of d.invoices.slice(0, 5)) {
+      const nr = i.invoice_number ?? i.number ?? i.id;
+      lines.push(`- ${nr} – ${i.status ?? "?"}${date(i.due_date) ? `, fällig ${date(i.due_date)}` : ""}`);
+    }
+  }
+
+  if (d.projects.length > 0) {
+    lines.push("");
+    lines.push("**Projekte**");
+    for (const p of d.projects.slice(0, 5)) {
+      lines.push(`- ${p.title ?? p.name ?? "Ohne Titel"} – ${p.status ?? "?"}`);
+    }
+  }
+
+  if (d.contracts.length > 0) {
+    lines.push("");
+    lines.push("**Verträge**");
+    for (const v of d.contracts.slice(0, 5)) {
+      lines.push(`- ${v.title ?? v.name ?? "Vertrag"} – ${v.status ?? "?"}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 // ── Angebote ──────────────────────────────────────────────────────────────────
 export async function listQuotes(limit = 20, status?: string) {
   const q = status ? `?status=eq.${status}&limit=${limit}&order=created_at.desc` : `?limit=${limit}&order=created_at.desc`;
@@ -315,6 +491,13 @@ export async function executeAppAction(action: string, params: Record<string, un
         const result = await createCustomer(params as Parameters<typeof createCustomer>[0]);
         const c = Array.isArray(result) ? result[0] : result;
         return `✅ Kunde erstellt: **${c.company_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim()}** (ID: ${c.id})`;
+      }
+      case "customer_dossier": {
+        const key = (params.customer ?? params.name ?? params.id ?? params.search) as string | undefined;
+        if (!key) return "Für welchen Kunden soll ich das Dossier erstellen?";
+        const dossier = await getCustomerDossier(key);
+        if (!dossier) return `Ich habe keinen Kunden gefunden, der zu „${key}" passt.`;
+        return formatDossier(dossier);
       }
       case "list_tickets": {
         const data = await listTickets(10, params.status as string);

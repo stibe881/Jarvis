@@ -6,6 +6,11 @@
 
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
+import { addTtsUsage, getTtsUsage } from "../db";
+import {
+  MONTHLY_CHAR_LIMIT, MAX_CHARS_PER_SPEECH,
+  budgetState, currentYearMonth, shortenForSpeech,
+} from "../ttsBudget";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 // George – Warm, Captivating Storyteller (britisch, männlich, reif) – am nächsten an Iron Man Jarvis
@@ -17,9 +22,29 @@ export const elevenLabsRouter = router({
     .input(z.object({
       text: z.string().min(1).max(2500),
       voiceId: z.string().optional(),
+      /** false = vollständigen Text sprechen (z.B. Stimmen-Vorschau) */
+      shorten: z.boolean().default(true),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const voiceId = input.voiceId ?? JARVIS_VOICE_ID;
+
+      // Zeichen-Budget prüfen (Free-Plan: 10'000 Zeichen pro Monat)
+      const used = await getTtsUsage(ctx.user.id, currentYearMonth());
+      const state = budgetState(used);
+      if (state.remaining <= 0) {
+        throw new Error(
+          "Das monatliche Sprachausgabe-Budget von 10'000 Zeichen ist aufgebraucht. " +
+          "Die Antworten erscheinen weiterhin im Chat."
+        );
+      }
+
+      // Kurzfassung sprechen, damit das Budget für viele Antworten reicht
+      const limit = Math.min(input.shorten ? MAX_CHARS_PER_SPEECH : 2500, state.remaining);
+      const { spoken, truncated } = input.shorten
+        ? shortenForSpeech(input.text, limit)
+        : { spoken: input.text.slice(0, limit), truncated: input.text.length > limit };
+      if (!spoken) throw new Error("Kein sprechbarer Text vorhanden.");
+
       const resp = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
         method: "POST",
         headers: {
@@ -28,7 +53,7 @@ export const elevenLabsRouter = router({
           "Accept": "audio/mpeg",
         },
         body: JSON.stringify({
-          text: input.text,
+          text: spoken,
           model_id: "eleven_multilingual_v2", // Unterstützt Deutsch/Schweizerdeutsch
           voice_settings: {
             stability: 0.5,
@@ -46,8 +71,23 @@ export const elevenLabsRouter = router({
 
       const arrayBuffer = await resp.arrayBuffer();
       const base64 = Buffer.from(arrayBuffer).toString("base64");
-      return { audio: base64, mimeType: "audio/mpeg" };
+
+      // Verbrauch buchen
+      const total = await addTtsUsage(ctx.user.id, currentYearMonth(), spoken.length);
+      return {
+        audio: base64,
+        mimeType: "audio/mpeg",
+        spokenText: spoken,
+        truncated,
+        usage: budgetState(total),
+      };
     }),
+
+  /** Aktueller Zeichenverbrauch des Monats */
+  usage: protectedProcedure.query(async ({ ctx }) => {
+    const used = await getTtsUsage(ctx.user.id, currentYearMonth());
+    return { ...budgetState(used), yearMonth: currentYearMonth(), monthlyLimit: MONTHLY_CHAR_LIMIT };
+  }),
 
   // ── Verfügbare Stimmen auflisten ──────────────────────────────────────────
   voices: protectedProcedure.query(async () => {

@@ -313,3 +313,17 @@ export const deviceCommands = mysqlTable("device_commands", {
 });
 export type DeviceCommand = typeof deviceCommands.$inferSelect;
 export type InsertDeviceCommand = typeof deviceCommands.$inferInsert;
+
+// ── ElevenLabs-Zeichenverbrauch (Free-Plan: 10'000 Zeichen pro Monat) ─────────
+export const ttsUsage = mysqlTable("tts_usage", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  /** Abrechnungsmonat im Format YYYY-MM, z.B. 2026-08 */
+  yearMonth: varchar("yearMonth", { length: 7 }).notNull(),
+  charsUsed: int("charsUsed").default(0).notNull(),
+  requestCount: int("requestCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TtsUsage = typeof ttsUsage.$inferSelect;
+export type InsertTtsUsage = typeof ttsUsage.$inferInsert;

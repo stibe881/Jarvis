@@ -30,13 +30,15 @@ export default function JarvisProfile() {
   });
   const utils = trpc.useUtils();
   const { data: voicesData } = trpc.elevenlabs.voices.useQuery();
+  const { data: ttsUsage } = trpc.elevenlabs.usage.useQuery();
   const ttsMutation = trpc.elevenlabs.tts.useMutation();
   const [previewVoiceId, setPreviewVoiceId] = useState<string | null>(null);
 
   const previewVoice = (voiceId: string, name: string) => {
     setPreviewVoiceId(voiceId);
-    ttsMutation.mutate({ text: `Hallo, ich bin ${name}. Wie kann ich Ihnen helfen, Sir?`, voiceId }, {
+    ttsMutation.mutate({ text: `Hallo, ich bin ${name}. Wie kann ich Ihnen helfen, Sir?`, voiceId, shorten: false }, {
       onSuccess: (data) => {
+        utils.elevenlabs.usage.invalidate();
         try {
           const binary = atob(data.audio);
           const bytes = new Uint8Array(binary.length);
@@ -242,6 +244,35 @@ export default function JarvisProfile() {
             <Volume2 size={14} /> JARVIS-STIMME (ELEVENLABS)
           </h2>
           <p className="text-xs text-muted-foreground">Wähle die Stimme mit der Jarvis mit dir spricht. Klicke auf ▶ um eine Vorschau zu hören.</p>
+          {/* Zeichen-Budget des Free-Plans */}
+          {ttsUsage && (
+            <div className="space-y-1.5 rounded-lg border border-border p-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Sprachausgabe-Budget ({ttsUsage.yearMonth})</span>
+                <span className={cn(
+                  "tabular-nums font-medium",
+                  ttsUsage.level === "exhausted" || ttsUsage.level === "critical" ? "text-destructive"
+                    : ttsUsage.level === "warn" ? "text-yellow-400" : "text-primary"
+                )}>
+                  {ttsUsage.charsUsed.toLocaleString("de-CH")} / {ttsUsage.limit.toLocaleString("de-CH")} Zeichen
+                </span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    ttsUsage.level === "exhausted" || ttsUsage.level === "critical" ? "bg-destructive"
+                      : ttsUsage.level === "warn" ? "bg-yellow-400" : "bg-primary"
+                  )}
+                  style={{ width: `${ttsUsage.percentUsed}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Jarvis spricht eine Kurzfassung (max. 450 Zeichen), damit das Monatsbudget für viele Antworten reicht.
+                Der vollständige Text bleibt im Chat sichtbar.
+              </p>
+            </div>
+          )}
           {!voicesData || voicesData.length === 0 ? (
             <div className="flex items-center gap-2 text-muted-foreground text-xs"><Loader2 size={12} className="animate-spin" /> Stimmen werden geladen...</div>
           ) : (

@@ -4,6 +4,7 @@ import { z } from "zod";
   getAppDashboard, listCustomers, listTickets, listQuotes,
   listInvoices, listProjects, listLeads, getOverdueInvoices,
   listContracts, listExpenses, listProducts,
+  getCustomerDossier,
 } from "./appIntegration";
 
 export const appDashboardRouter = router({
@@ -18,4 +19,8 @@ export const appDashboardRouter = router({
   contracts: protectedProcedure.input(z.object({ status: z.string().optional() })).query(({ input }) => listContracts(20, input.status)),
   expenses: protectedProcedure.query(() => listExpenses(30)),
   products: protectedProcedure.query(() => listProducts(50)),
+  /** Vollständiges Kunden-Dossier: Stammdaten, Tickets, Angebote, Rechnungen, Projekte, Verträge */
+  customerDossier: protectedProcedure
+    .input(z.object({ idOrName: z.string().min(1) }))
+    .query(({ input }) => getCustomerDossier(input.idOrName)),
 });

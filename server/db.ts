@@ -20,7 +20,7 @@ import {
   promptStats,
   webhookKeys, webhookEvents,
 } from "../drizzle/schema";
-import { spotifyTokens, deviceCommands } from "../drizzle/schema";
+import { spotifyTokens, deviceCommands, ttsUsage } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -568,4 +568,35 @@ export async function deleteDeviceCommand(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(deviceCommands).where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
+}
+
+// ─── ElevenLabs-Zeichenverbrauch ──────────────────────────────────────────────
+
+/** Verbrauchte Zeichen im angegebenen Monat (Format YYYY-MM). */
+export async function getTtsUsage(userId: number, yearMonth: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select().from(ttsUsage)
+    .where(and(eq(ttsUsage.userId, userId), eq(ttsUsage.yearMonth, yearMonth)))
+    .limit(1);
+  return rows[0]?.charsUsed ?? 0;
+}
+
+/** Bucht Zeichen auf den Monat und gibt den neuen Gesamtwert zurück. */
+export async function addTtsUsage(userId: number, yearMonth: string, chars: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return chars;
+  const rows = await db.select().from(ttsUsage)
+    .where(and(eq(ttsUsage.userId, userId), eq(ttsUsage.yearMonth, yearMonth)))
+    .limit(1);
+  const existing = rows[0];
+  if (!existing) {
+    await db.insert(ttsUsage).values({ userId, yearMonth, charsUsed: chars, requestCount: 1 });
+    return chars;
+  }
+  const total = existing.charsUsed + chars;
+  await db.update(ttsUsage)
+    .set({ charsUsed: total, requestCount: existing.requestCount + 1 })
+    .where(eq(ttsUsage.id, existing.id));
+  return total;
 }

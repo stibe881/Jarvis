@@ -10,6 +10,7 @@ import {
   Paperclip, Globe, X, FileText, Loader2, ChevronLeft, MessageSquare
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { detectWakeWord } from "@shared/wakeWord";
 import { cn } from "@/lib/utils";
 import { JarvisOrb } from "@/components/JarvisLayout";
 
@@ -41,6 +42,8 @@ export default function JarvisChat() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const ttsEnabledRef = useRef(true);
+  // Zeichen-Budget der Sprachausgabe (ElevenLabs Free-Plan: 10'000 Zeichen/Monat)
+  const [ttsUsage, setTtsUsage] = useState<{ charsUsed: number; limit: number; remaining: number; percentUsed: number; level: string } | null>(null);
   const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
   const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
@@ -53,6 +56,11 @@ export default function JarvisChat() {
   const isListeningRef = useRef(false); // synchroner Guard für startListening
   const [autoListen, setAutoListen] = useState(false); // kontinuierlicher Zuhör-Modus
   const autoListenRef = useRef(false); // synchron für Callbacks
+  // Wake-Word-Modus: Jarvis lauscht dauerhaft und reagiert erst auf "Hey Jarvis"
+  const [wakeWordMode, setWakeWordMode] = useState(false);
+  const wakeWordModeRef = useRef(false);
+  const [wakeArmed, setWakeArmed] = useState(false); // true = Aktivierungswort erkannt, nächster Satz geht an Jarvis
+  const wakeArmedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voicesLoadedRef = useRef(false);
@@ -112,13 +120,25 @@ export default function JarvisChat() {
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
     if (!ttsEnabledRef.current) return;
-    const clean = text.replace(/[#*`_~>\[\]()]/g, "").replace(/\n+/g, " ").trim().slice(0, 2500);
+    // Nur grob vorreinigen – das Server-Modul kürzt satzweise und rechnet das Budget ab
+    const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/\n+/g, " ").trim().slice(0, 2500);
     if (!clean) return;
     // ElevenLabs TTS bevorzugen
     const voiceId = profile?.elevenLabsVoiceId ?? undefined;
-    elTtsMutation.mutate({ text: clean, voiceId }, {
-      onSuccess: (data) => playElevenLabsAudio(data.audio),
-      onError: () => {
+    elTtsMutation.mutate({ text: clean, voiceId, shorten: true }, {
+      onSuccess: (data) => {
+        playElevenLabsAudio(data.audio);
+        if (data.usage) setTtsUsage(data.usage);
+        if (data.usage && data.usage.level === "critical") {
+          toast.warning(`Sprachausgabe-Budget fast aufgebraucht: ${data.usage.remaining} Zeichen übrig.`);
+        }
+      },
+      onError: (err) => {
+        // Budget aufgebraucht: klarer Hinweis statt stiller Fallback
+        if (err.message.includes("Budget")) {
+          toast.error("Sprachausgabe-Budget für diesen Monat aufgebraucht. Antworten erscheinen weiterhin im Chat.");
+          return;
+        }
         // Fallback: Web Speech API
         if (!("speechSynthesis" in window) || !ttsUnlockedRef.current) return;
         window.speechSynthesis.cancel();
@@ -185,6 +205,12 @@ export default function JarvisChat() {
     { conversationId: activeConvId! },
     { enabled: !!activeConvId }
   );
+
+  // Zeichen-Budget der Sprachausgabe laden
+  const { data: usageData } = trpc.elevenlabs.usage.useQuery();
+  useEffect(() => {
+    if (usageData) setTtsUsage(usageData);
+  }, [usageData]);
 
   useEffect(() => {
     if (dbMessages) setMessages(dbMessages as Message[]);
@@ -373,7 +399,36 @@ export default function JarvisChat() {
         setInterimText("");
         recognitionRef.current = null;
         const spoken = final.trim();
-        if (spoken) {
+        if (!spoken) return;
+
+        // Wake-Word-Modus: erst auf "Hey Jarvis" reagieren
+        if (wakeWordModeRef.current && !wakeArmedRef.current) {
+          const detection = detectWakeWord(spoken);
+          if (!detection.detected) {
+            // Kein Aktivierungswort – einfach weiterlauschen
+            wantAutoListenRef.current = true;
+            setAutoListenTick((t) => t + 1);
+            return;
+          }
+          if (detection.rest) {
+            // "Hey Jarvis, wie ist das Wetter?" – direkt ausführen
+            sendMessageFromText(detection.rest);
+            return;
+          }
+          // Nur das Aktivierungswort – jetzt auf den Auftrag warten
+          wakeArmedRef.current = true;
+          setWakeArmed(true);
+          wantAutoListenRef.current = true;
+          setAutoListenTick((t) => t + 1);
+          return;
+        }
+
+        if (wakeWordModeRef.current && wakeArmedRef.current) {
+          wakeArmedRef.current = false;
+          setWakeArmed(false);
+        }
+
+        {
           // sendMessageFromText legt den Text bei laufender Antwort selbst in die
           // Warteschlange – er geht also nie verloren.
           sendMessageFromText(spoken);
@@ -402,6 +457,11 @@ export default function JarvisChat() {
       setInterimText("");
       if (recognitionRef.current === recognition) {
         recognitionRef.current = null;
+      }
+      // Wake-Word-Modus: dauerhaft weiterlauschen, solange nichts läuft
+      if (wakeWordModeRef.current && !isBusyRef.current) {
+        wantAutoListenRef.current = true;
+        setAutoListenTick((t) => t + 1);
       }
     };
 
@@ -456,6 +516,29 @@ export default function JarvisChat() {
   useEffect(() => {
     autoListenRef.current = autoListen;
   }, [autoListen]);
+
+  // wakeWordModeRef synchron halten
+  useEffect(() => {
+    wakeWordModeRef.current = wakeWordMode;
+  }, [wakeWordMode]);
+
+  /** Wake-Word-Modus umschalten: Jarvis lauscht dauerhaft auf „Hey Jarvis". */
+  const toggleWakeWord = useCallback(() => {
+    const next = !wakeWordMode;
+    setWakeWordMode(next);
+    wakeWordModeRef.current = next;
+    wakeArmedRef.current = false;
+    setWakeArmed(false);
+    if (next) {
+      // Hands-free deaktivieren – die beiden Modi würden sich gegenseitig neu starten
+      setAutoListen(false);
+      autoListenRef.current = false;
+      if (!isListeningRef.current && !isBusyRef.current) startListening();
+      toast.info("Wake-Word aktiv: Sag «Hey Jarvis», um mich anzusprechen.");
+    } else {
+      stopListening();
+    }
+  }, [wakeWordMode, startListening, stopListening]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -570,6 +653,23 @@ export default function JarvisChat() {
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
               <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsUnlocked && ttsEnabled ? "🔊 AN" : "🔇 AUS"}</span>
             </Button>
+            {/* Zeichen-Budget der Sprachausgabe */}
+            {ttsUsage && (
+              <span
+                title={`Sprachausgabe: ${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen in diesem Monat verbraucht`}
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-[10px] tabular-nums",
+                  ttsUsage.level === "exhausted" || ttsUsage.level === "critical"
+                    ? "border-destructive/40 text-destructive"
+                    : ttsUsage.level === "warn"
+                    ? "border-yellow-500/40 text-yellow-400"
+                    : "border-border text-muted-foreground"
+                )}
+              >
+                <span className="hidden md:inline">{ttsUsage.remaining.toLocaleString("de-CH")} Zeichen übrig</span>
+                <span className="md:hidden">{Math.max(0, 100 - ttsUsage.percentUsed)}%</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -683,8 +783,9 @@ export default function JarvisChat() {
                 )}
                 title={isListening ? "Aufnahme stoppen" : "Jarvis sprechen"}
               >
-                {isListening ? <MicOff size={28} /> : <Mic size={28} />}
+              {isListening ? <MicOff size={28} /> : <Mic size={28} />}
               </button>
+              <div className="flex items-center gap-2">
               {/* Kontinuierlicher Zuhör-Modus Toggle */}
               <button
                 onClick={() => {
@@ -708,6 +809,21 @@ export default function JarvisChat() {
                 <div className={cn("w-1.5 h-1.5 rounded-full", autoListen ? "bg-primary animate-pulse" : "bg-muted-foreground")} />
                 {autoListen ? "Hands-free AN" : "Hands-free"}
               </button>
+              {/* Wake-Word-Modus */}
+              <button
+                onClick={toggleWakeWord}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
+                  wakeWordMode
+                    ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
+                    : "bg-transparent border-border text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-300"
+                )}
+                title="Jarvis lauscht dauerhaft und reagiert auf «Hey Jarvis»"
+              >
+                <div className={cn("w-1.5 h-1.5 rounded-full", wakeWordMode ? "bg-cyan-400 animate-pulse" : "bg-muted-foreground")} />
+                {wakeWordMode ? (wakeArmed ? "Ich höre …" : "«Hey Jarvis» AN") : "«Hey Jarvis»"}
+              </button>
+              </div>
             </div>
           )}
 

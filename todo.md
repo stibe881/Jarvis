@@ -71,9 +71,9 @@
 
 ## Phase 5 – Fehlerbehebung und weitere Verbesserungen
 - [x] BUG: Nur eine Anfrage pro Sitzung möglich – zweite Anfrage wird ignoriert (Warteschlange statt Verwerfen, synchrone Sperre, Auto-Zuhören erst nach Antwortende)
-- [ ] Kunden-Dossier: Backend-Aggregation (Kunde, Tickets, Angebote, Rechnungen, Projekte, Verträge)
-- [ ] Kunden-Dossier: Detailseite im Frontend mit allen Kundendaten
-- [ ] Kunden-Dossier: Chat-Aktion "Erzähl mir alles über Kunde X"
-- [ ] Sprachausgabe: Zeichen-Budget-Anzeige für ElevenLabs (10'000/Monat)
-- [ ] Sprachausgabe: Kurzfassung für TTS bei langen Antworten
-- [ ] Sprachausgabe: Wake-Word "Hey Jarvis" für Hands-free-Einstieg
+- [x] Kunden-Dossier: Backend-Aggregation (Kunde, Tickets, Angebote, Rechnungen, Projekte, Verträge)
+- [x] Kunden-Dossier: Detailseite im Frontend mit allen Kundendaten
+- [x] Kunden-Dossier: Chat-Aktion "Erzähl mir alles über Kunde X" (app_action customer_dossier)
+- [x] Sprachausgabe: Zeichen-Budget-Anzeige für ElevenLabs (10'000/Monat)
+- [x] Sprachausgabe: Kurzfassung für TTS bei langen Antworten
+- [x] Sprachausgabe: Wake-Word "Hey Jarvis" für Hands-free-Einstieg
