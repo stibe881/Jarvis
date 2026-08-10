@@ -1,4 +1,5 @@
-import "dotenv/config";
+// MUSS als Erstes stehen: lädt die .env, bevor ein anderes Modul process.env liest.
+import "./loadEnv";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
