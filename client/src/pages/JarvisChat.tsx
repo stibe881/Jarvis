@@ -58,6 +58,15 @@ export default function JarvisChat() {
   const voicesLoadedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const startListeningRef = useRef<(() => void) | null>(null); // Ref für Circular-Dep-Vermeidung
+  // Synchrone Sperre: State-Updates greifen zu spät für schnelle Folgeaufrufe
+  const isBusyRef = useRef(false);
+  // Text, der während einer laufenden Antwort erkannt wurde und danach gesendet wird
+  const queuedTextRef = useRef<string | null>(null);
+  // Läuft ein Wort-für-Wort-Einblenden? Wird abgebrochen, wenn eine neue Anfrage kommt
+  const streamRunIdRef = useRef(0);
+  // Nach dem Sprechen wieder zuhören – aber erst wenn die Antwort fertig ist
+  const wantAutoListenRef = useRef(false);
+  const [autoListenTick, setAutoListenTick] = useState(0);
 
   // ── ElevenLabs ────────────────────────────────────────────────────────────
   const elTtsMutation = trpc.elevenlabs.tts.useMutation();
@@ -79,7 +88,11 @@ export default function JarvisChat() {
         setIsSpeaking(false);
         URL.revokeObjectURL(url);
         elAudioRef.current = null;
-        if (autoListenRef.current) setTimeout(() => { if (autoListenRef.current) startListeningRef.current?.(); }, 600);
+        // Nicht direkt starten: erst wenn keine Antwort mehr läuft (siehe useEffect unten)
+        if (autoListenRef.current) {
+          wantAutoListenRef.current = true;
+          setAutoListenTick((t) => t + 1);
+        }
       };
       audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); elAudioRef.current = null; };
       audio.play().catch(console.error);
@@ -112,7 +125,13 @@ export default function JarvisChat() {
         const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
         utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80;
         utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => { setIsSpeaking(false); if (autoListenRef.current) setTimeout(() => { if (autoListenRef.current) startListeningRef.current?.(); }, 600); };
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          if (autoListenRef.current) {
+            wantAutoListenRef.current = true;
+            setAutoListenTick((t) => t + 1);
+          }
+        };
         setTimeout(() => window.speechSynthesis.speak(utterance), 0);
       },
     });
@@ -180,15 +199,30 @@ export default function JarvisChat() {
   // Kern-Funktion: Nachricht senden
   const sendMessageFromText = useCallback(async (text: string, file?: typeof uploadedFile) => {
     if (!text.trim() && !file) return;
-    if (isStreaming) return;
+    // Läuft noch eine Antwort? Dann Text merken und nach dem Ende automatisch senden,
+    // statt ihn stillschweigend zu verwerfen (das war die Ursache für „nur eine Antwort").
+    if (isBusyRef.current) {
+      queuedTextRef.current = text.trim();
+      toast.info("Ich beantworte noch die letzte Frage – deine neue Nachricht folgt gleich.");
+      return;
+    }
+    isBusyRef.current = true;
 
     let convId = activeConvId;
-    if (!convId) {
-      const result = await createConvMutation.mutateAsync({});
-      convId = result?.id ?? null;
-      if (convId) setActiveConvId(convId);
+    try {
+      if (!convId) {
+        const result = await createConvMutation.mutateAsync({});
+        convId = result?.id ?? null;
+        if (convId) setActiveConvId(convId);
+      }
+    } catch (e) {
+      console.error("[createConversation]", e);
     }
-    if (!convId) return;
+    if (!convId) {
+      isBusyRef.current = false;
+      toast.error("Gespräch konnte nicht gestartet werden. Bitte erneut versuchen.");
+      return;
+    }
 
     const userMsg: Message = { role: "user", content: text, fileUrl: file?.url, fileName: file?.name };
     setMessages((prev) => [...prev, userMsg]);
@@ -217,20 +251,31 @@ export default function JarvisChat() {
       const fullText = result.response;
       utils.chat.listConversations.invalidate();
 
-      // Pseudo-Streaming: Wort für Wort einblenden
+      // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
+      // Abbrechbar, damit eine neue Anfrage nicht warten muss.
+      const runId = ++streamRunIdRef.current;
       const words = fullText.split(" ");
+      const delay = Math.max(6, Math.min(30, 1000 / Math.max(words.length, 1)));
       let displayed = "";
-      const delay = Math.max(8, Math.min(35, 1200 / words.length));
       for (let i = 0; i < words.length; i++) {
+        if (streamRunIdRef.current !== runId) break; // abgebrochen
         displayed += (i > 0 ? " " : "") + words[i];
         const snap = displayed;
         setMessages((prev) => {
           const updated = [...prev];
+          if (updated.length === 0) return prev;
           updated[updated.length - 1] = { ...updated[updated.length - 1], content: snap };
           return updated;
         });
         await new Promise(r => setTimeout(r, delay));
       }
+      // Sicherstellen, dass immer der vollständige Text steht
+      setMessages((prev) => {
+        const updated = [...prev];
+        if (updated.length === 0) return prev;
+        updated[updated.length - 1] = { ...updated[updated.length - 1], content: fullText };
+        return updated;
+      });
 
       // TTS
       if (fullText) speakText(fullText);
@@ -240,10 +285,34 @@ export default function JarvisChat() {
       toast.error(`Fehler: ${msg.slice(0, 120)}`);
       setMessages((prev) => prev.slice(0, -1));
     } finally {
+      isBusyRef.current = false;
       setIsStreaming(false);
       utils.chat.getMessages.invalidate({ conversationId: convId });
     }
-  }, [isStreaming, activeConvId, searchEnabled, createConvMutation, searchMutation, sendMessageMutation, speakText, utils]);
+  }, [activeConvId, searchEnabled, createConvMutation, searchMutation, sendMessageMutation, speakText, utils]);
+
+  // In der Warteschlange stehende Nachricht senden, sobald die Antwort fertig ist
+  useEffect(() => {
+    if (isStreaming) return;
+    const queued = queuedTextRef.current;
+    if (queued) {
+      queuedTextRef.current = null;
+      const timer = setTimeout(() => { sendMessageFromText(queued); }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming, sendMessageFromText]);
+
+  // Hands-free: erst wieder zuhören, wenn keine Antwort mehr läuft
+  useEffect(() => {
+    if (!wantAutoListenRef.current) return;
+    if (isStreaming || isSpeaking) return;
+    if (!autoListenRef.current) { wantAutoListenRef.current = false; return; }
+    wantAutoListenRef.current = false;
+    const timer = setTimeout(() => {
+      if (autoListenRef.current && !isBusyRef.current) startListeningRef.current?.();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [autoListenTick, isStreaming, isSpeaking]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() && !uploadedFile) return;
@@ -303,7 +372,12 @@ export default function JarvisChat() {
         setIsListening(false);
         setInterimText("");
         recognitionRef.current = null;
-        sendMessageFromText(final.trim());
+        const spoken = final.trim();
+        if (spoken) {
+          // sendMessageFromText legt den Text bei laufender Antwort selbst in die
+          // Warteschlange – er geht also nie verloren.
+          sendMessageFromText(spoken);
+        }
       }
     };
 
@@ -598,7 +672,6 @@ export default function JarvisChat() {
             <div className="flex flex-col items-center gap-2 mb-3">
               <button
                 onClick={isListening ? stopListening : startListening}
-                disabled={isStreaming}
                 className={cn(
                   "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg",
                   isListening
@@ -618,7 +691,7 @@ export default function JarvisChat() {
                   const next = !autoListen;
                   setAutoListen(next);
                   autoListenRef.current = next;
-                  if (next && !isListening && !isStreaming) {
+                  if (next && !isListening && !isBusyRef.current) {
                     startListening();
                   } else if (!next) {
                     stopListening();
@@ -646,7 +719,7 @@ export default function JarvisChat() {
                 onKeyDown={handleKeyDown}
                 placeholder={isListening ? "Höre zu..." : "Frag Jarvis etwas... (Enter zum Senden)"}
                 className="min-h-[52px] max-h-[200px] resize-none bg-input border-border text-foreground placeholder:text-muted-foreground focus:border-primary/50"
-                disabled={isStreaming || isListening}
+                disabled={isListening}
               />
             </div>
             <div className="flex flex-col gap-1">
@@ -656,13 +729,13 @@ export default function JarvisChat() {
                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
               </Button>
               {input.trim() && (
-                <Button variant="ghost" size="icon" onClick={isListening ? stopListening : startListening} disabled={isStreaming}
+                <Button variant="ghost" size="icon" onClick={isListening ? stopListening : startListening}
                   className={cn("h-8 w-8", isListening ? "text-red-400 animate-pulse" : "text-muted-foreground hover:text-primary")}
                   title={isListening ? "Aufnahme stoppen" : "Spracheingabe"}>
                   {isListening ? <MicOff size={14} /> : <Mic size={14} />}
                 </Button>
               )}
-              <Button size="icon" onClick={sendMessage} disabled={isStreaming || (!input.trim() && !uploadedFile)}
+              <Button size="icon" onClick={sendMessage} disabled={!input.trim() && !uploadedFile}
                 className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90">
                 {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
               </Button>
