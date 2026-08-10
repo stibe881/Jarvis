@@ -9,8 +9,15 @@
 /** Monatliches Zeichenbudget des ElevenLabs-Free-Plans. */
 export const MONTHLY_CHAR_LIMIT = 10_000;
 
-/** Maximale Zeichen pro einzelner Sprachausgabe. */
-export const MAX_CHARS_PER_SPEECH = 450;
+/**
+ * Maximale Zeichen pro einzelner Sprachausgabe.
+ *
+ * Bei 450 Zeichen reichte das Monatsbudget nur für etwa 22 Antworten und war
+ * nach kurzer Zeit erschöpft. Mit 260 Zeichen sind es rund 38 Antworten,
+ * ohne dass die gesprochene Zusammenfassung unbrauchbar kurz wird. Der
+ * vollständige Text bleibt im Chat sichtbar.
+ */
+export const MAX_CHARS_PER_SPEECH = 260;
 
 /** Abrechnungsmonat im Format YYYY-MM. */
 export function currentYearMonth(date = new Date()): string {

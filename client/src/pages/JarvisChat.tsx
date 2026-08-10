@@ -92,6 +92,7 @@ function JarvisChatInner() {
   const ttsEnabledRef = useRef(true);
   // Zeichen-Budget der Sprachausgabe (ElevenLabs Free-Plan: 10'000 Zeichen/Monat)
   const [ttsUsage, setTtsUsage] = useState<{ charsUsed: number; limit: number; remaining: number; percentUsed: number; level: string } | null>(null);
+  const [ttsResetAt, setTtsResetAt] = useState<number | null>(null);
   const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
   const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
@@ -305,6 +306,28 @@ function JarvisChatInner() {
   // ohne dass eine Abhängigkeitsschleife entsteht.
   const speakViaMutationRef = useRef<((clean: string, voiceId: string | undefined) => void) | null>(null);
 
+  /**
+   * Browser-Stimme als Ersatz, wenn ElevenLabs nicht verfügbar ist (etwa bei
+   * aufgebrauchtem Guthaben). Besser eine einfache Stimme als Schweigen.
+   */
+  const speakViaBrowser = useCallback((clean: string) => {
+    if (!("speechSynthesis" in window)) { setIsSpeaking(false); resumeListeningAfterSpeech(); return; }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
+    // Tiefe, ruhige Stimme – so nah wie möglich am Jarvis-Klang
+    utterance.lang = "de-DE";
+    utterance.rate = 0.92;
+    utterance.pitch = 0.75;
+    const stimmen = window.speechSynthesis.getVoices();
+    const bevorzugt = stimmen.find(v => /stefan|markus|conrad/i.test(v.name) && v.lang.startsWith("de"))
+      ?? stimmen.find(v => v.lang.startsWith("de"));
+    if (bevorzugt) utterance.voice = bevorzugt;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
+    utterance.onerror = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
+    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+  }, [resumeListeningAfterSpeech]);
+
   // TTS-Funktion
   const speakText = useCallback((text: string) => {
     if (!ttsEnabledRef.current) return;
@@ -328,6 +351,21 @@ function JarvisChatInner() {
 
     void (async () => {
       try {
+        // Zuerst prüfen, ob überhaupt Guthaben vorhanden ist. Sonst würde das
+        // Audio-Element eine Fehlerseite laden und Jarvis bliebe still.
+        const vorabPruefung = await fetch("/api/tts/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ text: "x", shorten: true, checkOnly: true }),
+        }).catch(() => null);
+        if (vorabPruefung && vorabPruefung.status === 429) {
+          toast.warning("Sprachausgabe-Guthaben aufgebraucht – Jarvis nutzt vorübergehend die Browser-Stimme.");
+          refetchUsageRef.current?.();
+          speakViaBrowser(clean);
+          return;
+        }
+
         // Adresse mit Text als Abfrageparameter: dadurch kann das
         // Audio-Element selbst laden und fortschreitend abspielen.
         const params = new URLSearchParams({ text: clean, shorten: "true" });
@@ -338,9 +376,8 @@ function JarvisChatInner() {
         const beiFehler = () => {
           if (fehlerBehandelt) return;
           fehlerBehandelt = true;
-          console.warn("[TTS-Stream] Wiedergabe fehlgeschlagen, nutze Ausweichweg");
-          finish();
-          speakViaMutationRef.current?.(clean, voiceId);
+          console.warn("[TTS-Stream] Wiedergabe fehlgeschlagen, nutze Browser-Stimme");
+          speakViaBrowser(clean);
         };
 
         el.src = streamUrl;
@@ -353,12 +390,11 @@ function JarvisChatInner() {
         setTimeout(() => { refetchUsageRef.current?.(); }, 900);
       } catch (e) {
         console.error("[TTS-Stream]", e);
-        finish();
-        // Ausweichweg: klassischer Weg über tRPC (erzeugt komplette Datei)
-        speakViaMutationRef.current?.(clean, voiceId);
+        // Ausweichweg: Browser-Stimme, damit Jarvis nicht verstummt
+        speakViaBrowser(clean);
       }
     })();
-  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId]);
+  }, [getAudioEl, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId, speakViaBrowser]);
 
   /** Ausweichweg über die tRPC-Mutation (langsamer, aber robust). */
   const speakViaMutation = useCallback((clean: string, voiceId: string | undefined) => {
@@ -462,7 +498,10 @@ function JarvisChatInner() {
   const { data: usageData, refetch: refetchUsage } = trpc.elevenlabs.usage.useQuery();
   useEffect(() => { refetchUsageRef.current = () => { void refetchUsage(); }; }, [refetchUsage]);
   useEffect(() => {
-    if (usageData) setTtsUsage(usageData);
+    if (usageData) {
+      setTtsUsage(usageData);
+      setTtsResetAt(usageData.resetAt ?? null);
+    }
   }, [usageData]);
 
   useEffect(() => {
@@ -969,7 +1008,13 @@ function JarvisChatInner() {
             {/* Zeichen-Budget der Sprachausgabe */}
             {ttsUsage && (
               <span
-                title={`Sprachausgabe: ${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen in diesem Monat verbraucht`}
+                title={
+                  ttsUsage.level === "exhausted"
+                    ? `Guthaben aufgebraucht (${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen). Jarvis nutzt die Browser-Stimme.` +
+                      (ttsResetAt ? ` Neues Guthaben ab ${new Date(ttsResetAt).toLocaleDateString("de-CH")}.` : "")
+                    : `Sprachausgabe: ${ttsUsage.charsUsed} von ${ttsUsage.limit} Zeichen verbraucht` +
+                      (ttsResetAt ? `, Rücksetzung am ${new Date(ttsResetAt).toLocaleDateString("de-CH")}` : "")
+                }
                 className={cn(
                   "rounded-full border px-2 py-0.5 text-[10px] tabular-nums",
                   ttsUsage.level === "exhausted" || ttsUsage.level === "critical"
@@ -979,8 +1024,17 @@ function JarvisChatInner() {
                     : "border-border text-muted-foreground"
                 )}
               >
-                <span className="hidden md:inline">{ttsUsage.remaining.toLocaleString("de-CH")} Zeichen übrig</span>
-                <span className="md:hidden">{Math.max(0, 100 - ttsUsage.percentUsed)}%</span>
+                {ttsUsage.level === "exhausted" ? (
+                  <>
+                    <span className="hidden md:inline">Guthaben leer – Browser-Stimme</span>
+                    <span className="md:hidden">0%</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="hidden md:inline">{ttsUsage.remaining.toLocaleString("de-CH")} Zeichen übrig</span>
+                    <span className="md:hidden">{Math.max(0, 100 - ttsUsage.percentUsed)}%</span>
+                  </>
+                )}
               </span>
             )}
           </div>

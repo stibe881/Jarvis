@@ -14,6 +14,7 @@
 import type { Request, Response } from "express";
 import { addTtsUsage, getTtsUsage } from "../db";
 import { budgetState, currentYearMonth, shortenForSpeech, MAX_CHARS_PER_SPEECH } from "../ttsBudget";
+import { fetchLiveQuota, invalidateQuotaCache } from "../ttsQuota";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 const JARVIS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
@@ -24,18 +25,31 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
     // Browser abspielen, während die Daten noch eintreffen. Bei POST müsste der
     // Client die Antwort erst vollständig einlesen.
     const src = req.method === "GET" ? (req.query ?? {}) : (req.body ?? {});
-    const body = src as { text?: string; voiceId?: string; shorten?: boolean | string };
+    const body = src as { text?: string; voiceId?: string; shorten?: boolean | string; checkOnly?: boolean | string };
     const rawText = (body.text ?? "").trim();
     if (!rawText) {
       res.status(400).json({ error: "Kein Text übergeben" });
       return;
     }
 
-    // Budget prüfen
-    const used = await getTtsUsage(userId, currentYearMonth());
-    const state = budgetState(used);
+    // Verbindlich ist der Kontostand bei ElevenLabs. Der lokale Zähler dient
+    // nur als Rückfall, wenn der Dienst nicht erreichbar ist.
+    const live = await fetchLiveQuota();
+    const localUsed = await getTtsUsage(userId, currentYearMonth());
+    const state = live ?? budgetState(localUsed);
     if (state.remaining <= 0) {
-      res.status(429).json({ error: "Monatliches Sprachausgabe-Budget aufgebraucht" });
+      res.status(429).json({
+        error: "Sprachausgabe-Guthaben aufgebraucht",
+        remaining: 0,
+        resetAt: live?.resetAt ?? null,
+      });
+      return;
+    }
+
+    // Reine Vorabprüfung: der Client will nur wissen, ob Guthaben da ist.
+    // So vermeidet er, das Audio-Element auf eine Fehlerseite zu richten.
+    if (body.checkOnly === true || body.checkOnly === "true") {
+      res.status(200).json({ ok: true, remaining: state.remaining, resetAt: live?.resetAt ?? null });
       return;
     }
 
@@ -74,6 +88,12 @@ export async function handleTtsStream(req: Request, res: Response, userId: numbe
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => "");
       console.error("[TTS-Stream]", upstream.status, errText.slice(0, 300));
+      // ElevenLabs meldet ein erschöpftes Guthaben als 401 mit quota_exceeded
+      if (errText.includes("quota_exceeded")) {
+        invalidateQuotaCache();
+        res.status(429).json({ error: "Sprachausgabe-Guthaben aufgebraucht" });
+        return;
+      }
       res.status(502).json({ error: `Sprachausgabe fehlgeschlagen (${upstream.status})` });
       return;
     }

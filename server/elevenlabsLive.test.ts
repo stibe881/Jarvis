@@ -33,7 +33,14 @@ describe("ElevenLabs Sprachausgabe", () => {
       }),
     });
     if (!r.ok) {
-      console.log("[TTS-Fehler]", r.status, (await r.text()).slice(0, 600));
+      const fehler = await r.text();
+      console.log("[TTS-Fehler]", r.status, fehler.slice(0, 600));
+      // Aufgebrauchtes Monatsguthaben ist kein Codefehler. Die App muss dann
+      // auf die Browser-Stimme wechseln – das prüft ttsQuota.test.ts.
+      if (fehler.includes("quota_exceeded")) {
+        console.warn("[TTS] übersprungen – Monatsguthaben aufgebraucht");
+        return;
+      }
     }
     expect(r.ok).toBe(true);
     const buf = await r.arrayBuffer();

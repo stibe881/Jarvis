@@ -11,6 +11,7 @@ import {
   MONTHLY_CHAR_LIMIT, MAX_CHARS_PER_SPEECH,
   budgetState, currentYearMonth, shortenForSpeech,
 } from "../ttsBudget";
+import { fetchLiveQuota, invalidateQuotaCache } from "../ttsQuota";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 // George – Warm, Captivating Storyteller (britisch, männlich, reif) – am nächsten an Iron Man Jarvis
@@ -30,13 +31,15 @@ export const elevenLabsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const voiceId = input.voiceId ?? JARVIS_VOICE_ID;
 
-      // Zeichen-Budget prüfen (Free-Plan: 10'000 Zeichen pro Monat)
+      // Verbindlich ist der Kontostand bei ElevenLabs (der lokale Zähler kennt
+      // nur den Verbrauch über diese App).
+      const live = await fetchLiveQuota();
       const used = await getTtsUsage(ctx.user.id, currentYearMonth());
-      const state = budgetState(used);
+      const state = live ?? budgetState(used);
       if (state.remaining <= 0) {
         throw new Error(
-          "Das monatliche Sprachausgabe-Budget von 10'000 Zeichen ist aufgebraucht. " +
-          "Die Antworten erscheinen weiterhin im Chat."
+          "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. " +
+          "Jarvis wechselt auf die Browser-Stimme, die Antworten erscheinen weiterhin im Chat."
         );
       }
 
@@ -68,6 +71,13 @@ export const elevenLabsRouter = router({
 
       if (!resp.ok) {
         const err = await resp.text();
+        if (err.includes("quota_exceeded")) {
+          invalidateQuotaCache();
+          throw new Error(
+            "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. " +
+            "Jarvis wechselt auf die Browser-Stimme."
+          );
+        }
         throw new Error(`ElevenLabs TTS Fehler: ${resp.status} – ${err}`);
       }
 
@@ -87,8 +97,25 @@ export const elevenLabsRouter = router({
 
   /** Aktueller Zeichenverbrauch des Monats */
   usage: protectedProcedure.query(async ({ ctx }) => {
+    const live = await fetchLiveQuota();
     const used = await getTtsUsage(ctx.user.id, currentYearMonth());
-    return { ...budgetState(used), yearMonth: currentYearMonth(), monthlyLimit: MONTHLY_CHAR_LIMIT };
+    if (live) {
+      return {
+        ...live,
+        yearMonth: currentYearMonth(),
+        monthlyLimit: live.limit,
+        localCharsUsed: used,
+      };
+    }
+    return {
+      ...budgetState(used),
+      yearMonth: currentYearMonth(),
+      monthlyLimit: MONTHLY_CHAR_LIMIT,
+      resetAt: null,
+      tier: "unbekannt",
+      live: false,
+      localCharsUsed: used,
+    };
   }),
 
   // ── Verfügbare Stimmen auflisten ──────────────────────────────────────────

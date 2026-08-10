@@ -95,3 +95,7 @@
 - [x] Ausweichweg: schlägt `<audio>.play()` fehl, wird die Antwort über WebAudio abgespielt (wichtig für iOS/Safari)
 - [x] Sprachausgabe setzt früher ein: gestreamter Endpunkt /api/tts/stream mit Flash-Modell und kleinem Format; Wiedergabe startet, während das Audio noch lädt (Ausweichweg über tRPC bleibt)
 - [x] Jarvis-Persönlichkeit nach Iron Man: kultiviert, britisches Understatement, trockener Sarkasmus, «Sir»-Anrede, typische Formulierungen – in server/persona.ts, angewendet in Chat (beide Pfade), Morgen-Briefing und Wochenbericht
+- [x] BUG behoben: Jarvis schwieg, weil das ElevenLabs-Guthaben aufgebraucht war (9949/10000 Zeichen). Neues Modul server/ttsQuota.ts fragt den echten Kontostand bei ElevenLabs ab (mit Zwischenspeicher) und ist verbindliche Quelle statt des lokalen Zählers
+- [x] Bei aufgebrauchtem Guthaben wechselt Jarvis automatisch auf die Browser-Stimme (tiefe deutsche Stimme) statt zu verstummen; Hinweis per Meldung
+- [x] Guthaben-Anzeige zeigt echten Stand, Rücksetzdatum und den Hinweis «Guthaben leer – Browser-Stimme»
+- [x] Sprachausgabe sparsamer: gesprochene Fassung von 450 auf 260 Zeichen gekürzt (rund 38 statt 22 Antworten pro Monat), voller Text bleibt im Chat
