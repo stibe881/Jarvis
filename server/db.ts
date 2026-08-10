@@ -1,4 +1,4 @@
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertConversation,
@@ -12,16 +12,25 @@ import {
   InsertUser,
   users,
 } from "../drizzle/schema";
-import { googleTokens, memories, userProfiles, InsertUserProfile } from "../drizzle/schema";
 import {
-  documentTemplates, InsertDocumentTemplate,
-  delegations, InsertDelegation,
-  voiceNotes, InsertVoiceNote,
+  googleTokens,
+  memories,
+  userProfiles,
+  InsertUserProfile,
+} from "../drizzle/schema";
+import {
+  documentTemplates,
+  InsertDocumentTemplate,
+  delegations,
+  InsertDelegation,
+  voiceNotes,
+  InsertVoiceNote,
   promptStats,
-  webhookKeys, webhookEvents,
+  webhookKeys,
+  webhookEvents,
 } from "../drizzle/schema";
 import { spotifyTokens, deviceCommands, ttsUsage } from "../drizzle/schema";
-import { ENV } from './_core/env';
+import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -76,8 +85,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values.role = user.role;
       updateSet.role = user.role;
     } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
+      values.role = "admin";
+      updateSet.role = "admin";
     }
 
     if (!values.lastSignedIn) {
@@ -104,7 +113,11 @@ export async function getUserByOpenId(openId: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }
@@ -121,13 +134,21 @@ export async function createConversation(data: InsertConversation) {
 export async function getConversationsByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
+  return db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.userId, userId))
+    .orderBy(desc(conversations.updatedAt));
 }
 
 export async function getConversationById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.id, id))
+    .limit(1);
   return result[0];
 }
 
@@ -156,7 +177,11 @@ export async function addMessage(data: InsertMessage) {
 export async function getMessagesByConversation(conversationId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(messages.createdAt);
 }
 
 // ─── Notes ────────────────────────────────────────────────────────────────────
@@ -172,27 +197,49 @@ export async function getNotesByUser(userId: number, search?: string) {
   const db = await getDb();
   if (!db) return [];
   if (search) {
-    return db.select().from(notes).where(
-      and(
-        eq(notes.userId, userId),
-        or(like(notes.title, `%${search}%`), like(notes.content, `%${search}%`))
+    return db
+      .select()
+      .from(notes)
+      .where(
+        and(
+          eq(notes.userId, userId),
+          or(
+            like(notes.title, `%${search}%`),
+            like(notes.content, `%${search}%`)
+          )
+        )
       )
-    ).orderBy(desc(notes.updatedAt));
+      .orderBy(desc(notes.updatedAt));
   }
-  return db.select().from(notes).where(eq(notes.userId, userId)).orderBy(desc(notes.updatedAt));
+  return db
+    .select()
+    .from(notes)
+    .where(eq(notes.userId, userId))
+    .orderBy(desc(notes.updatedAt));
 }
 
 export async function getNoteById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(notes).where(and(eq(notes.id, id), eq(notes.userId, userId))).limit(1);
+  const result = await db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.id, id), eq(notes.userId, userId)))
+    .limit(1);
   return result[0];
 }
 
-export async function updateNote(id: number, userId: number, data: Partial<InsertNote>) {
+export async function updateNote(
+  id: number,
+  userId: number,
+  data: Partial<InsertNote>
+) {
   const db = await getDb();
   if (!db) return;
-  await db.update(notes).set(data).where(and(eq(notes.id, id), eq(notes.userId, userId)));
+  await db
+    .update(notes)
+    .set(data)
+    .where(and(eq(notes.id, id), eq(notes.userId, userId)));
 }
 
 export async function deleteNote(id: number, userId: number) {
@@ -213,13 +260,24 @@ export async function createTask(data: InsertTask) {
 export async function getTasksByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(tasks).where(eq(tasks.userId, userId)).orderBy(tasks.dueDate, desc(tasks.createdAt));
+  return db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.userId, userId))
+    .orderBy(tasks.dueDate, desc(tasks.createdAt));
 }
 
-export async function updateTask(id: number, userId: number, data: Partial<InsertTask>) {
+export async function updateTask(
+  id: number,
+  userId: number,
+  data: Partial<InsertTask>
+) {
   const db = await getDb();
   if (!db) return;
-  await db.update(tasks).set(data).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  await db
+    .update(tasks)
+    .set(data)
+    .where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
 }
 
 export async function deleteTask(id: number, userId: number) {
@@ -233,7 +291,11 @@ export async function deleteTask(id: number, userId: number) {
 export async function getGoogleToken(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const rows = await db.select().from(googleTokens).where(eq(googleTokens.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(googleTokens)
+    .where(eq(googleTokens.userId, userId))
+    .limit(1);
   return rows[0];
 }
 
@@ -247,15 +309,18 @@ export async function upsertGoogleToken(data: {
 }) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(googleTokens).values(data).onDuplicateKeyUpdate({
-    set: {
-      accessToken: data.accessToken,
-      ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
-      expiresAt: data.expiresAt,
-      scope: data.scope ?? null,
-      email: data.email ?? null,
-    },
-  });
+  await db
+    .insert(googleTokens)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        accessToken: data.accessToken,
+        ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+        expiresAt: data.expiresAt,
+        scope: data.scope ?? null,
+        email: data.email ?? null,
+      },
+    });
 }
 
 export async function deleteGoogleToken(userId: number) {
@@ -269,16 +334,33 @@ export async function deleteGoogleToken(userId: number) {
 export async function getMemoriesByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(memories).where(eq(memories.userId, userId)).orderBy(memories.category, memories.key);
+  return db
+    .select()
+    .from(memories)
+    .where(eq(memories.userId, userId))
+    .orderBy(memories.category, memories.key);
 }
 
-export async function upsertMemory(userId: number, category: string, key: string, value: string, source = "chat") {
+export async function upsertMemory(
+  userId: number,
+  category: string,
+  key: string,
+  value: string,
+  source = "chat"
+) {
   const db = await getDb();
   if (!db) return;
   // Prüfen ob bereits vorhanden (gleicher key)
-  const existing = await db.select().from(memories).where(and(eq(memories.userId, userId), eq(memories.key, key))).limit(1);
+  const existing = await db
+    .select()
+    .from(memories)
+    .where(and(eq(memories.userId, userId), eq(memories.key, key)))
+    .limit(1);
   if (existing.length > 0) {
-    await db.update(memories).set({ value, category, source, updatedAt: new Date() }).where(and(eq(memories.userId, userId), eq(memories.key, key)));
+    await db
+      .update(memories)
+      .set({ value, category, source, updatedAt: new Date() })
+      .where(and(eq(memories.userId, userId), eq(memories.key, key)));
   } else {
     await db.insert(memories).values({ userId, category, key, value, source });
   }
@@ -287,7 +369,9 @@ export async function upsertMemory(userId: number, category: string, key: string
 export async function deleteMemory(userId: number, id: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(memories).where(and(eq(memories.id, id), eq(memories.userId, userId)));
+  await db
+    .delete(memories)
+    .where(and(eq(memories.id, id), eq(memories.userId, userId)));
 }
 
 // ─── User Profile ─────────────────────────────────────────────────────────────
@@ -295,14 +379,24 @@ export async function deleteMemory(userId: number, id: number) {
 export async function getUserProfile(userId: number) {
   const db = await getDb();
   if (!db) return null;
-  const result = await db.select().from(userProfiles).where(eq(userProfiles.userId, userId)).limit(1);
+  const result = await db
+    .select()
+    .from(userProfiles)
+    .where(eq(userProfiles.userId, userId))
+    .limit(1);
   return result[0] ?? null;
 }
 
-export async function upsertUserProfile(userId: number, data: Partial<Omit<InsertUserProfile, "id" | "userId" | "createdAt" | "updatedAt">>) {
+export async function upsertUserProfile(
+  userId: number,
+  data: Partial<
+    Omit<InsertUserProfile, "id" | "userId" | "createdAt" | "updatedAt">
+  >
+) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(userProfiles)
+  await db
+    .insert(userProfiles)
     .values({ userId, ...data })
     .onDuplicateKeyUpdate({ set: { ...data, updatedAt: new Date() } });
 }
@@ -312,47 +406,74 @@ export async function upsertUserProfile(userId: number, data: Partial<Omit<Inser
 export async function createTemplate(data: InsertDocumentTemplate) {
   const db = await getDb();
   if (!db) throw new Error("Keine Datenbankverbindung");
-  const [result] = await db.insert(documentTemplates).values(data).$returningId();
+  const [result] = await db
+    .insert(documentTemplates)
+    .values(data)
+    .$returningId();
   return result;
 }
 
 export async function getTemplatesByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(documentTemplates)
+  return db
+    .select()
+    .from(documentTemplates)
     .where(eq(documentTemplates.userId, userId))
-    .orderBy(desc(documentTemplates.isFavorite), desc(documentTemplates.usageCount));
+    .orderBy(
+      desc(documentTemplates.isFavorite),
+      desc(documentTemplates.usageCount)
+    );
 }
 
 export async function getTemplateById(id: number, userId: number) {
   const db = await getDb();
   if (!db) return null;
-  const r = await db.select().from(documentTemplates)
-    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))).limit(1);
+  const r = await db
+    .select()
+    .from(documentTemplates)
+    .where(
+      and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))
+    )
+    .limit(1);
   return r[0] ?? null;
 }
 
-export async function updateTemplate(id: number, userId: number, data: Partial<InsertDocumentTemplate>) {
+export async function updateTemplate(
+  id: number,
+  userId: number,
+  data: Partial<InsertDocumentTemplate>
+) {
   const db = await getDb();
   if (!db) return;
-  await db.update(documentTemplates).set(data)
-    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+  await db
+    .update(documentTemplates)
+    .set(data)
+    .where(
+      and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))
+    );
 }
 
 export async function deleteTemplate(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(documentTemplates)
-    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+  await db
+    .delete(documentTemplates)
+    .where(
+      and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))
+    );
 }
 
 export async function incrementTemplateUsage(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  const tpl = await getTemplateById(id, userId);
-  if (!tpl) return;
-  await db.update(documentTemplates).set({ usageCount: tpl.usageCount + 1 })
-    .where(and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId)));
+  // Atomar erhöhen statt read-then-write (spart einen Roundtrip und ist race-frei).
+  await db
+    .update(documentTemplates)
+    .set({ usageCount: sql`${documentTemplates.usageCount} + 1` })
+    .where(
+      and(eq(documentTemplates.id, id), eq(documentTemplates.userId, userId))
+    );
 }
 
 // ─── Delegationen ─────────────────────────────────────────────────────────────
@@ -367,21 +488,31 @@ export async function createDelegation(data: InsertDelegation) {
 export async function getDelegationsByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(delegations)
-    .where(eq(delegations.userId, userId)).orderBy(desc(delegations.createdAt));
+  return db
+    .select()
+    .from(delegations)
+    .where(eq(delegations.userId, userId))
+    .orderBy(desc(delegations.createdAt));
 }
 
-export async function updateDelegation(id: number, userId: number, data: Partial<InsertDelegation>) {
+export async function updateDelegation(
+  id: number,
+  userId: number,
+  data: Partial<InsertDelegation>
+) {
   const db = await getDb();
   if (!db) return;
-  await db.update(delegations).set(data)
+  await db
+    .update(delegations)
+    .set(data)
     .where(and(eq(delegations.id, id), eq(delegations.userId, userId)));
 }
 
 export async function deleteDelegation(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(delegations)
+  await db
+    .delete(delegations)
     .where(and(eq(delegations.id, id), eq(delegations.userId, userId)));
 }
 
@@ -397,36 +528,67 @@ export async function createVoiceNote(data: InsertVoiceNote) {
 export async function getVoiceNotesByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(voiceNotes)
-    .where(eq(voiceNotes.userId, userId)).orderBy(desc(voiceNotes.createdAt)).limit(100);
+  return db
+    .select()
+    .from(voiceNotes)
+    .where(eq(voiceNotes.userId, userId))
+    .orderBy(desc(voiceNotes.createdAt))
+    .limit(100);
 }
 
 export async function deleteVoiceNote(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(voiceNotes).where(and(eq(voiceNotes.id, id), eq(voiceNotes.userId, userId)));
+  await db
+    .delete(voiceNotes)
+    .where(and(eq(voiceNotes.id, id), eq(voiceNotes.userId, userId)));
 }
 
 // ─── Lernende Vorschläge ──────────────────────────────────────────────────────
 
-export async function trackPrompt(userId: number, intent: string, label: string, promptText: string) {
+export async function trackPrompt(
+  userId: number,
+  intent: string,
+  label: string,
+  promptText: string
+) {
   const db = await getDb();
   if (!db) return;
-  const existing = await db.select().from(promptStats)
-    .where(and(eq(promptStats.userId, userId), eq(promptStats.intent, intent))).limit(1);
+  const existing = await db
+    .select()
+    .from(promptStats)
+    .where(and(eq(promptStats.userId, userId), eq(promptStats.intent, intent)))
+    .limit(1);
   if (existing[0]) {
-    await db.update(promptStats)
-      .set({ count: existing[0].count + 1, lastUsedAt: Date.now(), label, promptText })
+    await db
+      .update(promptStats)
+      .set({
+        count: sql`${promptStats.count} + 1`,
+        lastUsedAt: Date.now(),
+        label,
+        promptText,
+      })
       .where(eq(promptStats.id, existing[0].id));
   } else {
-    await db.insert(promptStats).values({ userId, intent, label, promptText, count: 1, lastUsedAt: Date.now() });
+    await db
+      .insert(promptStats)
+      .values({
+        userId,
+        intent,
+        label,
+        promptText,
+        count: 1,
+        lastUsedAt: Date.now(),
+      });
   }
 }
 
 export async function getTopPrompts(userId: number, limit = 4) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(promptStats)
+  return db
+    .select()
+    .from(promptStats)
     .where(eq(promptStats.userId, userId))
     .orderBy(desc(promptStats.count), desc(promptStats.lastUsedAt))
     .limit(limit);
@@ -434,31 +596,46 @@ export async function getTopPrompts(userId: number, limit = 4) {
 
 // ─── Webhook-Schlüssel und Ereignisse ─────────────────────────────────────────
 
-export async function createWebhookKey(userId: number, label: string, apiKey: string) {
+export async function createWebhookKey(
+  userId: number,
+  label: string,
+  apiKey: string
+) {
   const db = await getDb();
   if (!db) throw new Error("Keine Datenbankverbindung");
-  const [result] = await db.insert(webhookKeys).values({ userId, label, apiKey }).$returningId();
+  const [result] = await db
+    .insert(webhookKeys)
+    .values({ userId, label, apiKey })
+    .$returningId();
   return { id: result.id, apiKey };
 }
 
 export async function getWebhookKeysByUser(userId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(webhookKeys)
-    .where(eq(webhookKeys.userId, userId)).orderBy(desc(webhookKeys.createdAt));
+  return db
+    .select()
+    .from(webhookKeys)
+    .where(eq(webhookKeys.userId, userId))
+    .orderBy(desc(webhookKeys.createdAt));
 }
 
 export async function findWebhookKey(apiKey: string) {
   const db = await getDb();
   if (!db) return null;
-  const r = await db.select().from(webhookKeys).where(eq(webhookKeys.apiKey, apiKey)).limit(1);
+  const r = await db
+    .select()
+    .from(webhookKeys)
+    .where(eq(webhookKeys.apiKey, apiKey))
+    .limit(1);
   return r[0] ?? null;
 }
 
 export async function touchWebhookKey(id: number, currentCount: number) {
   const db = await getDb();
   if (!db) return;
-  await db.update(webhookKeys)
+  await db
+    .update(webhookKeys)
     .set({ lastUsedAt: Date.now(), callCount: currentCount + 1 })
     .where(eq(webhookKeys.id, id));
 }
@@ -466,20 +643,34 @@ export async function touchWebhookKey(id: number, currentCount: number) {
 export async function deleteWebhookKey(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(webhookKeys).where(and(eq(webhookKeys.id, id), eq(webhookKeys.userId, userId)));
+  await db
+    .delete(webhookKeys)
+    .where(and(eq(webhookKeys.id, id), eq(webhookKeys.userId, userId)));
 }
 
-export async function createWebhookEvent(userId: number, source: string, title: string, body: string | null, notified: boolean) {
+export async function createWebhookEvent(
+  userId: number,
+  source: string,
+  title: string,
+  body: string | null,
+  notified: boolean
+) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(webhookEvents).values({ userId, source, title, body, notified });
+  await db
+    .insert(webhookEvents)
+    .values({ userId, source, title, body, notified });
 }
 
 export async function getWebhookEventsByUser(userId: number, limit = 50) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(webhookEvents)
-    .where(eq(webhookEvents.userId, userId)).orderBy(desc(webhookEvents.createdAt)).limit(limit);
+  return db
+    .select()
+    .from(webhookEvents)
+    .where(eq(webhookEvents.userId, userId))
+    .orderBy(desc(webhookEvents.createdAt))
+    .limit(limit);
 }
 
 // ─── Spotify-Tokens ───────────────────────────────────────────────────────────
@@ -487,7 +678,11 @@ export async function getWebhookEventsByUser(userId: number, limit = 50) {
 export async function getSpotifyToken(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const rows = await db.select().from(spotifyTokens).where(eq(spotifyTokens.userId, userId)).limit(1);
+  const rows = await db
+    .select()
+    .from(spotifyTokens)
+    .where(eq(spotifyTokens.userId, userId))
+    .limit(1);
   return rows[0];
 }
 
@@ -502,17 +697,20 @@ export async function upsertSpotifyToken(data: {
 }) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(spotifyTokens).values(data).onDuplicateKeyUpdate({
-    set: {
-      accessToken: data.accessToken,
-      ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
-      expiresAt: data.expiresAt,
-      scope: data.scope ?? null,
-      displayName: data.displayName ?? null,
-      product: data.product ?? null,
-      updatedAt: new Date(),
-    },
-  });
+  await db
+    .insert(spotifyTokens)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        accessToken: data.accessToken,
+        ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+        expiresAt: data.expiresAt,
+        scope: data.scope ?? null,
+        displayName: data.displayName ?? null,
+        product: data.product ?? null,
+        updatedAt: new Date(),
+      },
+    });
 }
 
 export async function deleteSpotifyToken(userId: number) {
@@ -523,10 +721,16 @@ export async function deleteSpotifyToken(userId: number) {
 
 // ─── Geräte-Befehle (iOS-Kurzbefehle) ─────────────────────────────────────────
 
-export async function createDeviceCommand(userId: number, type: string, payload: unknown, summary: string) {
+export async function createDeviceCommand(
+  userId: number,
+  type: string,
+  payload: unknown,
+  summary: string
+) {
   const db = await getDb();
   if (!db) throw new Error("Keine Datenbankverbindung");
-  const [result] = await db.insert(deviceCommands)
+  const [result] = await db
+    .insert(deviceCommands)
     .values({ userId, type, payload: JSON.stringify(payload), summary })
     .$returningId();
   return result;
@@ -536,67 +740,108 @@ export async function createDeviceCommand(userId: number, type: string, payload:
 export async function claimPendingDeviceCommands(userId: number, limit = 10) {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.select().from(deviceCommands)
-    .where(and(eq(deviceCommands.userId, userId), eq(deviceCommands.status, "pending")))
+  const rows = await db
+    .select()
+    .from(deviceCommands)
+    .where(
+      and(
+        eq(deviceCommands.userId, userId),
+        eq(deviceCommands.status, "pending")
+      )
+    )
     .orderBy(deviceCommands.createdAt)
     .limit(limit);
-  for (const row of rows) {
-    await db.update(deviceCommands)
-      .set({ status: "delivered", deliveredAt: Date.now() })
-      .where(eq(deviceCommands.id, row.id));
-  }
+  if (rows.length === 0) return rows;
+  // Ein einziges UPDATE statt eines pro Zeile (vorher N+1).
+  await db
+    .update(deviceCommands)
+    .set({ status: "delivered", deliveredAt: Date.now() })
+    .where(
+      inArray(
+        deviceCommands.id,
+        rows.map(r => r.id)
+      )
+    );
   return rows;
 }
 
 export async function getDeviceCommandsByUser(userId: number, limit = 30) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(deviceCommands)
+  return db
+    .select()
+    .from(deviceCommands)
     .where(eq(deviceCommands.userId, userId))
     .orderBy(desc(deviceCommands.createdAt))
     .limit(limit);
 }
 
-export async function markDeviceCommandDone(id: number, userId: number, status: "done" | "failed" = "done") {
+export async function markDeviceCommandDone(
+  id: number,
+  userId: number,
+  status: "done" | "failed" = "done"
+) {
   const db = await getDb();
   if (!db) return;
-  await db.update(deviceCommands).set({ status })
+  await db
+    .update(deviceCommands)
+    .set({ status })
     .where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
 }
 
 export async function deleteDeviceCommand(id: number, userId: number) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(deviceCommands).where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
+  await db
+    .delete(deviceCommands)
+    .where(and(eq(deviceCommands.id, id), eq(deviceCommands.userId, userId)));
 }
 
 // ─── ElevenLabs-Zeichenverbrauch ──────────────────────────────────────────────
 
 /** Verbrauchte Zeichen im angegebenen Monat (Format YYYY-MM). */
-export async function getTtsUsage(userId: number, yearMonth: string): Promise<number> {
+export async function getTtsUsage(
+  userId: number,
+  yearMonth: string
+): Promise<number> {
   const db = await getDb();
   if (!db) return 0;
-  const rows = await db.select().from(ttsUsage)
+  const rows = await db
+    .select()
+    .from(ttsUsage)
     .where(and(eq(ttsUsage.userId, userId), eq(ttsUsage.yearMonth, yearMonth)))
     .limit(1);
   return rows[0]?.charsUsed ?? 0;
 }
 
 /** Bucht Zeichen auf den Monat und gibt den neuen Gesamtwert zurück. */
-export async function addTtsUsage(userId: number, yearMonth: string, chars: number): Promise<number> {
+export async function addTtsUsage(
+  userId: number,
+  yearMonth: string,
+  chars: number
+): Promise<number> {
   const db = await getDb();
   if (!db) return chars;
-  const rows = await db.select().from(ttsUsage)
+  const rows = await db
+    .select()
+    .from(ttsUsage)
     .where(and(eq(ttsUsage.userId, userId), eq(ttsUsage.yearMonth, yearMonth)))
     .limit(1);
   const existing = rows[0];
   if (!existing) {
-    await db.insert(ttsUsage).values({ userId, yearMonth, charsUsed: chars, requestCount: 1 });
+    await db
+      .insert(ttsUsage)
+      .values({ userId, yearMonth, charsUsed: chars, requestCount: 1 });
     return chars;
   }
   const total = existing.charsUsed + chars;
-  await db.update(ttsUsage)
-    .set({ charsUsed: total, requestCount: existing.requestCount + 1 })
+  // Atomar im DB-Server erhöhen (verhindert verlorene Updates bei parallelen Aufrufen).
+  await db
+    .update(ttsUsage)
+    .set({
+      charsUsed: sql`${ttsUsage.charsUsed} + ${chars}`,
+      requestCount: sql`${ttsUsage.requestCount} + 1`,
+    })
     .where(eq(ttsUsage.id, existing.id));
   return total;
 }
