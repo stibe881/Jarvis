@@ -1,4 +1,5 @@
 import type { CookieOptions, Request } from "express";
+import { ENV } from "./env";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -39,10 +40,20 @@ export function getSessionCookieOptions(
   //       ? hostname
   //       : undefined;
 
+  // Plattform-Betrieb (Manus-OAuth, App läuft im iframe): SameSite=None ist
+  // nötig, damit der Cookie im eingebetteten Kontext mitgeschickt wird.
+  //
+  // Self-Hosting (lokaler Login, eigene Domain): SameSite=Lax. Wichtig, weil
+  // SameSite=None zwingend das Secure-Flag verlangt – und hinter einem Proxy,
+  // der kein X-Forwarded-Proto setzt, wird Secure hier false. Den Cookie
+  // "None ohne Secure" verwirft jeder moderne Browser stillschweigend; das
+  // Symptom ist eine Login-Schleife (Anmeldung ok, Session hält nie).
+  const eingebettet = Boolean(ENV.oAuthServerUrl);
+
   return {
     httpOnly: true,
     path: "/",
-    sameSite: "none",
+    sameSite: eingebettet ? "none" : "lax",
     secure: isSecureRequest(req),
   };
 }
