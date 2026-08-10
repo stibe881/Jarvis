@@ -123,37 +123,109 @@ function JarvisChatInner() {
   // Nach dem Sprechen wieder zuhören – aber erst wenn die Antwort fertig ist
   const wantAutoListenRef = useRef(false);
   const [autoListenTick, setAutoListenTick] = useState(0);
+  // Wächter: startet die Erkennung nicht innerhalb weniger Sekunden, wird der
+  // Zustand zurückgesetzt, damit der Mikrofon-Knopf nie blockiert bleibt.
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref auf createAndStartRecognition, damit ein Neustart aus der Funktion
+  // selbst möglich ist, ohne eine Abhängigkeitsschleife zu erzeugen.
+  const createAndStartRecognitionRef = useRef<(() => void) | null>(null);
 
   // ── ElevenLabs ────────────────────────────────────────────────────────────
   const elTtsMutation = trpc.elevenlabs.tts.useMutation();
   const elSttMutation = trpc.elevenlabs.stt.useMutation();
   const elAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Wiederverwendetes Audio-Element: einmal per Klick freigegeben, danach darf
+  // der Browser es auch ohne direkte Nutzeraktion abspielen. Ohne diesen Trick
+  // blockiert die Autoplay-Sperre die Sprachausgabe bei Spracheingabe.
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const audioUnlockedRef = useRef(false);
+
+  /** Liefert das dauerhaft genutzte Audio-Element (wird nur einmal erzeugt). */
+  const getAudioEl = useCallback(() => {
+    if (!audioElRef.current) {
+      const el = new Audio();
+      el.preload = "auto";
+      audioElRef.current = el;
+    }
+    return audioElRef.current;
+  }, []);
+
+  /**
+   * Gibt die Tonausgabe frei. Muss aus einem echten Klick heraus aufgerufen
+   * werden – danach funktioniert die Wiedergabe auch bei Sprachbedienung.
+   * Liefert true, sobald der Browser die Wiedergabe erlaubt hat.
+   */
+  const unlockAudio = useCallback(async (): Promise<boolean> => {
+    const el = getAudioEl();
+    try {
+      // Ein Sekundenbruchteil Stille genügt als Freigabe
+      el.src = "data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA";
+      el.muted = true;
+      await el.play();
+      el.pause();
+      el.muted = false;
+      audioUnlockedRef.current = true;
+      return true;
+    } catch {
+      el.muted = false;
+      audioUnlockedRef.current = false;
+      return false;
+    }
+  }, [getAudioEl]);
+
+  /**
+   * Nach dem Sprechen wieder zuhören – zentral, damit jeder Weg (Erfolg,
+   * Fehler, blockierte Wiedergabe) denselben Zustand hinterlässt.
+   */
+  const resumeListeningAfterSpeech = useCallback(() => {
+    if (autoListenRef.current || wakeWordModeRef.current) {
+      wantAutoListenRef.current = true;
+      setAutoListenTick((t) => t + 1);
+    }
+  }, []);
 
   const playElevenLabsAudio = useCallback((base64: string) => {
+    const el = getAudioEl();
+    let url: string | null = null;
+    const finish = () => {
+      setIsSpeaking(false);
+      if (url) { URL.revokeObjectURL(url); url = null; }
+      elAudioRef.current = null;
+      resumeListeningAfterSpeech();
+    };
     try {
-      if (elAudioRef.current) { elAudioRef.current.pause(); elAudioRef.current = null; }
+      // Laufende Wiedergabe beenden
+      try { el.pause(); } catch { /* ignorieren */ }
       const binary = atob(base64);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       const blob = new Blob([bytes], { type: "audio/mpeg" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      elAudioRef.current = audio;
+      url = URL.createObjectURL(blob);
+      el.src = url;
+      el.muted = false;
+      el.onended = finish;
+      el.onerror = finish;
+      elAudioRef.current = el;
       setIsSpeaking(true);
-      audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(url);
-        elAudioRef.current = null;
-        // Nicht direkt starten: erst wenn keine Antwort mehr läuft (siehe useEffect unten)
-        if (autoListenRef.current) {
-          wantAutoListenRef.current = true;
-          setAutoListenTick((t) => t + 1);
-        }
-      };
-      audio.onerror = () => { setIsSpeaking(false); URL.revokeObjectURL(url); elAudioRef.current = null; };
-      audio.play().catch(console.error);
-    } catch (e) { console.error("[ElevenLabs Audio]", e); }
-  }, []);
+      const p = el.play();
+      if (p && typeof p.catch === "function") {
+        p.then(() => { audioUnlockedRef.current = true; }).catch((err: unknown) => {
+          console.error("[Audio blockiert]", err);
+          // Zustand sauber zurücksetzen, sonst bleibt „Spricht..." hängen und
+          // die Spracherkennung startet nie wieder.
+          finish();
+          // Freigabe ist offensichtlich nicht (mehr) gültig: Status überall zurücksetzen
+          audioUnlockedRef.current = false;
+          ttsUnlockedRef.current = false;
+          setTtsUnlocked(false);
+          toast.error("Der Browser hat den Ton blockiert. Tippe einmal auf «Sprachausgabe aktivieren».", { duration: 6000 });
+        });
+      }
+    } catch (e) {
+      console.error("[ElevenLabs Audio]", e);
+      finish();
+    }
+  }, [getAudioEl, resumeListeningAfterSpeech]);
 
   // Stimmen vorladen
   useEffect(() => {
@@ -185,53 +257,68 @@ function JarvisChatInner() {
         // Budget aufgebraucht: klarer Hinweis statt stiller Fallback
         if (err.message.includes("Budget")) {
           toast.error("Sprachausgabe-Budget für diesen Monat aufgebraucht. Antworten erscheinen weiterhin im Chat.");
+          resumeListeningAfterSpeech();
           return;
         }
+        console.error("[TTS]", err);
         // Fallback: Web Speech API
-        if (!("speechSynthesis" in window) || !ttsUnlockedRef.current) return;
+        if (!("speechSynthesis" in window)) { resumeListeningAfterSpeech(); return; }
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
         utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80;
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => {
           setIsSpeaking(false);
-          if (autoListenRef.current) {
-            wantAutoListenRef.current = true;
-            setAutoListenTick((t) => t + 1);
-          }
+          resumeListeningAfterSpeech();
         };
+        utterance.onerror = () => { setIsSpeaking(false); resumeListeningAfterSpeech(); };
         setTimeout(() => window.speechSynthesis.speak(utterance), 0);
       },
     });
-  }, [elTtsMutation, playElevenLabsAudio]);
+  }, [elTtsMutation, playElevenLabsAudio, resumeListeningAfterSpeech, profile?.elevenLabsVoiceId]);
 
   // TTS einmalig entsperren (per User-Gesture)
-  const unlockTts = useCallback(() => {
-    if (!("speechSynthesis" in window)) return;
-    const unlock = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(unlock);
+  const unlockTts = useCallback(async () => {
+    // Wichtigster Teil: das HTML-Audio-Element freigeben, damit ElevenLabs
+    // auch bei Sprachbedienung abspielen darf.
+    const ok = await unlockAudio();
+    if ("speechSynthesis" in window) {
+      const unlock = new SpeechSynthesisUtterance("");
+      window.speechSynthesis.speak(unlock);
+      window.speechSynthesis.getVoices();
+      voicesLoadedRef.current = true;
+    }
+    // Status nur setzen, wenn der Browser die Wiedergabe wirklich erlaubt hat.
+    // Sonst bleibt der Hinweis stehen, statt fälschlich «AN» zu zeigen.
+    if (!ok) {
+      ttsUnlockedRef.current = false;
+      setTtsUnlocked(false);
+      toast.error("Der Browser hat den Ton blockiert. Bitte erneut antippen oder die Ton-Einstellungen prüfen.");
+      return;
+    }
     ttsUnlockedRef.current = true;
     ttsEnabledRef.current = true;
     setTtsUnlocked(true);
     setTtsEnabled(true);
-    voicesLoadedRef.current = true;
-    window.speechSynthesis.getVoices();
-  }, []);
+    toast.success("Sprachausgabe aktiviert.");
+  }, [unlockAudio]);
 
   const toggleTts = useCallback(() => {
     if (!ttsUnlockedRef.current) {
       unlockTts();
       return;
     }
-    if (isSpeaking) {
+    const next = !ttsEnabled;
+    setTtsEnabled(next);
+    ttsEnabledRef.current = next;
+    if (!next) {
+      // Ausschalten stoppt auch die laufende Wiedergabe
       window.speechSynthesis?.cancel();
+      try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+      elAudioRef.current = null;
       setIsSpeaking(false);
-    } else {
-      const next = !ttsEnabled;
-      setTtsEnabled(next);
-      ttsEnabledRef.current = next;
     }
-  }, [ttsEnabled, isSpeaking, unlockTts]);
+  }, [ttsEnabled, unlockTts]);
 
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
@@ -380,13 +467,28 @@ function JarvisChatInner() {
   useEffect(() => {
     if (!wantAutoListenRef.current) return;
     if (isStreaming || isSpeaking) return;
-    if (!autoListenRef.current) { wantAutoListenRef.current = false; return; }
+    if (!autoListenRef.current && !wakeWordModeRef.current) { wantAutoListenRef.current = false; return; }
     wantAutoListenRef.current = false;
     const timer = setTimeout(() => {
-      if (autoListenRef.current && !isBusyRef.current) startListeningRef.current?.();
+      const wanted = autoListenRef.current || wakeWordModeRef.current;
+      if (wanted && !isBusyRef.current && !isListeningRef.current) startListeningRef.current?.();
     }, 500);
     return () => clearTimeout(timer);
   }, [autoListenTick, isStreaming, isSpeaking]);
+
+  // Nach jeder abgeschlossenen Antwort im Hands-free-/Wake-Word-Modus erneut
+  // zuhören – auch dann, wenn die Sprachausgabe nichts abgespielt hat.
+  useEffect(() => {
+    if (isStreaming) return;
+    if (!autoListenRef.current && !wakeWordModeRef.current) return;
+    if (isSpeaking || isListeningRef.current || isBusyRef.current) return;
+    const timer = setTimeout(() => {
+      if ((autoListenRef.current || wakeWordModeRef.current) && !isListeningRef.current && !isBusyRef.current) {
+        startListeningRef.current?.();
+      }
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [isStreaming, isSpeaking]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() && !uploadedFile) return;
@@ -397,10 +499,21 @@ function JarvisChatInner() {
     await sendMessageFromText(text, file ?? undefined);
   }, [input, uploadedFile, sendMessageFromText]);
 
-  // startListeningRef aktuell halten (für speakText Callback)
+  // Refs aktuell halten (vermeidet Abhängigkeitsschleifen in Callbacks)
   useEffect(() => {
     startListeningRef.current = startListening;
+    createAndStartRecognitionRef.current = createAndStartRecognition;
   });
+
+  // Beim Verlassen der Seite alles sauber beenden
+  useEffect(() => {
+    return () => {
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      try { recognitionRef.current?.abort(); } catch { /* ignorieren */ }
+      try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -427,6 +540,7 @@ function JarvisChatInner() {
       isListeningRef.current = true;
       setIsListening(true);
       setInterimText("");
+      if (watchdogRef.current) { clearTimeout(watchdogRef.current); watchdogRef.current = null; }
     };
 
     recognition.onresult = (event: any) => {
@@ -516,10 +630,22 @@ function JarvisChatInner() {
     recognitionRef.current = recognition;
     try {
       recognition.start();
+      // Falls onstart nicht innerhalb von 3 Sekunden kommt, ist die Instanz tot
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+      watchdogRef.current = setTimeout(() => {
+        if (!isListeningRef.current) {
+          try { recognition.abort(); } catch { /* ignorieren */ }
+          if (recognitionRef.current === recognition) recognitionRef.current = null;
+          setIsListening(false);
+          toast.error("Das Mikrofon hat nicht gestartet. Bitte nochmals antippen.");
+        }
+      }, 3000);
     } catch {
       isListeningRef.current = false;
       setIsListening(false);
       recognitionRef.current = null;
+      // Häufigster Grund: die alte Instanz läuft noch. Kurz warten, dann erneut.
+      setTimeout(() => { if (!isListeningRef.current) createAndStartRecognitionRef.current?.(); }, 400);
     }
   }, [sendMessageFromText]);
 
@@ -532,23 +658,31 @@ function JarvisChatInner() {
       return;
     }
 
-    // TTS stoppen während Aufnahme
+    // Der Mikrofon-Klick ist eine echte Nutzeraktion: gleich die Tonausgabe
+    // freigeben, damit Jarvis später auch bei Sprachbedienung sprechen darf.
+    if (!audioUnlockedRef.current) unlockAudio();
+
+    // Laufende Sprachausgabe beenden, damit sie nicht mit aufgenommen wird
     window.speechSynthesis?.cancel();
+    try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+    elAudioRef.current = null;
     setIsSpeaking(false);
 
-    // Falls noch aktiv: stoppen (KEIN abort – stop() lässt onend feuern)
-    if (recognitionRef.current) {
-      try { recognitionRef.current.stop(); } catch { /* ignorieren */ }
+    // Falls noch eine Instanz existiert: hart beenden und neu aufbauen.
+    // abort() ist hier richtig, weil wir die Instanz ohnehin verwerfen –
+    // stop() konnte hängen bleiben, wodurch die zweite Aufnahme nie startete.
+    const old = recognitionRef.current;
+    if (old) {
       recognitionRef.current = null;
       isListeningRef.current = false;
-      // Kurze Pause damit onend feuern kann, dann neu starten
-      setTimeout(() => createAndStartRecognition(), 300);
+      try { old.onend = null; old.onresult = null; old.onerror = null; } catch { /* ignorieren */ }
+      try { old.abort(); } catch { /* ignorieren */ }
+      setTimeout(() => createAndStartRecognition(), 250);
       return;
     }
 
-    // Direkt starten (keine Pause nötig wenn keine aktive Instanz)
     createAndStartRecognition();
-  }, [createAndStartRecognition]);
+  }, [createAndStartRecognition, unlockAudio]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
@@ -606,7 +740,18 @@ function JarvisChatInner() {
     finally { setIsUploading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
 
-  const stopSpeaking = () => { window.speechSynthesis?.cancel(); setIsSpeaking(false); };
+  /**
+   * Beendet jede Form der Sprachausgabe und hinterlässt einen sauberen Zustand.
+   * `resume` steuert, ob danach im Hands-free-/Wake-Word-Modus wieder zugehört
+   * werden soll – beim ausdrücklichen Stoppen durch Stefan bewusst nicht.
+   */
+  const stopSpeaking = useCallback((resume = false) => {
+    window.speechSynthesis?.cancel();
+    try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
+    elAudioRef.current = null;
+    setIsSpeaking(false);
+    if (resume) resumeListeningAfterSpeech();
+  }, [resumeListeningAfterSpeech]);
 
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -696,7 +841,7 @@ function JarvisChatInner() {
               <Globe size={14} />
               <span className="hidden sm:inline">{searchEnabled ? "Suche AN" : "Suche AUS"}</span>
             </Button>
-            <Button variant="ghost" size="sm" onClick={isSpeaking ? stopSpeaking : toggleTts}
+            <Button variant="ghost" size="sm" onClick={isSpeaking ? () => stopSpeaking(false) : toggleTts}
               className={cn("gap-1 text-xs px-2 border", ttsUnlocked && ttsEnabled ? "text-primary border-primary/30 bg-primary/10" : "text-muted-foreground border-transparent")} title="Sprachausgabe">
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
               <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsUnlocked && ttsEnabled ? "🔊 AN" : "🔇 AUS"}</span>
@@ -735,7 +880,7 @@ function JarvisChatInner() {
                 </div>
                 <div className="text-left">
                   <p className="text-xs font-semibold text-primary">Sprachausgabe aktivieren</p>
-                  <p className="text-xs text-muted-foreground">Tippe hier damit Jarvis mit dir sprechen kann</p>
+                  <p className="text-xs text-muted-foreground">Einmal antippen – danach spricht Jarvis auch bei Sprachbedienung</p>
                 </div>
               </button>
             </div>

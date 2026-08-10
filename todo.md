@@ -84,3 +84,10 @@
 - [x] Proaktive Handlungsvorschläge nach jeder Antwort (erzwungen via ensureNextStep + Tests)
 - [x] Ausgeführte Schritte im Chat sichtbar machen (Aktionsprotokoll)
 - [x] Bestätigung bei kritischen Aktionen (Rechnung bezahlt/erstellt, Termin löschen, Einladung, WhatsApp, Status-Änderungen) – werden vorgemerkt und erst nach klarem «Ja» ausgeführt
+
+## Phase 6 – Spracheingabe-Bug
+- [x] BUG: Zweite Spracheingabe löst nicht mehr aus – alte Erkennungs-Instanz wird nun hart beendet und neu aufgebaut, Wächter-Timer verhindert hängenden «Höre zu»-Zustand
+- [x] BUG: Jarvis spricht nicht mehr – Ursache war die Autoplay-Sperre des Browsers bei Sprachbedienung. Ton wird jetzt einmalig per Klick freigegeben (auch über den Mikrofon-Knopf) und dauerhaft wiederverwendet
+- [x] Sprachausgabe-Zustand wird bei Erfolg, Fehler, blockierter Wiedergabe und aufgebrauchtem Budget zurückgesetzt und löst das Weiterhören zentral aus; beim ausdrücklichen Stopp bleibt es bewusst aus
+- [x] Freigabe-Status wird nur nach tatsächlich erlaubter Wiedergabe gesetzt und bei Blockade überall zurückgenommen
+- [x] Prüfpfad für zwei aufeinanderfolgende Spracheingaben dokumentiert (DIAGNOSE_SPRACHE.md)
