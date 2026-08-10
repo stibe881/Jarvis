@@ -20,6 +20,8 @@ export function currentYearMonth(date = new Date()): string {
 /** Entfernt Markdown, Emojis und Aufzählungszeichen, damit nichts mitgesprochen wird. */
 export function stripForSpeech(text: string): string {
   return text
+    // Protokoll der ausgeführten Schritte nie mitsprechen
+    .replace(/⟦schritte⟧[\s\S]*$/g, " ")
     // Codeblöcke ganz entfernen – die will niemand vorgelesen bekommen
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")

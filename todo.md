@@ -77,3 +77,10 @@
 - [x] Sprachausgabe: Zeichen-Budget-Anzeige für ElevenLabs (10'000/Monat)
 - [x] Sprachausgabe: Kurzfassung für TTS bei langen Antworten
 - [x] Sprachausgabe: Wake-Word "Hey Jarvis" für Hands-free-Einstieg
+- [x] Kundenliste in «Meine App» verlinkt direkt aufs Kunden-Dossier (ein Klick)
+- [x] Agenten-Schleife: Jarvis führt mehrere Werkzeuge nacheinander aus bis die Aufgabe erledigt ist
+- [x] Werkzeug-Katalog vereinheitlichen (App, Kalender, Aufgaben, Notizen, Spotify, Gerät, Gedächtnis)
+- [x] Jarvis beschafft fehlende Daten selbstständig statt nachzufragen
+- [x] Proaktive Handlungsvorschläge nach jeder Antwort (erzwungen via ensureNextStep + Tests)
+- [x] Ausgeführte Schritte im Chat sichtbar machen (Aktionsprotokoll)
+- [ ] Bestätigung bei kritischen Aktionen (Rechnung bezahlt, Löschen, Versand)

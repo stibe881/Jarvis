@@ -8,7 +8,8 @@ import {
   Search, Building2, Mail, Phone, MapPin, Ticket, FileText, Receipt,
   FolderKanban, FileSignature, AlertTriangle, TrendingUp, Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 
 const chf = (n: number) =>
   `CHF ${n.toLocaleString("de-CH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -30,8 +31,30 @@ const statusColor = (status: string) => {
 
 /** Kunden-Dossier: alle Informationen zu einem Kunden auf einer Seite. */
 export default function CustomerDossier() {
-  const [query, setQuery] = useState("");
-  const [submitted, setSubmitted] = useState<string | null>(null);
+  const [location] = useLocation();
+
+  // Deep-Link: /customer?id=<uuid>&name=<Anzeigename> öffnet das Dossier direkt.
+  // Wird aus der Kundenliste in «Meine App» verwendet.
+  const params = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : ""
+  );
+  const linkedId = params.get("id");
+  const linkedName = params.get("name");
+
+  const [query, setQuery] = useState(linkedName ?? "");
+  const [submitted, setSubmitted] = useState<string | null>(linkedId ?? null);
+
+  // Auf Navigation innerhalb der App reagieren (z.B. zweiter Klick aus der Liste)
+  useEffect(() => {
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    const next = new URLSearchParams(search);
+    const id = next.get("id");
+    const name = next.get("name");
+    if (id) {
+      setSubmitted(id);
+      setQuery(name ?? "");
+    }
+  }, [location]);
 
   const { data: customers } = trpc.appDashboard.customers.useQuery(
     { search: query.length >= 2 ? query : undefined, limit: 8 },

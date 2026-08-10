@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import {
   Send, Mic, MicOff, Volume2, VolumeX, Plus, Trash2,
-  Paperclip, Globe, X, FileText, Loader2, ChevronLeft, MessageSquare
+  Paperclip, Globe, X, FileText, Loader2, ChevronLeft, MessageSquare, Wrench, ChevronDown
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { detectWakeWord } from "@shared/wakeWord";
@@ -28,6 +28,54 @@ type Message = {
 type SpeechRecognitionInstance = any;
 
 export default function JarvisChat() {
+  return <JarvisChatInner />;
+}
+
+/** Marker, mit dem der Server das Protokoll der ausgeführten Schritte anhängt. */
+const STEP_LOG_MARKER = "⟦schritte⟧ ";
+
+/**
+ * Antwort von Jarvis darstellen. Hat Jarvis Werkzeuge benutzt, wird das
+ * Protokoll der Schritte separat und einklappbar unter der Antwort gezeigt.
+ */
+function AssistantMessage({ content }: { content: string }) {
+  const [open, setOpen] = useState(false);
+  const idx = content.indexOf(STEP_LOG_MARKER);
+  const text = idx >= 0 ? content.slice(0, idx).trim() : content;
+  const steps = idx >= 0
+    ? content.slice(idx + STEP_LOG_MARKER.length).split(" | ").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  return (
+    <>
+      <Streamdown className="prose prose-invert prose-sm max-w-none">{text}</Streamdown>
+      {steps.length > 0 && (
+        <div className="mt-3 border-t border-border/60 pt-2">
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="flex items-center gap-1.5 text-[11px] text-muted-foreground transition-colors hover:text-primary"
+          >
+            <Wrench size={11} />
+            {steps.length} {steps.length === 1 ? "Schritt" : "Schritte"} ausgeführt
+            <ChevronDown size={11} className={cn("transition-transform duration-200", open && "rotate-180")} />
+          </button>
+          {open && (
+            <ul className="mt-1.5 space-y-1">
+              {steps.map((s, i) => (
+                <li key={i} className="flex gap-2 text-[11px] text-muted-foreground">
+                  <span className="text-primary/60">{i + 1}.</span>
+                  <span className="font-mono">{s}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function JarvisChatInner() {
   const { data: profile } = trpc.profile.get.useQuery();
   const { user } = useAuth();
   // Widget-Modus (?widget=1): kompakte Ansicht ohne Gesprächsliste
@@ -730,7 +778,7 @@ export default function JarvisChat() {
                       </div>
                     )}
                     {msg.role === "assistant" ? (
-                      <Streamdown className="prose prose-invert prose-sm max-w-none">{msg.content}</Streamdown>
+                      <AssistantMessage content={msg.content} />
                     ) : (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     )}

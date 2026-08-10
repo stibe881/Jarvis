@@ -16,9 +16,8 @@ import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
-import { executeSpotifyAction } from "./spotify";
-import { queueDeviceCommand } from "./deviceCommands";
 import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
+import { runAgentLoop, executeAction, formatStepLog, type LoopMessage } from "../agent";
 
 // ── Intent-Erkennung für lernende Vorschläge ──────────────────────────────────
 const INTENT_RULES: Array<{ intent: string; label: string; test: RegExp }> = [
@@ -347,7 +346,59 @@ ARBEITSWEISE (sehr wichtig):
 5. VORLAGEN: Für wiederkehrende Dokumente (Angebot, IT-Konzept, Beschaffungsantrag, Protokoll, Statusbericht) gibt es im Bereich "Vorlagen" fertige Muster mit Platzhaltern. Weise Stefan darauf hin, wenn eine Vorlage schneller wäre.`;
           const fullSystemPrompt = systemPrompt + grossIctContext + intelligenceContext + `
 
-KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
+HANDLUNGSFÄHIGKEIT (das Wichtigste überhaupt):
+Du bist kein Textgenerator, sondern ein handelnder Assistent mit echten Werkzeugen. Du arbeitest in Runden:
+In jeder Runde darfst du EINEN ODER MEHRERE Aktionsblöcke einsetzen. Deren Ergebnisse bekommst du anschliessend
+als Beobachtung zurück (der Nutzer sieht diese Zwischenschritte nicht) und darfst dann weitere Werkzeuge nutzen,
+bis die Aufgabe wirklich erledigt ist. Du hast bis zu fünf Runden.
+
+Daraus folgt:
+- BESCHAFFE FEHLENDE DATEN SELBST, statt danach zu fragen. Brauchst du eine Kunden-ID für eine Rechnung,
+  suche den Kunden zuerst mit list_customers und verwende dann die zurückgegebene ID. Frage nur nach, wenn
+  die Information nirgends in deinen Werkzeugen steht (z.B. ein gewünschter Betrag oder Wunschtermin).
+- KETTE SCHRITTE ZUSAMMEN. Beispiel "Schreib eine Mahnung an den Kunden mit der ältesten überfälligen Rechnung":
+  Runde 1 list_overdue_invoices, Runde 2 customer_dossier für den betroffenen Kunden, Runde 3 die Mahnung
+  mit den echten Zahlen schreiben und eine Aufgabe zum Nachfassen anlegen.
+- ERLEDIGE DIE GANZE AUFGABE. Wenn Stefan sagt "kümmere dich darum", führe die nötigen Schritte aus statt
+  nur zu erklären, was man tun könnte.
+- ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
+  Stefans Nachricht stammen.
+- Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
+
+PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
+
+A) ZUSAMMENHÄNGE ERKENNEN: Verknüpfe Informationen aus verschiedenen Quellen, statt sie nur aufzulisten.
+   - Ein Kunde hat eine überfällige Rechnung UND ein offenes Ticket? Weise darauf hin, dass man das Ticket
+     vielleicht erst nach Zahlungseingang priorisieren sollte.
+   - Ein Angebot ist seit über zwei Wochen "sent" und ohne Reaktion? Schlage vor nachzufassen.
+   - Ein Termin überschneidet sich mit einer fälligen Aufgabe? Melde den Konflikt aktiv.
+   - Ein Projekt ist "active", aber es gibt keine Rechnung dazu? Frage, ob abgerechnet werden soll.
+
+B) NÄCHSTER SCHRITT: Beende jede Antwort, die Daten oder Ergebnisse enthält, mit genau EINEM konkreten,
+   sofort ausführbaren Vorschlag – keine Floskeln wie "Sag mir, wenn du Hilfe brauchst".
+   Gute Beispiele: "Soll ich für die drei überfälligen Rechnungen Mahnungen vorbereiten?",
+   "Soll ich eine Aufgabe zum Nachfassen bei Muster AG anlegen (Frist Freitag)?".
+   Formuliere den Vorschlag so, dass ein "Ja" von Stefan ausreicht, damit du ihn ausführen kannst.
+
+C) SELBSTÄNDIG NACHFASSEN: Erkennst du eine Pendenz, die sonst untergeht (Angebot ohne Antwort,
+   Rechnung kurz vor Verfall, Ticket ohne Bearbeitung), lege ungefragt eine Aufgabe mit Frist an
+   und erwähne das in einem Satz. Lieber eine Aufgabe zu viel als eine vergessene Pendenz.
+
+D) BEWERTEN STATT AUFZÄHLEN: Wenn du Listen zeigst, nenne zuerst in einem Satz die Kernaussage
+   ("Fünf Rechnungen offen, davon zwei über 30 Tage überfällig – zusammen CHF 922"), danach die Details.
+
+NOTIZEN: Du kannst Notizen durchsuchen und anlegen:
+<notes_action>{"action":"list","search":"Passwort"}</notes_action>
+<notes_action>{"action":"create","title":"Besprechung Muster AG","content":"Kernpunkte ..."}</notes_action>
+
+AUFGABEN: Du kannst Aufgaben lesen, anlegen und abschliessen:
+<tasks_action>{"action":"list"}</tasks_action>
+<tasks_action>{"action":"create","title":"Mahnung Muster AG senden","priority":"high","due_date":"2026-08-15"}</tasks_action>
+<tasks_action>{"action":"complete","id":42}</tasks_action>
+Nutze diese Werkzeuge aktiv: erkennst du im Gespräch eine offene Pendenz, lege selbst eine Aufgabe an
+und sage Stefan in einem Satz, dass du das getan hast.
+
+KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, nutze einen Aktionsblock:
 <calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
 <calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
 <calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
@@ -361,7 +412,8 @@ GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
-Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein.
+Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
+wenn du unabhängige Informationen brauchst (z.B. Dashboard und überfällige Rechnungen gleichzeitig).
 Verfügbare Aktionen (Beispiele):
 
 LESEN:
@@ -410,7 +462,8 @@ STATUS-WERTE in der App:
 - Angebote: draft, sent, accepted, rejected
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
-Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
+Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
+dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
 
 MUSIK (Spotify): Stefan kann sein Spotify-Konto verbinden. Wenn er Musik hören will, füge GENAU EINEN spotify_action-Block ein:
 <spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
@@ -464,72 +517,21 @@ ${profileContext}${calendarContext}${memoryContext}`;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const llmResp2 = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages2 as any });
           let fullResponse2 = (llmResp2.choices[0]?.message?.content as string) ?? "";
-          // calendar_action und memory_action verarbeiten
-          const calActionRegex = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
-          let calMatch2;
-          let calResults2 = "";
-          while ((calMatch2 = calActionRegex.exec(fullResponse2)) !== null) {
-            try {
-              const calParams = JSON.parse(calMatch2[1]);
-              const calResult = await executeCalendarAction(userId, calParams.action, calParams);
-              calResults2 += `
-
-**Kalender:** ${calResult}`;
-            } catch { /* ignorieren */ }
-          }
-          fullResponse2 = fullResponse2.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
-          if (calResults2) fullResponse2 += calResults2;
-          const memActionRegex = /<memory_action>([\s\S]*?)<\/memory_action>/g;
-          let memMatch2;
-          while ((memMatch2 = memActionRegex.exec(fullResponse2)) !== null) {
-            try {
-              const memParams = JSON.parse(memMatch2[1]);
-              if (memParams.key && memParams.value) await upsertMemory(userId, memParams.category ?? "fact", memParams.key, memParams.value, "chat");
-            } catch { /* ignorieren */ }
-          }
-          fullResponse2 = fullResponse2.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
-          // ── app_action-Blöcke ausführen (Profil-Pfad) ─────────────────────
-          const appRxP = /<app_action>([\s\S]*?)<\/app_action>/g;
-          const appMatchesP: RegExpExecArray[] = [];
-          let axP: RegExpExecArray | null;
-          while ((axP = appRxP.exec(fullResponse2)) !== null) appMatchesP.push(axP as RegExpExecArray);
-          fullResponse2 = fullResponse2.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
-          for (const match of appMatchesP) {
-            try {
-              const ad = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
-              const { action: appAct, ...appParams } = ad;
-              const appResult = await executeAppAction(appAct, appParams);
-              fullResponse2 = fullResponse2 + "\n\n" + appResult;
-            } catch (e) { console.error("[AppAction Profil-Pfad]", e); }
-          }
-          // ── spotify_action-Blöcke ausführen ──────────────────────────────
-          const spotRxP = /<spotify_action>([\s\S]*?)<\/spotify_action>/g;
-          const spotMatchesP: RegExpExecArray[] = [];
-          let sxP: RegExpExecArray | null;
-          while ((sxP = spotRxP.exec(fullResponse2)) !== null) spotMatchesP.push(sxP as RegExpExecArray);
-          fullResponse2 = fullResponse2.replace(/<spotify_action>[\s\S]*?<\/spotify_action>/g, "").trim();
-          for (const match of spotMatchesP) {
-            try {
-              const sd = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
-              const { action: spotAct, ...spotParams } = sd;
-              const spotResult = await executeSpotifyAction(userId, spotAct, spotParams);
-              fullResponse2 = (fullResponse2 ? fullResponse2 + "\n\n" : "") + spotResult;
-            } catch (e) { console.error("[SpotifyAction]", e); }
-          }
-          // ── device_action-Blöcke ausführen (iOS-Kurzbefehle) ─────────────
-          const devRxP = /<device_action>([\s\S]*?)<\/device_action>/g;
-          const devMatchesP: RegExpExecArray[] = [];
-          let dxP: RegExpExecArray | null;
-          while ((dxP = devRxP.exec(fullResponse2)) !== null) devMatchesP.push(dxP as RegExpExecArray);
-          fullResponse2 = fullResponse2.replace(/<device_action>[\s\S]*?<\/device_action>/g, "").trim();
-          for (const match of devMatchesP) {
-            try {
-              const dd = JSON.parse(match[1].trim()) as { type: string; [k: string]: unknown };
-              const { type: devType, ...devParams } = dd;
-              const devResult = await queueDeviceCommand(userId, devType, devParams);
-              fullResponse2 = (fullResponse2 ? fullResponse2 + "\n\n" : "") + devResult;
-            } catch (e) { console.error("[DeviceAction]", e); }
-          }
+          // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ──────
+          // Jarvis darf mehrere Runden Werkzeuge nutzen. Nach jeder Runde
+          // erhält er die Ergebnisse als Beobachtung und entscheidet selbst,
+          // ob er weitere Daten braucht oder die Antwort formulieren kann.
+          const loopP = await runAgentLoop({
+            firstResponse: fullResponse2,
+            messages: llmMessages2 as unknown as LoopMessage[],
+            runAction: (parsed) => executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
+            callModel: async (msgs) => {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const next = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: msgs as any });
+              return (next.choices[0]?.message?.content as string) ?? "";
+            },
+          });
+          fullResponse2 = loopP.text + formatStepLog(loopP.steps);
           const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
           if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
           await addMessage({ conversationId, role: "assistant", content: fullResponse2 });
@@ -545,7 +547,59 @@ Du antwortest immer auf Deutsch, präzise, hilfreich und mit einem leicht profes
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.
 
-KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, füge am Ende deiner Antwort GENAU EINEN Aktionsblock ein:
+HANDLUNGSFÄHIGKEIT (das Wichtigste überhaupt):
+Du bist kein Textgenerator, sondern ein handelnder Assistent mit echten Werkzeugen. Du arbeitest in Runden:
+In jeder Runde darfst du EINEN ODER MEHRERE Aktionsblöcke einsetzen. Deren Ergebnisse bekommst du anschliessend
+als Beobachtung zurück (der Nutzer sieht diese Zwischenschritte nicht) und darfst dann weitere Werkzeuge nutzen,
+bis die Aufgabe wirklich erledigt ist. Du hast bis zu fünf Runden.
+
+Daraus folgt:
+- BESCHAFFE FEHLENDE DATEN SELBST, statt danach zu fragen. Brauchst du eine Kunden-ID für eine Rechnung,
+  suche den Kunden zuerst mit list_customers und verwende dann die zurückgegebene ID. Frage nur nach, wenn
+  die Information nirgends in deinen Werkzeugen steht (z.B. ein gewünschter Betrag oder Wunschtermin).
+- KETTE SCHRITTE ZUSAMMEN. Beispiel "Schreib eine Mahnung an den Kunden mit der ältesten überfälligen Rechnung":
+  Runde 1 list_overdue_invoices, Runde 2 customer_dossier für den betroffenen Kunden, Runde 3 die Mahnung
+  mit den echten Zahlen schreiben und eine Aufgabe zum Nachfassen anlegen.
+- ERLEDIGE DIE GANZE AUFGABE. Wenn Stefan sagt "kümmere dich darum", führe die nötigen Schritte aus statt
+  nur zu erklären, was man tun könnte.
+- ERFINDE NIE Daten. Alle Zahlen, Namen, IDs und Fristen müssen aus einer Werkzeug-Beobachtung oder aus
+  Stefans Nachricht stammen.
+- Wenn ein Werkzeug einen Fehler meldet, erkläre kurz was schiefging und schlage einen Alternativweg vor.
+
+PROAKTIVE INTELLIGENZ (was einen echten Assistenten ausmacht):
+
+A) ZUSAMMENHÄNGE ERKENNEN: Verknüpfe Informationen aus verschiedenen Quellen, statt sie nur aufzulisten.
+   - Ein Kunde hat eine überfällige Rechnung UND ein offenes Ticket? Weise darauf hin, dass man das Ticket
+     vielleicht erst nach Zahlungseingang priorisieren sollte.
+   - Ein Angebot ist seit über zwei Wochen "sent" und ohne Reaktion? Schlage vor nachzufassen.
+   - Ein Termin überschneidet sich mit einer fälligen Aufgabe? Melde den Konflikt aktiv.
+   - Ein Projekt ist "active", aber es gibt keine Rechnung dazu? Frage, ob abgerechnet werden soll.
+
+B) NÄCHSTER SCHRITT: Beende jede Antwort, die Daten oder Ergebnisse enthält, mit genau EINEM konkreten,
+   sofort ausführbaren Vorschlag – keine Floskeln wie "Sag mir, wenn du Hilfe brauchst".
+   Gute Beispiele: "Soll ich für die drei überfälligen Rechnungen Mahnungen vorbereiten?",
+   "Soll ich eine Aufgabe zum Nachfassen bei Muster AG anlegen (Frist Freitag)?".
+   Formuliere den Vorschlag so, dass ein "Ja" von Stefan ausreicht, damit du ihn ausführen kannst.
+
+C) SELBSTÄNDIG NACHFASSEN: Erkennst du eine Pendenz, die sonst untergeht (Angebot ohne Antwort,
+   Rechnung kurz vor Verfall, Ticket ohne Bearbeitung), lege ungefragt eine Aufgabe mit Frist an
+   und erwähne das in einem Satz. Lieber eine Aufgabe zu viel als eine vergessene Pendenz.
+
+D) BEWERTEN STATT AUFZÄHLEN: Wenn du Listen zeigst, nenne zuerst in einem Satz die Kernaussage
+   ("Fünf Rechnungen offen, davon zwei über 30 Tage überfällig – zusammen CHF 922"), danach die Details.
+
+NOTIZEN: Du kannst Notizen durchsuchen und anlegen:
+<notes_action>{"action":"list","search":"Passwort"}</notes_action>
+<notes_action>{"action":"create","title":"Besprechung Muster AG","content":"Kernpunkte ..."}</notes_action>
+
+AUFGABEN: Du kannst Aufgaben lesen, anlegen und abschliessen:
+<tasks_action>{"action":"list"}</tasks_action>
+<tasks_action>{"action":"create","title":"Mahnung Muster AG senden","priority":"high","due_date":"2026-08-15"}</tasks_action>
+<tasks_action>{"action":"complete","id":42}</tasks_action>
+Nutze diese Werkzeuge aktiv: erkennst du im Gespräch eine offene Pendenz, lege selbst eine Aufgabe an
+und sage Stefan in einem Satz, dass du das getan hast.
+
+KALENDER: Wenn der Nutzer Kalender-Aktionen möchte, nutze einen Aktionsblock:
 <calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
 <calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
 <calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
@@ -559,7 +613,8 @@ GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
-Wenn Stefan etwas aus seiner App möchte, füge am Ende deiner Antwort GENAU EINEN app_action-Block ein.
+Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
+wenn du unabhängige Informationen brauchst (z.B. Dashboard und überfällige Rechnungen gleichzeitig).
 Verfügbare Aktionen (Beispiele):
 
 LESEN:
@@ -608,7 +663,8 @@ STATUS-WERTE in der App:
 - Angebote: draft, sent, accepted, rejected
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
-Wenn du eine ID brauchst, frage zuerst nach dem Kunden/Ticket/Projekt und nutze dann die zurückgegebene ID.
+Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
+dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
 
 MUSIK (Spotify): Füge bei Musikwünschen GENAU EINEN spotify_action-Block ein:
 <spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
@@ -656,89 +712,20 @@ ${calendarContext}${memoryContext}`;
       const llmResp = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: llmMessages as any });
       let fullResponse = (llmResp.choices[0]?.message?.content as string) ?? "";
 
-      // calendar_action-Blöcke verarbeiten
-      const calMatches: RegExpExecArray[] = [];
-      let cm: RegExpExecArray | null;
-      const calRx = /<calendar_action>([\s\S]*?)<\/calendar_action>/g;
-      while ((cm = calRx.exec(fullResponse)) !== null) calMatches.push(cm);
-      let cleanResponse = fullResponse.replace(/<calendar_action>[\s\S]*?<\/calendar_action>/g, "").trim();
-      const calendarResults: string[] = [];
-      for (const match of calMatches) {
-        try {
-          const ad = JSON.parse(match[1].trim()) as Record<string, unknown>;
-          const result = await executeCalendarAction(userId, ad.action as string, ad);
-          calendarResults.push(result);
-          cleanResponse += `\n\n**Kalender:** ${result}`;
-        } catch (e) { cleanResponse += `\n\n**Kalender-Fehler:** ${e instanceof Error ? e.message : String(e)}`; }
-      }
+      // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ─────────
+      // Auch dieser Pfad (ohne Profil) nutzt die mehrstufige Werkzeugnutzung.
+      const loopFb = await runAgentLoop({
+        firstResponse: fullResponse,
+        messages: llmMessages as unknown as LoopMessage[],
+        runAction: (parsed) => executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
+        callModel: async (msgs) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const next = await invokeLLM({ model: "claude-sonnet-4-5", max_tokens: 4096, messages: msgs as any });
+          return (next.choices[0]?.message?.content as string) ?? "";
+        },
+      });
+      let cleanResponse = loopFb.text + formatStepLog(loopFb.steps);
 
-      // memory_action-Blöcke verarbeiten
-      const memMatches: RegExpExecArray[] = [];
-      let mm2: RegExpExecArray | null;
-      const memRx = /<memory_action>([\s\S]*?)<\/memory_action>/g;
-      while ((mm2 = memRx.exec(cleanResponse)) !== null) memMatches.push(mm2);
-      cleanResponse = cleanResponse.replace(/<memory_action>[\s\S]*?<\/memory_action>/g, "").trim();
-      for (const match of memMatches) {
-        try {
-          const md = JSON.parse(match[1].trim()) as { category?: string; key?: string; value?: string };
-          if (md.key && md.value) await upsertMemory(userId, md.category ?? "fact", md.key, md.value, "chat");
-        } catch { /* ignorieren */ }
-      }
-
-      // ── app_action-Blöcke ausführen ──────────────────────────────────────
-      // Robuster Parser: auch fullResponse prüfen falls cleanResponse den Block verloren hat
-      const appSource = cleanResponse.includes("<app_action>") ? cleanResponse : fullResponse;
-      console.log("[AppAction] Suche in:", appSource.includes("<app_action>") ? "gefunden" : "nicht gefunden", "| cleanResponse length:", cleanResponse.length);
-      const appRx2 = /<app_action>([\s\S]*?)<\/app_action>/g;
-      const appM2: RegExpExecArray[] = [];
-      let ax: RegExpExecArray | null;
-      while ((ax = appRx2.exec(appSource)) !== null) appM2.push(ax);
-      console.log("[AppAction] Matches:", appM2.length);
-      cleanResponse = cleanResponse.replace(/<app_action>[\s\S]*?<\/app_action>/g, "").trim();
-      for (const match of appM2) {
-        try {
-          const rawJson = match[1].trim();
-          console.log("[AppAction] Raw JSON:", rawJson);
-          const ad2 = JSON.parse(rawJson) as { action: string; [k: string]: unknown };
-          const { action: appAct, ...appParams } = ad2;
-          console.log("[AppAction] Executing:", appAct, appParams);
-          const appResult = await executeAppAction(appAct, appParams);
-          console.log("[AppAction] Result:", appResult.slice(0, 200));
-          cleanResponse = cleanResponse + "\n\n" + appResult;
-        } catch (e) { console.error("[AppAction sendMessage]", e); }
-      }
-
-      // ── spotify_action-Blöcke ausführen ─────────────────────────────────
-      const spotSource = cleanResponse.includes("<spotify_action>") ? cleanResponse : fullResponse;
-      const spotRx = /<spotify_action>([\s\S]*?)<\/spotify_action>/g;
-      const spotM: RegExpExecArray[] = [];
-      let sx: RegExpExecArray | null;
-      while ((sx = spotRx.exec(spotSource)) !== null) spotM.push(sx);
-      cleanResponse = cleanResponse.replace(/<spotify_action>[\s\S]*?<\/spotify_action>/g, "").trim();
-      for (const match of spotM) {
-        try {
-          const sd = JSON.parse(match[1].trim()) as { action: string; [k: string]: unknown };
-          const { action: spotAct, ...spotParams } = sd;
-          const spotResult = await executeSpotifyAction(userId, spotAct, spotParams);
-          cleanResponse = (cleanResponse ? cleanResponse + "\n\n" : "") + spotResult;
-        } catch (e) { console.error("[SpotifyAction sendMessage]", e); }
-      }
-
-      // ── device_action-Blöcke ausführen (iOS-Kurzbefehle) ────────────────
-      const devSource = cleanResponse.includes("<device_action>") ? cleanResponse : fullResponse;
-      const devRx = /<device_action>([\s\S]*?)<\/device_action>/g;
-      const devM: RegExpExecArray[] = [];
-      let dx: RegExpExecArray | null;
-      while ((dx = devRx.exec(devSource)) !== null) devM.push(dx);
-      cleanResponse = cleanResponse.replace(/<device_action>[\s\S]*?<\/device_action>/g, "").trim();
-      for (const match of devM) {
-        try {
-          const dd = JSON.parse(match[1].trim()) as { type: string; [k: string]: unknown };
-          const { type: devType, ...devParams } = dd;
-          const devResult = await queueDeviceCommand(userId, devType, devParams);
-          cleanResponse = (cleanResponse ? cleanResponse + "\n\n" : "") + devResult;
-        } catch (e) { console.error("[DeviceAction sendMessage]", e); }
-      }
 
       // Antwort speichern
       await addMessage({ conversationId, role: "assistant", content: cleanResponse });

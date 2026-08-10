@@ -1,8 +1,9 @@
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Loader2, Users, Ticket, FileText, Receipt, FolderKanban, Target, AlertTriangle, RefreshCw } from "lucide-react";
+import { Loader2, Users, Ticket, FileText, Receipt, FolderKanban, Target, AlertTriangle, RefreshCw, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
 
 // ── Typen ─────────────────────────────────────────────────────────────────────
 type Customer = { id: string; company_name?: string; first_name?: string; last_name?: string; email?: string; status?: string };
@@ -16,6 +17,20 @@ type Expense = { id: string; description: string; amount: number; category?: str
 type Product = { id: string; name: string; price: number; unit?: string; category?: string; description?: string };
 
 const PRIORITY_ICON: Record<string, string> = { high: "🔴", medium: "🟡", low: "🟢" };
+
+/** Kundenname als Verweis aufs Dossier – öffnet mit einem Klick alle Informationen. */
+function CustomerLink({ name, onOpen }: { name?: string; onOpen: (name?: string) => void }) {
+  if (!name) return <>–</>;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onOpen(name); }}
+      className="underline decoration-dotted underline-offset-2 transition-colors hover:text-primary"
+      title={`Dossier von ${name} öffnen`}
+    >
+      {name}
+    </button>
+  );
+}
 const STATUS_COLOR: Record<string, string> = {
   open: "text-blue-400", closed: "text-muted-foreground", draft: "text-amber-400",
   sent: "text-blue-400", accepted: "text-green-400", rejected: "text-red-400",
@@ -53,6 +68,18 @@ const TABS = [
 export default function AppDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [customerSearch, setCustomerSearch] = useState("");
+  const [, navigate] = useLocation();
+
+  /** Öffnet das Kunden-Dossier mit einem Klick aus der Kundenliste. */
+  const openDossier = (id: string, label: string) => {
+    navigate(`/customer?id=${encodeURIComponent(id)}&name=${encodeURIComponent(label)}`);
+  };
+
+  /** Öffnet das Dossier anhand des Kundennamens (aus Ticket-, Rechnungs- oder Angebotslisten). */
+  const openDossierByName = (name?: string) => {
+    if (!name || name === "–") return;
+    navigate(`/customer?id=${encodeURIComponent(name)}&name=${encodeURIComponent(name)}`);
+  };
 
   const summary = trpc.appDashboard.summary.useQuery();
   const tickets = trpc.appDashboard.tickets.useQuery({ status: undefined }, { enabled: activeTab === "tickets" });
@@ -132,7 +159,9 @@ export default function AppDashboard() {
                     <span className="text-sm">{PRIORITY_ICON[t.priority] ?? "⚪"}</span>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm text-foreground">{t.title}</p>
-                      <p className="text-xs text-muted-foreground">{t._customer ?? "–"} · <span className={STATUS_COLOR[t.status] ?? ""}>{t.status}</span></p>
+                      <p className="text-xs text-muted-foreground">
+                        <CustomerLink name={t._customer} onOpen={openDossierByName} /> · <span className={STATUS_COLOR[t.status] ?? ""}>{t.status}</span>
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -151,7 +180,9 @@ export default function AppDashboard() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium text-sm text-foreground">Angebot {q.quote_number}</p>
-                      <p className="text-xs text-muted-foreground">{q._customer ?? "–"} · {new Date(q.quote_date).toLocaleDateString("de-CH")}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <CustomerLink name={q._customer} onOpen={openDossierByName} /> · {new Date(q.quote_date).toLocaleDateString("de-CH")}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium">CHF {Number(q.total ?? 0).toLocaleString("de-CH")}</p>
@@ -181,7 +212,9 @@ export default function AppDashboard() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium text-sm text-foreground">Rechnung {inv.invoice_number}</p>
-                      <p className="text-xs text-muted-foreground">{inv._customer ?? "–"} · fällig: {inv.due_date ?? "–"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <CustomerLink name={inv._customer} onOpen={openDossierByName} /> · fällig: {inv.due_date ?? "–"}
+                      </p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-medium">CHF {Number(inv.total ?? 0).toLocaleString("de-CH")}</p>
@@ -237,13 +270,30 @@ export default function AppDashboard() {
           <div className="space-y-3">
             <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Kunden suchen..." className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground" />
             {customers.isLoading ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-primary" /></div> :
-              (customers.data as Customer[] ?? []).map(c => (
-                <div key={c.id} className="jarvis-card rounded-xl p-3 border border-border">
-                  <p className="font-medium text-sm text-foreground">{c.company_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim()}</p>
-                  <p className="text-xs text-muted-foreground">{c.email ?? "–"} · {c.status ?? "aktiv"}</p>
-                </div>
-              ))
+              (customers.data as Customer[] ?? []).map(c => {
+                const label = c.company_name || `${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Unbekannt";
+                return (
+                  <button
+                    key={c.id}
+                    onClick={() => openDossier(c.id, label)}
+                    className="jarvis-card w-full rounded-xl p-3 border border-border text-left transition-all hover:border-primary/50 hover:bg-primary/5 active:scale-[0.99] flex items-center gap-3 group"
+                    title={`Dossier von ${label} öffnen`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-foreground truncate">{label}</p>
+                      <p className="text-xs text-muted-foreground truncate">{c.email ?? "–"} · {c.status ?? "aktiv"}</p>
+                    </div>
+                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground group-hover:text-primary transition-colors">
+                      <span className="hidden sm:inline">Dossier</span>
+                      <ChevronRight size={14} />
+                    </span>
+                  </button>
+                );
+              })
             }
+            {!customers.isLoading && (customers.data as Customer[] ?? []).length === 0 && (
+              <p className="text-center text-muted-foreground text-sm py-8">Keine Kunden gefunden.</p>
+            )}
           </div>
         )}
 
@@ -316,4 +366,3 @@ export default function AppDashboard() {
     </div>
   );
 }
-
