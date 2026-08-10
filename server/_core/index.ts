@@ -148,6 +148,27 @@ async function startServer() {
   const argPort = process.argv.slice(2).find(a => /^\d{2,5}$/.test(a));
   const envPort = process.env.PORT || argPort;
 
+  // systemd-Socket-Activation (z.B. Hetzner konsoleH): Der Prozessmanager
+  // übergibt einen fertig gebundenen Socket als Dateideskriptor (FD 3) und
+  // lädt per NODE_OPTIONS einen Shim, der jeden listen()-Aufruf darauf umbiegt.
+  // Port-Probing ist hier fatal: Der Probe-Server belegt genau diesen Socket
+  // und schließt ihn beim close() wieder – danach lauscht nichts mehr und der
+  // Webserver liefert nur noch 503. Deshalb genau EINMAL listen() aufrufen.
+  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes(
+    "listen_systemd_fd"
+  );
+  const hatSocketActivation = Boolean(process.env.LISTEN_FDS);
+
+  if (hatSystemdShim || hatSocketActivation) {
+    const ziel: string | number | { fd: number } = hatSystemdShim
+      ? Number(envPort) || 3000 // Wert egal – der Shim ersetzt ihn durch den Socket.
+      : { fd: 3 }; // Ohne Shim direkt auf den übergebenen Deskriptor.
+    server.listen(ziel, () => {
+      logger.info("Server running (systemd socket activation)");
+    });
+    return;
+  }
+
   if (envPort) {
     // Rein numerische Werte als TCP-Port, alles andere als Socket-Pfad behandeln.
     const listenTarget: string | number = /^\d+$/.test(envPort)
