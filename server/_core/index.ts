@@ -130,16 +130,26 @@ async function startServer() {
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
-
-  if (port !== preferredPort) {
-    logger.info(`Port ${preferredPort} is busy, using port ${port} instead`);
+  // Wenn die Umgebung einen Port/Socket vorgibt (Passenger auf Plesk-/Managed-
+  // Hosting, PaaS, Docker), MUSS genau darauf gelauscht werden – ohne Port-
+  // Probing. Unter Passenger würde ein Probe-Server über die gepatchte
+  // listen()-Methode sogar den vom Prozessmanager erwarteten Socket belegen.
+  // Nur im lokalen Dev (kein PORT gesetzt) suchen wir einen freien Port.
+  const envPort = process.env.PORT;
+  if (envPort) {
+    // Rein numerische Werte als TCP-Port, alles andere als Socket-Pfad behandeln.
+    const listenTarget: string | number = /^\d+$/.test(envPort)
+      ? Number(envPort)
+      : envPort;
+    server.listen(listenTarget, () => {
+      logger.info(`Server running (listening on ${listenTarget})`);
+    });
+  } else {
+    const port = await findAvailablePort(3000);
+    server.listen(port, () => {
+      logger.info(`Server running on http://localhost:${port}/`);
+    });
   }
-
-  server.listen(port, () => {
-    logger.info(`Server running on http://localhost:${port}/`);
-  });
 }
 
 startServer().catch(err => {
