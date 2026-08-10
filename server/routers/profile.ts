@@ -20,6 +20,7 @@ export const profileRouter = router({
       jarvisPersonality: z.string().optional(),
       language: z.enum(["de", "en", "auto"]).optional(),
       elevenLabsVoiceId: z.string().max(64).optional(),
+      speechMode: z.enum(["always", "voiceOnly", "never"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       await upsertUserProfile(ctx.user.id, input);

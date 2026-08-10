@@ -99,3 +99,10 @@
 - [x] Bei aufgebrauchtem Guthaben wechselt Jarvis automatisch auf die Browser-Stimme (tiefe deutsche Stimme) statt zu verstummen; Hinweis per Meldung
 - [x] Guthaben-Anzeige zeigt echten Stand, Rücksetzdatum und den Hinweis «Guthaben leer – Browser-Stimme»
 - [x] Sprachausgabe sparsamer: gesprochene Fassung von 450 auf 260 Zeichen gekürzt (rund 38 statt 22 Antworten pro Monat), voller Text bleibt im Chat
+- [x] Sprachausgabe-Modus mit drei Stufen: «Immer», «Nur Sprache» (Standard) und «Aus». Getippte Nachrichten bleiben im Standard stumm und schonen das Guthaben; Einstellung wird im Browser gespeichert
+- [x] Modus im Chat-Kopf per Lautsprecher-Knopf durchschaltbar, aktiver Zustand als Text sichtbar («🔊 Immer» / «🎤 Nur Sprache» / «🔇 Aus»)
+- [x] BUG behoben: Gedächtnis-Markierungen wie `[person]`/`[context]` erscheinen nicht mehr. Ursache war der Gedächtnis-Kontext, der Kategorien in eckigen Klammern übergab; jetzt Klartext-Überschriften. Zusätzlich Sicherheitsnetz in shared/cleanText.ts (Server + Anzeige + Sprachausgabe) und ausdrückliche Regel in der Systemanweisung
+- [x] BUG behoben: Sprachausgabe brach mitten im Text ab. Grenze von 260 auf 1200 Zeichen erhöht – normale Antworten werden vollständig gesprochen, nur sehr lange Texte enden an einer Satzgrenze. Browser-Stimme spricht bis 4000 Zeichen
+- [x] Sprachmodus im Profil gespeichert (neue Spalte `speechMode` in user_profiles): Einstellung gilt jetzt auf allen Geräten, lokale Speicherung dient nur als Rückfall beim Laden
+- [x] Sehr lange Antworten: Jarvis spricht eine Kurzfassung aus Anfang, Hinweis «Die vollständige Antwort steht im Chat» und Schlusssatz (damit die Rückfrage hörbar bleibt) statt mitten im Text abzubrechen
+- [x] Kurzfassungslogik in shared/cleanText.ts verschoben: ElevenLabs-Stimme und Browser-Stimme nutzen jetzt dieselbe Logik, damit beide gleich klingen (Browser-Stimme mit höherem Limit, weil sie nichts kostet)

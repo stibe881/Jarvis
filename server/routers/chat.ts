@@ -17,6 +17,7 @@ import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
 import { getMemoriesByUser, upsertMemory, getUserProfile, trackPrompt, getTopPrompts } from "../db";
+import { removeInternalTags } from "../cleanResponse";
 import { runAgentLoop, executeAction, formatStepLog, type LoopMessage } from "../agent";
 import { JARVIS_PERSONA } from "../persona";
 import { rememberPending, takePending, isApproval, isRejection, hasPending, clearPending } from "../pendingApproval";
@@ -309,7 +310,16 @@ export const chatRouter = router({
             if (!grouped[m.category]) grouped[m.category] = [];
             grouped[m.category].push(`${m.key}: ${m.value}`);
           }
-          const lines = Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join("\n")}`).join("\n\n");
+          // Kategorien als Klartext-Überschrift, NICHT in eckigen Klammern:
+          // das Modell hat die Markierungen sonst wörtlich in die Antwort
+          // übernommen (im Chat erschien etwa «... 2019 [person].»).
+          const namen: Record<string, string> = {
+            person: "Personen", contact: "Kontakte", preference: "Vorlieben",
+            project: "Projekte", fact: "Fakten", context: "Kontext",
+          };
+          const lines = Object.entries(grouped)
+            .map(([cat, items]) => `${namen[cat] ?? cat}:\n${items.join("\n")}`)
+            .join("\n\n");
           memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
         }
       } catch { /* ignorieren */ }
@@ -452,7 +462,9 @@ WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
 
 GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+Kategorien: person, contact, preference, project, fact.
+WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
+Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
 Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
@@ -575,7 +587,9 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             },
             // Hat Stefan im vorherigen Zug zugestimmt, dürfen kritische Aktionen laufen
           });
-          fullResponse2 = loopP.text + formatStepLog(loopP.steps);
+          // Interne Kategorie-Markierungen entfernen, bevor der Text gespeichert
+          // und ausgegeben wird (sonst erscheint etwa «... 2019 [person].»).
+          fullResponse2 = removeInternalTags(loopP.text) + formatStepLog(loopP.steps);
           rememberPending(conversationId, loopP.pending);
           const convTitleP = fullResponse2.slice(0, 50).replace(/[\n]/g, " ").trim();
           if (history.length === 0) await updateConversationTitle(conversationId, convTitleP || message.slice(0, 50));
@@ -667,7 +681,9 @@ WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
 
 GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-Kategorien: person, contact, preference, project, fact. Zeige dem Nutzer NIE den rohen memory_action-Block.
+Kategorien: person, contact, preference, project, fact.
+WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
+Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Verträgen, Ausgaben und Produkten.
 Wenn Stefan etwas aus seiner App möchte, nutze app_action-Blöcke. Du darfst mehrere pro Runde einsetzen,
@@ -781,7 +797,8 @@ ${calendarContext}${memoryContext}${approvalContext}`;
           return (next.choices[0]?.message?.content as string) ?? "";
         },
       });
-      let cleanResponse = loopFb.text + formatStepLog(loopFb.steps);
+      // Interne Kategorie-Markierungen entfernen (siehe cleanResponse.ts)
+      let cleanResponse = removeInternalTags(loopFb.text) + formatStepLog(loopFb.steps);
       rememberPending(conversationId, loopFb.pending);
 
 
@@ -852,7 +869,16 @@ export async function handleChatStream(req: Request, res: Response) {
             if (!grouped[m.category]) grouped[m.category] = [];
             grouped[m.category].push(`${m.key}: ${m.value}`);
           }
-          const lines = Object.entries(grouped).map(([cat, items]) => `[${cat}]\n${items.join("\n")}`).join("\n\n");
+          // Kategorien als Klartext-Überschrift, NICHT in eckigen Klammern:
+          // das Modell hat die Markierungen sonst wörtlich in die Antwort
+          // übernommen (im Chat erschien etwa «... 2019 [person].»).
+          const namen: Record<string, string> = {
+            person: "Personen", contact: "Kontakte", preference: "Vorlieben",
+            project: "Projekte", fact: "Fakten", context: "Kontext",
+          };
+          const lines = Object.entries(grouped)
+            .map(([cat, items]) => `${namen[cat] ?? cat}:\n${items.join("\n")}`)
+            .join("\n\n");
           memoryContext = `\n\nGespeichertes Wissen über den Nutzer:\n${lines}`;
         }
       } catch { /* ignorieren */ }
@@ -877,7 +903,9 @@ WICHTIG: Wenn du eine eventId brauchst (für update/delete/invite), nutze zuerst
 GEDÄCHTNIS: Wenn der Nutzer wichtige Informationen mitteilt (Namen, E-Mail, Telefon, Präferenzen, Fakten über Personen oder Projekte), speichere sie mit einem memory_action-Block am Ende deiner Antwort:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
 <memory_action>{"category":"preference","key":"Lieblingsfarbe","value":"Blau"}</memory_action>
-Kategorien: person, contact, preference, project, fact. Speichere NUR wenn der Nutzer explizit eine Information mitteilt. Zeige dem Nutzer NIE den rohen memory_action-Block.
+Kategorien: person, contact, preference, project, fact.
+WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und dürfen im Antworttext nicht auftauchen. Formuliere den Inhalt in natürlicher Sprache.
+Kategorien-Hinweis Ende. Speichere NUR wenn der Nutzer explizit eine Information mitteilt. Zeige dem Nutzer NIE den rohen memory_action-Block.
 ${calendarContext}${memoryContext}`;
 
     // Nachrichten-History aufbauen

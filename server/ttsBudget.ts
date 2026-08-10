@@ -6,18 +6,20 @@
  * während der vollständige Text im Chat sichtbar bleibt.
  */
 
+import { buildSpokenSummary } from "../shared/cleanText";
+
 /** Monatliches Zeichenbudget des ElevenLabs-Free-Plans. */
 export const MONTHLY_CHAR_LIMIT = 10_000;
 
 /**
  * Maximale Zeichen pro einzelner Sprachausgabe.
  *
- * Bei 450 Zeichen reichte das Monatsbudget nur für etwa 22 Antworten und war
- * nach kurzer Zeit erschöpft. Mit 260 Zeichen sind es rund 38 Antworten,
- * ohne dass die gesprochene Zusammenfassung unbrauchbar kurz wird. Der
- * vollständige Text bleibt im Chat sichtbar.
+ * 260 Zeichen waren zu knapp: Jarvis brach mitten im Satz ab. Mit 1200 Zeichen
+ * werden normale Antworten vollständig gesprochen; nur sehr lange Texte werden
+ * an einer Satzgrenze gekürzt. Das Guthaben wird stattdessen über den Modus
+ * «nur bei Sprachbedienung» geschont, der getippte Antworten stumm lässt.
  */
-export const MAX_CHARS_PER_SPEECH = 260;
+export const MAX_CHARS_PER_SPEECH = 1200;
 
 /** Abrechnungsmonat im Format YYYY-MM. */
 export function currentYearMonth(date = new Date()): string {
@@ -29,6 +31,9 @@ export function stripForSpeech(text: string): string {
   return text
     // Protokoll der ausgeführten Schritte nie mitsprechen
     .replace(/⟦schritte⟧[\s\S]*$/g, " ")
+    // Interne Kategorie-Markierungen aus dem Gedächtnis-Kontext nie mitsprechen
+    // (etwa «[person]», «[context]») – sie sind technische Hinweise, kein Inhalt
+    .replace(/\s*\[(?:person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar)\]/gi, "")
     // Codeblöcke ganz entfernen – die will niemand vorgelesen bekommen
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]*)`/g, "$1")
@@ -47,6 +52,8 @@ export function stripForSpeech(text: string): string {
     .replace(/\n{2,}/g, ". ")
     .replace(/\n/g, " ")
     .replace(/\s*\.\s*\./g, ".")
+    // Leerzeichen vor Satzzeichen entfernen, die durch das Entfernen entstehen
+    .replace(/\s+([.,;:!?])/g, "$1")
     .trim();
 }
 
@@ -58,17 +65,11 @@ export function shortenForSpeech(text: string, limit = MAX_CHARS_PER_SPEECH): { 
   const clean = stripForSpeech(text);
   if (clean.length <= limit) return { spoken: clean, truncated: false };
 
-  // Möglichst an einer Satzgrenze abschneiden
-  const window = clean.slice(0, limit);
-  const lastSentence = Math.max(window.lastIndexOf(". "), window.lastIndexOf("! "), window.lastIndexOf("? "));
-  if (lastSentence > limit * 0.5) {
-    return { spoken: window.slice(0, lastSentence + 1).trim(), truncated: true };
-  }
-
-  // Sonst am letzten Wort abschneiden
-  const lastSpace = window.lastIndexOf(" ");
-  const cut = lastSpace > limit * 0.5 ? window.slice(0, lastSpace) : window;
-  return { spoken: `${cut.trim()} …`, truncated: true };
+  // Sehr lange Texte werden nicht einfach abgeschnitten – das klang, als würde
+  // Jarvis mitten im Gedanken verstummen. Stattdessen entsteht eine Kurzfassung
+  // aus Anfang und Schluss, ergänzt um einen Hinweis auf den vollen Text.
+  // Die Logik liegt in shared/cleanText.ts, damit die Browser-Stimme identisch klingt.
+  return { spoken: buildSpokenSummary(clean, limit), truncated: true };
 }
 
 /** Restbudget und Warnstufe berechnen. */

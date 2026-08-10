@@ -1,0 +1,1 @@
+ALTER TABLE `user_profiles` ADD `speechMode` enum('always','voiceOnly','never') DEFAULT 'voiceOnly';

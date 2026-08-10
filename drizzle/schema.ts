@@ -147,6 +147,9 @@ export const userProfiles = mysqlTable("user_profiles", {
   jarvisPersonality: text("jarvisPersonality"), // Eigene Beschreibung wie Jarvis sich verhalten soll
   language: mysqlEnum("language", ["de", "en", "auto"]).default("de"),
   elevenLabsVoiceId: varchar("elevenLabsVoiceId", { length: 64 }).default("JBFqnCBsd6RMkjVDRZzb"), // George (britisch, männlich)
+  // Wann Jarvis sprechen soll. "voiceOnly" ist Standard und schont das
+  // ElevenLabs-Guthaben, weil getippte Nachrichten stumm bleiben.
+  speechMode: mysqlEnum("speechMode", ["always", "voiceOnly", "never"]).default("voiceOnly"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

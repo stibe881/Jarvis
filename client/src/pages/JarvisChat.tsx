@@ -13,6 +13,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { detectWakeWord } from "@shared/wakeWord";
 import { cn } from "@/lib/utils";
 import { JarvisOrb } from "@/components/JarvisLayout";
+import { removeInternalTags, buildSpokenSummary } from "@shared/cleanText";
 
 type Message = {
   id?: number;
@@ -41,7 +42,10 @@ const STEP_LOG_MARKER = "⟦schritte⟧ ";
 function AssistantMessage({ content }: { content: string }) {
   const [open, setOpen] = useState(false);
   const idx = content.indexOf(STEP_LOG_MARKER);
-  const text = idx >= 0 ? content.slice(0, idx).trim() : content;
+  // Interne Kategorie-Markierungen ausblenden – sie sind technische Hinweise
+  // aus dem Gedächtnis-Kontext und gehören nicht in die Antwort.
+  const roh = idx >= 0 ? content.slice(0, idx).trim() : content;
+  const text = removeInternalTags(roh);
   const steps = idx >= 0
     ? content.slice(idx + STEP_LOG_MARKER.length).split(" | ").map((s) => s.trim()).filter(Boolean)
     : [];
@@ -77,6 +81,8 @@ function AssistantMessage({ content }: { content: string }) {
 
 function JarvisChatInner() {
   const { data: profile } = trpc.profile.get.useQuery();
+  // Sprachmodus im Profil speichern, damit er auf allen Geräten gilt
+  const saveSpeechMode = trpc.profile.update.useMutation();
   const { user } = useAuth();
   // Widget-Modus (?widget=1): kompakte Ansicht ohne Gesprächsliste
   const [isWidget] = useState(() =>
@@ -299,6 +305,16 @@ function JarvisChatInner() {
     }
   }, []);
 
+  // Sprachausgabe-Modus: bestimmt, wann Jarvis überhaupt spricht.
+  // "always"     = bei jeder Antwort
+  // "voice-only" = nur wenn die Frage per Sprache kam (Standard, spart Guthaben)
+  // "never"      = nie sprechen
+  const [speechMode, setSpeechMode] = useState<"always" | "voice-only" | "never">("voice-only");
+  const speechModeRef = useRef<"always" | "voice-only" | "never">("voice-only");
+  useEffect(() => { speechModeRef.current = speechMode; }, [speechMode]);
+  // Quelle einer zurückgestellten Nachricht, damit die Sprachausgabe stimmt
+  const queuedSourceRef = useRef<"sprache" | "tippen">("tippen");
+
   // Verbrauchsabfrage per Ref, da die Abfrage weiter unten deklariert wird.
   const refetchUsageRef = useRef<(() => void) | null>(null);
 
@@ -313,7 +329,12 @@ function JarvisChatInner() {
   const speakViaBrowser = useCallback((clean: string) => {
     if (!("speechSynthesis" in window)) { setIsSpeaking(false); resumeListeningAfterSpeech(); return; }
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
+    // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
+    // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
+    // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
+    // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
+    const gesprochen = clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
+    const utterance = new SpeechSynthesisUtterance(gesprochen);
     // Tiefe, ruhige Stimme – so nah wie möglich am Jarvis-Klang
     utterance.lang = "de-DE";
     utterance.rate = 0.92;
@@ -332,7 +353,15 @@ function JarvisChatInner() {
   const speakText = useCallback((text: string) => {
     if (!ttsEnabledRef.current) return;
     // Nur grob vorreinigen – das Server-Modul kürzt satzweise und rechnet das Budget ab
-    const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/\n+/g, " ").trim().slice(0, 2500);
+    const clean = text
+      // Schritt-Protokoll und interne Kategorie-Markierungen nie mitsprechen
+      .replace(/⟦schritte⟧[\s\S]*$/g, " ")
+      .replace(/\s*\[(?:person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar)\]/gi, "")
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/\n+/g, " ")
+      .replace(/\s+([.,;:!?])/g, "$1")
+      .trim()
+      .slice(0, 2500);
     if (!clean) return;
     const voiceId = profile?.elevenLabsVoiceId ?? undefined;
 
@@ -417,7 +446,12 @@ function JarvisChatInner() {
         // Fallback: Web Speech API
         if (!("speechSynthesis" in window)) { resumeListeningAfterSpeech(); return; }
         window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(clean.slice(0, 600));
+        // Die Browser-Stimme kostet nichts – daher den ganzen Text sprechen
+    // Dieselbe Kurzfassung wie bei der ElevenLabs-Stimme, damit beide gleich
+    // klingen: sehr lange Texte enden nicht mitten im Satz, sondern mit Hinweis
+    // und Schlusssatz. Die Browser-Stimme darf länger sprechen (kostet nichts).
+    const gesprochen = clean.length <= 4000 ? clean : buildSpokenSummary(clean, 4000);
+    const utterance = new SpeechSynthesisUtterance(gesprochen);
         utterance.lang = "de-DE"; utterance.rate = 0.90; utterance.pitch = 0.80;
         utterance.onstart = () => setIsSpeaking(true);
         utterance.onend = () => {
@@ -452,8 +486,12 @@ function JarvisChatInner() {
     ttsEnabledRef.current = true;
     setTtsUnlocked(true);
     setTtsEnabled(true);
-    // Kurze Probeansage im Jarvis-Ton, damit sofort hörbar ist, dass es klappt
-    speakText("Sehr wohl, Sir. Systeme bereit, ich stehe zu Ihrer Verfügung.");
+    // Kurze Probeansage im Jarvis-Ton (absichtlich knapp, um Guthaben zu sparen)
+    speakText("Sehr wohl, Sir. Systeme bereit.");
+    // Hinweis, was der gewählte Modus bedeutet
+    if (speechModeRef.current === "voice-only") {
+      toast.info("Jarvis spricht nur bei Sprachbedienung. Zum Umschalten den Lautsprecher antippen.");
+    }
   }, [unlockAudio, speakText]);
 
   const toggleTts = useCallback(() => {
@@ -461,17 +499,51 @@ function JarvisChatInner() {
       unlockTts();
       return;
     }
-    const next = !ttsEnabled;
-    setTtsEnabled(next);
-    ttsEnabledRef.current = next;
-    if (!next) {
-      // Ausschalten stoppt auch die laufende Wiedergabe
+    // Durchschalten: immer → nur bei Sprachbedienung → nie → immer
+    const reihenfolge: Array<"always" | "voice-only" | "never"> = ["always", "voice-only", "never"];
+    const next = reihenfolge[(reihenfolge.indexOf(speechMode) + 1) % reihenfolge.length];
+    setSpeechMode(next);
+    speechModeRef.current = next;
+    localStorage.setItem("jarvis-speech-mode", next);
+    // Zusätzlich im Profil ablegen, damit die Wahl auch am iPhone gilt
+    saveSpeechMode.mutate({ speechMode: next === "voice-only" ? "voiceOnly" : next });
+
+    // "nie" schaltet die Ausgabe komplett ab und stoppt eine laufende Wiedergabe
+    const aktiv = next !== "never";
+    setTtsEnabled(aktiv);
+    ttsEnabledRef.current = aktiv;
+    if (!aktiv) {
       window.speechSynthesis?.cancel();
       try { audioElRef.current?.pause(); } catch { /* ignorieren */ }
       elAudioRef.current = null;
       setIsSpeaking(false);
     }
-  }, [ttsEnabled, unlockTts]);
+
+    const texte = {
+      always: "Jarvis spricht bei jeder Antwort.",
+      "voice-only": "Jarvis spricht nur, wenn du ihn per Sprache fragst – das schont das Guthaben.",
+      never: "Sprachausgabe aus. Antworten erscheinen nur im Chat.",
+    } as const;
+    toast.info(texte[next]);
+  }, [speechMode, unlockTts, saveSpeechMode]);
+
+  // Modus beim Laden übernehmen. Das Profil hat Vorrang (gilt geräteübergreifend),
+  // die lokale Einstellung dient als Rückfall, solange das Profil noch lädt.
+  useEffect(() => {
+    // Im Profil wird "voiceOnly" geschrieben, im Chat "voice-only"
+    const ausProfil = profile?.speechMode
+      ? (profile.speechMode === "voiceOnly" ? "voice-only" : profile.speechMode) as "always" | "voice-only" | "never"
+      : null;
+    const lokal = localStorage.getItem("jarvis-speech-mode");
+    const modus = ausProfil
+      ?? (lokal === "always" || lokal === "voice-only" || lokal === "never" ? lokal : null);
+    if (!modus) return;
+    setSpeechMode(modus);
+    speechModeRef.current = modus;
+    const aktiv = modus !== "never";
+    setTtsEnabled(aktiv);
+    ttsEnabledRef.current = aktiv;
+  }, [profile?.speechMode]);
 
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
@@ -515,12 +587,17 @@ function JarvisChatInner() {
   }, [messages, interimText]);
 
   // Kern-Funktion: Nachricht senden
-  const sendMessageFromText = useCallback(async (text: string, file?: typeof uploadedFile) => {
+  const sendMessageFromText = useCallback(async (
+    text: string,
+    file?: typeof uploadedFile,
+    quelle: "sprache" | "tippen" = "tippen",
+  ) => {
     if (!text.trim() && !file) return;
     // Läuft noch eine Antwort? Dann Text merken und nach dem Ende automatisch senden,
     // statt ihn stillschweigend zu verwerfen (das war die Ursache für „nur eine Antwort").
     if (isBusyRef.current) {
       queuedTextRef.current = text.trim();
+      queuedSourceRef.current = quelle;
       toast.info("Ich beantworte noch die letzte Frage – deine neue Nachricht folgt gleich.");
       return;
     }
@@ -572,7 +649,13 @@ function JarvisChatInner() {
       // Sprachausgabe SOFORT anstossen – parallel zum Einblenden des Textes.
       // Vorher wurde erst der ganze Text eingeblendet und danach die Tondatei
       // erzeugt; dadurch entstand eine spürbare Pause bis zum Sprechen.
-      if (fullText) speakText(fullText);
+      //
+      // Der gewählte Modus entscheidet, ob überhaupt gesprochen wird. «nur bei
+      // Sprachbedienung» schont das Monatsguthaben deutlich, weil getippte
+      // Nachrichten stumm bleiben.
+      const modus = speechModeRef.current;
+      const darfSprechen = modus === "always" || (modus === "voice-only" && quelle === "sprache");
+      if (fullText && darfSprechen) speakText(fullText);
 
       // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
       // Abbrechbar, damit eine neue Anfrage nicht warten muss.
@@ -617,7 +700,8 @@ function JarvisChatInner() {
     const queued = queuedTextRef.current;
     if (queued) {
       queuedTextRef.current = null;
-      const timer = setTimeout(() => { sendMessageFromText(queued); }, 250);
+      const quelle = queuedSourceRef.current;
+      const timer = setTimeout(() => { sendMessageFromText(queued, undefined, quelle); }, 250);
       return () => clearTimeout(timer);
     }
   }, [isStreaming, sendMessageFromText]);
@@ -733,7 +817,7 @@ function JarvisChatInner() {
           }
           if (detection.rest) {
             // "Hey Jarvis, wie ist das Wetter?" – direkt ausführen
-            sendMessageFromText(detection.rest);
+            sendMessageFromText(detection.rest, undefined, "sprache");
             return;
           }
           // Nur das Aktivierungswort – jetzt auf den Auftrag warten
@@ -752,7 +836,7 @@ function JarvisChatInner() {
         {
           // sendMessageFromText legt den Text bei laufender Antwort selbst in die
           // Warteschlange – er geht also nie verloren.
-          sendMessageFromText(spoken);
+          sendMessageFromText(spoken, undefined, "sprache");
         }
       }
     };
@@ -1001,9 +1085,30 @@ function JarvisChatInner() {
               <span className="hidden sm:inline">{searchEnabled ? "Suche AN" : "Suche AUS"}</span>
             </Button>
             <Button variant="ghost" size="sm" onClick={isSpeaking ? () => stopSpeaking(false) : toggleTts}
-              className={cn("gap-1 text-xs px-2 border", ttsUnlocked && ttsEnabled ? "text-primary border-primary/30 bg-primary/10" : "text-muted-foreground border-transparent")} title="Sprachausgabe">
+              className={cn(
+                "gap-1 text-xs px-2 border",
+                ttsUnlocked && ttsEnabled ? "text-primary border-primary/30 bg-primary/10" : "text-muted-foreground border-transparent",
+              )}
+              title={
+                speechMode === "always" ? "Sprachausgabe: bei jeder Antwort (antippen zum Wechseln)"
+                : speechMode === "voice-only" ? "Sprachausgabe: nur bei Sprachbedienung – schont das Guthaben (antippen zum Wechseln)"
+                : "Sprachausgabe: aus (antippen zum Wechseln)"
+              }>
               {isSpeaking ? <VolumeX size={14} /> : <Volume2 size={14} />}
-              <span className="hidden sm:inline">{isSpeaking ? "Stopp" : ttsUnlocked && ttsEnabled ? "🔊 AN" : "🔇 AUS"}</span>
+              <span className="hidden sm:inline">
+                {isSpeaking ? "Stopp"
+                  : !ttsUnlocked ? "🔇 AUS"
+                  : speechMode === "always" ? "🔊 Immer"
+                  : speechMode === "voice-only" ? "🎤 Nur Sprache"
+                  : "🔇 Aus"}
+              </span>
+              <span className="sm:hidden">
+                {isSpeaking ? "■"
+                  : !ttsUnlocked ? ""
+                  : speechMode === "always" ? "∞"
+                  : speechMode === "voice-only" ? "🎤"
+                  : ""}
+              </span>
             </Button>
             {/* Zeichen-Budget der Sprachausgabe */}
             {ttsUsage && (
