@@ -639,7 +639,7 @@ ${langStr}
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} (ISO: ${new Date().toISOString().split("T")[0]}).
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr − Geburtsjahr.
@@ -781,7 +781,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             }
           }
           llmMessages2.push({ role: "user", content: userContent2 as string });
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const llmResp2 = await invokeLLM({
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
@@ -802,7 +802,6 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
                 parsed
               ),
             callModel: async msgs => {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const next = await invokeLLM({
                 model: "claude-sonnet-4-5",
                 max_tokens: 4096,
@@ -843,7 +842,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })} (ISO: ${new Date().toISOString().split("T")[0]}).
+Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr − Geburtsjahr.
@@ -932,7 +931,7 @@ ${calendarContext}${memoryContext}${approvalContext}`;
       llmMessages.push({ role: "user", content: userContent as string });
 
       // LLM aufrufen (nicht-streaming)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const llmResp = await invokeLLM({
         model: "claude-sonnet-4-5",
         max_tokens: 4096,
@@ -949,7 +948,6 @@ ${calendarContext}${memoryContext}${approvalContext}`;
         runAction: parsed =>
           executeAction({ userId, runCalendar: executeCalendarAction }, parsed),
         callModel: async msgs => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const next = await invokeLLM({
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
