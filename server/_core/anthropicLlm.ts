@@ -88,6 +88,41 @@ export async function invokeViaAnthropic(
     messages.unshift({ role: "user", content: "." });
   }
 
+  if (params.onStream) {
+    const stream = await getClient().messages.create({
+      model,
+      max_tokens: maxTokens,
+      ...(systemParts.length > 0 ? { system: systemParts.join("\n\n") } : {}),
+      messages: messages as any,
+      stream: true,
+    });
+
+    let fullText = "";
+    for await (const chunk of stream) {
+      if (
+        chunk.type === "content_block_delta" &&
+        chunk.delta.type === "text_delta"
+      ) {
+        fullText += chunk.delta.text;
+        params.onStream(chunk.delta.text);
+      }
+    }
+
+    return {
+      id: "stream-id",
+      created: Math.floor(Date.now() / 1000),
+      model: model,
+      choices: [
+        {
+          index: 0,
+          message: { role: "assistant", content: fullText },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    };
+  }
+
   const resp = await getClient().messages.create({
     model,
     max_tokens: maxTokens,

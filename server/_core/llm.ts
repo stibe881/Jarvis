@@ -75,6 +75,7 @@ export type InvokeParams = {
   model?: string;
   thinking?: Record<string, unknown>;
   reasoning?: Record<string, unknown>;
+  onStream?: (chunk: string) => void;
 };
 
 export type ToolCall = {

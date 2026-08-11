@@ -443,7 +443,10 @@ export type RunAgentLoopOptions = {
   /** Gesprächsverlauf, wird um Beobachtungen erweitert. */
   messages: LoopMessage[];
   /** Ruft das Modell erneut auf und liefert die nächste Antwort. */
-  callModel: (messages: LoopMessage[]) => Promise<string>;
+  callModel: (
+    messages: LoopMessage[],
+    onStream?: (chunk: string) => void
+  ) => Promise<string>;
   /** Führt eine einzelne Aktion aus. */
   runAction: (parsed: ParsedAction) => Promise<AgentStep>;
   /** Maximale Anzahl Runden. */
@@ -453,6 +456,10 @@ export type RunAgentLoopOptions = {
    * Chat, sobald Stefan eine vorgemerkte Aktion ausdrücklich freigegeben hat.
    */
   approved?: boolean;
+  /** Callback für eingehende Text-Chunks. */
+  onStream?: (chunk: string) => void;
+  /** Callback für ausgeführte Werkzeug-Schritte. */
+  onStep?: (step: AgentStep) => void;
 };
 
 /**
@@ -512,6 +519,9 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
       const step = await opts.runAction(parsed);
       roundSteps.push(step);
       steps.push(step);
+      if (opts.onStep) {
+        opts.onStep(step);
+      }
     }
 
     opts.messages.push({
@@ -523,9 +533,11 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
       content: `[Ergebnisse deiner Werkzeuge – der Nutzer sieht diese Nachricht nicht]\n\n${formatObservations(roundSteps)}\n\nWenn du für die Aufgabe noch Daten brauchst, nutze weitere Aktionsblöcke. Wenn du alles hast, formuliere jetzt die endgültige Antwort – ohne Aktionsblöcke, mit den konkreten Zahlen und Namen aus den Ergebnissen. Schliesse mit genau einem konkreten Vorschlag für den nächsten Schritt.`,
     });
 
-    current = await opts.callModel(opts.messages);
+    current = await opts.callModel(opts.messages, opts.onStream);
 
-    if (round === maxRounds - 1) current = parseActions(current).text;
+    if (round === maxRounds - 1) {
+      current = parseActions(current).text;
+    }
   }
 
   let finalText = ensureNextStep(current.trim(), steps);

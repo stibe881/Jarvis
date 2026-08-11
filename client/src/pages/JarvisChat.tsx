@@ -921,64 +921,91 @@ function JarvisChatInner() {
       }
 
       try {
-        const result = await sendMessageMutation.mutateAsync({
-          conversationId: convId,
-          message: text,
-          fileUrl: file?.url ?? undefined,
-          fileName: file?.name ?? undefined,
-          searchResults,
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            conversationId: convId,
+            message: text,
+            fileUrl: file?.url ?? undefined,
+            fileName: file?.name ?? undefined,
+            searchResults,
+          }),
         });
 
-        const fullText = result.response;
+        if (!response.body)
+          throw new Error("Stream konnte nicht gelesen werden.");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let done = false;
+        let fullText = "";
+        let displayedText = "";
+
+        // Puffer für abgeschnittene Server-Sent Events (SSE)
+        let buffer = "";
+
+        while (!done) {
+          const { value, done: readerDone } = await reader.read();
+          done = readerDone;
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            // Der letzte Teil ist evtl. unvollständig, also im Puffer lassen
+            buffer = parts.pop() || "";
+
+            for (const ev of parts) {
+              if (ev.startsWith("event: ")) {
+                const lines = ev.split("\n");
+                const eventName = lines[0].slice(7);
+                const dataLine = lines
+                  .find(l => l.startsWith("data: "))
+                  ?.slice(6);
+                if (dataLine) {
+                  try {
+                    const data = JSON.parse(dataLine);
+                    if (eventName === "text") {
+                      fullText += data.chunk;
+                      // Verstecke die XML-Befehle (Tags) live im UI
+                      displayedText = fullText.replace(/<[^>]*>?/g, "");
+                      setMessages(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0) {
+                          updated[updated.length - 1] = {
+                            ...updated[updated.length - 1],
+                            content: displayedText,
+                          };
+                        }
+                        return updated;
+                      });
+                    } else if (eventName === "done") {
+                      fullText = data.response; // Beinhaltet auch das Schritt-Protokoll
+                      setMessages(prev => {
+                        const updated = [...prev];
+                        if (updated.length > 0) {
+                          updated[updated.length - 1] = {
+                            ...updated[updated.length - 1],
+                            content: fullText,
+                          };
+                        }
+                        return updated;
+                      });
+                    }
+                  } catch (e) {
+                    console.error("Fehler beim Parsen von SSE", e);
+                  }
+                }
+              }
+            }
+          }
+        }
+
         utils.chat.listConversations.invalidate();
 
-        // Sprachausgabe SOFORT anstossen – parallel zum Einblenden des Textes.
-        // Vorher wurde erst der ganze Text eingeblendet und danach die Tondatei
-        // erzeugt; dadurch entstand eine spürbare Pause bis zum Sprechen.
-        //
-        // Der gewählte Modus entscheidet, ob überhaupt gesprochen wird. «nur bei
-        // Sprachbedienung» schont das Monatsguthaben deutlich, weil getippte
-        // Nachrichten stumm bleiben.
         const modus = speechModeRef.current;
         const darfSprechen =
           modus === "always" ||
           (modus === "voice-only" && quelle === "sprache");
         if (fullText && darfSprechen) speakText(fullText);
-
-        // Pseudo-Streaming: Wort für Wort einblenden, insgesamt maximal ~1,2 Sekunden.
-        // Abbrechbar, damit eine neue Anfrage nicht warten muss.
-        const runId = ++streamRunIdRef.current;
-        const words = fullText.split(" ");
-        const delay = Math.max(
-          6,
-          Math.min(30, 1000 / Math.max(words.length, 1))
-        );
-        let displayed = "";
-        for (let i = 0; i < words.length; i++) {
-          if (streamRunIdRef.current !== runId) break; // abgebrochen
-          displayed += (i > 0 ? " " : "") + words[i];
-          const snap = displayed;
-          setMessages(prev => {
-            const updated = [...prev];
-            if (updated.length === 0) return prev;
-            updated[updated.length - 1] = {
-              ...updated[updated.length - 1],
-              content: snap,
-            };
-            return updated;
-          });
-          await new Promise(r => setTimeout(r, delay));
-        }
-        // Sicherstellen, dass immer der vollständige Text steht
-        setMessages(prev => {
-          const updated = [...prev];
-          if (updated.length === 0) return prev;
-          updated[updated.length - 1] = {
-            ...updated[updated.length - 1],
-            content: fullText,
-          };
-          return updated;
-        });
       } catch (err) {
         console.error("[sendMessage] Fehler:", err);
         const msg = err instanceof Error ? err.message : String(err);
@@ -995,7 +1022,6 @@ function JarvisChatInner() {
       searchEnabled,
       createConvMutation,
       searchMutation,
-      sendMessageMutation,
       speakText,
       utils,
     ]

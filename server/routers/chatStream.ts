@@ -108,7 +108,7 @@ function detectIntent(
 }
 
 // Kalender-Aktionen direkt ausführen (für Chat-Integration)
-export async function executeCalendarAction(
+async function executeCalendarAction(
   userId: number,
   action: string,
   params: Record<string, unknown>
@@ -319,110 +319,6 @@ export async function executeCalendarAction(
   } catch (err) {
     return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`;
   }
-}
-
-export async function buildChatSystemPrompt(userId: number): Promise<string> {
-  const profile = await getUserProfile(userId);
-  let memoryContext = "";
-  const memories = await getMemoriesByUser(userId);
-  if (memories.length > 0) {
-    const memLines = memories.map(m => `- ${m.key}: ${m.value}`);
-    memoryContext = `\n\nGEDÄCHTNIS (Fakten über den Nutzer, die du in Antworten berücksichtigen solltest):\n${memLines.join("\n")}`;
-  }
-
-  let approvalContext = "";
-  if (hasPending()) {
-    approvalContext = `\n\nWICHTIG: Es gibt aktuell offene Aktionen, die auf Freigabe warten. Diese Aktionen darfst du erst ausführen, wenn der Nutzer ausdrücklich "Ja" oder "Einverstanden" sagt.`;
-  }
-
-  const calendarContext = `\n\nKALENDER: Du kannst Termine lesen und schreiben.
-- Um Termine zu lesen: <calendar_action>{"action":"list_events","days":7}</calendar_action>
-- Um einen Termin zu erstellen: <calendar_action>{"action":"create_event","summary":"Titel","start_time":"2024-05-20T10:00:00Z","end_time":"2024-05-20T11:00:00Z"}</calendar_action>
-- Um Termine zu aktualisieren/löschen, nutze update_event / delete_event mit eventId.`;
-
-  if (profile) {
-    const addressStr = profile.address
-      ? `Wohnhaft in ${profile.address}`
-      : "Keine Adresse hinterlegt";
-    const personalityStr = profile.personality
-      ? `\nDeine Persönlichkeit: ${profile.personality}`
-      : "";
-    const langStr =
-      profile.language === "de-CH"
-        ? "Antworte auf Schweizerdeutsch (Mundart)."
-        : profile.language === "en"
-          ? "Answer in English."
-          : "Antworte auf Deutsch.";
-    const jarvisName = profile.jarvisName || "Jarvis";
-
-    const intelligenceContext = `
-ARBEITSWEISE (sehr wichtig):
-1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enthält, um sie korrekt auszuführen, stelle GEZIELTE Rückfragen anstatt zu raten oder eine leere Antwort zu geben.`;
-
-    const grossIctContext = `
-GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
-Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server – für KMU in der Zentralschweiz.
-Wenn Stefan Hilfe zu Gross ICT braucht (Angebote, Texte, Kundenprojekte), kannst du helfen. Verwende immer CHF (nicht €) und Schweizer Schreibweise (ss statt ß).`;
-
-    return `Du bist ${jarvisName}, der persönliche Assistent von Stefan Gross. ${addressStr}.
-${langStr}
-
-${JARVIS_PERSONA}
-
-Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
-
-ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
-1. Rohes Alter = heutiges Jahr − Geburtsjahr.
-2. Hat der Geburtstag (Monat + Tag) dieses Jahr noch NICHT stattgefunden → Alter = Rohes Alter − 1, Geburtstag steht noch bevor.
-3. Hat der Geburtstag dieses Jahr bereits stattgefunden → Alter = Rohes Alter, Geburtstag war bereits.
-4. Kalendereinträge rund um einen Geburtstag sind NICHT zwingend veraltet – prüfe das Datum, bevor du einen Eintrag als «veraltet» bezeichnest.
-${grossIctContext}
-${intelligenceContext}
-${CORE_AGENT_INSTRUCTIONS}
-MUSIK (Spotify): Füge bei Musikwünschen GENAU EINEN spotify_action-Block ein:
-<spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
-<spotify_action>{"action":"pause"}</spotify_action> / {"action":"next"} / {"action":"previous"}
-<spotify_action>{"action":"volume","level":40}</spotify_action>
-<spotify_action>{"action":"current"}</spotify_action> / {"action":"playlists"} / {"action":"devices"}
-type kann track, album, playlist oder artist sein. Zeige NIE den rohen Block.
-
-IPHONE (Kurzbefehle): Für WhatsApp-Nachrichten, Wecker und Timer GENAU EINEN device_action-Block:
-<device_action>{"type":"whatsapp","recipient":"Bine","message":"Ich komme später"}</device_action>
-<device_action>{"type":"alarm","time":"06:30","label":"Aufstehen"}</device_action>
-<device_action>{"type":"timer","minutes":15}</device_action>
-Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
-${calendarContext}${memoryContext}${approvalContext}`;
-  }
-
-  return `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
-
-${JARVIS_PERSONA}
-
-Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
-
-ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
-1. Rohes Alter = heutiges Jahr − Geburtsjahr.
-2. Hat der Geburtstag (Monat + Tag) dieses Jahr noch NICHT stattgefunden → Alter = Rohes Alter − 1, Geburtstag steht noch bevor.
-3. Hat der Geburtstag dieses Jahr bereits stattgefunden → Alter = Rohes Alter, Geburtstag war bereits.
-4. Kalendereinträge rund um einen Geburtstag sind NICHT zwingend veraltet – prüfe das Datum, bevor du einen Eintrag als «veraltet» bezeichnest.
-
-${CORE_AGENT_INSTRUCTIONS}
-
-MUSIK (Spotify): Füge bei Musikwünschen GENAU EINEN spotify_action-Block ein:
-<spotify_action>{"action":"play","query":"Coldplay Yellow","type":"track"}</spotify_action>
-<spotify_action>{"action":"pause"}</spotify_action> / {"action":"next"} / {"action":"previous"}
-<spotify_action>{"action":"volume","level":40}</spotify_action>
-<spotify_action>{"action":"current"}</spotify_action> / {"action":"playlists"} / {"action":"devices"}
-type kann track, album, playlist oder artist sein. Zeige NIE den rohen Block.
-
-IPHONE (Kurzbefehle): Für WhatsApp-Nachrichten, Wecker und Timer GENAU EINEN device_action-Block:
-<device_action>{"type":"whatsapp","recipient":"Bine","message":"Ich komme später"}</device_action>
-<device_action>{"type":"alarm","time":"06:30","label":"Aufstehen"}</device_action>
-<device_action>{"type":"timer","minutes":15}</device_action>
-Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
-${calendarContext}${memoryContext}${approvalContext}`;
 }
 
 export const chatRouter = router({
