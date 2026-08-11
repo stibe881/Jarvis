@@ -333,7 +333,7 @@ function JarvisChatInner() {
 
     // Ohne WebAudio-Unterstützung gilt die Freigabe trotzdem als erteilt –
     // der eigentliche Beweis ist die erste erfolgreiche Wiedergabe.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const hasWebAudio = Boolean(
       (window as any).AudioContext || (window as any).webkitAudioContext
     );
@@ -1619,28 +1619,6 @@ function JarvisChatInner() {
           className="flex-1 px-3 md:px-6 py-4"
           ref={scrollRef as React.RefObject<HTMLDivElement>}
         >
-          {/* TTS-Unlock-Banner */}
-          {!ttsUnlocked && (
-            <div className="mx-auto max-w-sm mb-4 mt-2">
-              <button
-                onClick={unlockTts}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-all group"
-              >
-                <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0 group-hover:bg-primary/30">
-                  <Volume2 size={16} className="text-primary" />
-                </div>
-                <div className="text-left">
-                  <p className="text-xs font-semibold text-primary">
-                    Sprachausgabe aktivieren
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Einmal antippen – danach spricht Jarvis auch bei
-                    Sprachbedienung
-                  </p>
-                </div>
-              </button>
-            </div>
-          )}
           {messages.length === 0 && !isListening ? (
             <div className="flex flex-col items-center justify-center h-full gap-6 py-20">
               <JarvisOrb size={80} />
@@ -1770,7 +1748,16 @@ function JarvisChatInner() {
           {!input.trim() && !uploadedFile && (
             <div className="flex flex-col items-center gap-2 mb-3">
               <button
-                onClick={isListening ? stopListening : startListening}
+                onClick={() => {
+                  const next = !autoListen;
+                  setAutoListen(next);
+                  autoListenRef.current = next;
+                  if (next && !isListening && !isBusyRef.current) {
+                    startListening();
+                  } else if (!next) {
+                    stopListening();
+                  }
+                }}
                 className={cn(
                   "w-16 h-16 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg",
                   isListening
@@ -1784,63 +1771,6 @@ function JarvisChatInner() {
               >
                 {isListening ? <MicOff size={28} /> : <Mic size={28} />}
               </button>
-              <div className="flex items-center gap-2">
-                {/* Kontinuierlicher Zuhör-Modus Toggle */}
-                <button
-                  onClick={() => {
-                    const next = !autoListen;
-                    setAutoListen(next);
-                    autoListenRef.current = next;
-                    if (next && !isListening && !isBusyRef.current) {
-                      startListening();
-                    } else if (!next) {
-                      stopListening();
-                    }
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
-                    autoListen
-                      ? "bg-primary/20 border-primary/50 text-primary"
-                      : "bg-transparent border-border text-muted-foreground hover:border-primary/30 hover:text-primary"
-                  )}
-                  title="Kontinuierlicher Zuhör-Modus"
-                >
-                  <div
-                    className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      autoListen
-                        ? "bg-primary animate-pulse"
-                        : "bg-muted-foreground"
-                    )}
-                  />
-                  {autoListen ? "Hands-free AN" : "Hands-free"}
-                </button>
-                {/* Wake-Word-Modus */}
-                <button
-                  onClick={toggleWakeWord}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all border",
-                    wakeWordMode
-                      ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
-                      : "bg-transparent border-border text-muted-foreground hover:border-cyan-500/30 hover:text-cyan-300"
-                  )}
-                  title="Jarvis lauscht dauerhaft und reagiert auf «Hey Jarvis»"
-                >
-                  <div
-                    className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      wakeWordMode
-                        ? "bg-cyan-400 animate-pulse"
-                        : "bg-muted-foreground"
-                    )}
-                  />
-                  {wakeWordMode
-                    ? wakeArmed
-                      ? "Ich höre …"
-                      : "«Hey Jarvis» AN"
-                    : "«Hey Jarvis»"}
-                </button>
-              </div>
             </div>
           )}
 
