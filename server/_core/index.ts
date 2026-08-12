@@ -103,6 +103,9 @@ async function startServer() {
       await handleTtsStream(req, res, ctx.user.id);
     }
   );
+
+  const { handleChatStream } = await import("../routers/streamEndpoint");
+  app.post("/api/chat/stream", handleChatStream);
   // Heartbeat-Cron: Tägliche Morgen-Zusammenfassung
   app.post("/api/scheduled/morning-briefing", handleMorningBriefing);
   // Heartbeat-Cron: Wöchentlicher Bericht (Freitag)
