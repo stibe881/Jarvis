@@ -80,8 +80,9 @@ export async function runBackgroundTasks() {
 
       if (!user) continue;
 
+      const timeStr = `Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).`;
       const systemPrompt =
-        "Du bist Jarvis. Führe den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.";
+        `Du bist Jarvis. Führe den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.\n${timeStr}`;
 
       try {
         const response = await invokeLLM({

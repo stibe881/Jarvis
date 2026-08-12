@@ -4856,7 +4856,7 @@ ${langStr}
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Ged\xE4chtnis.${personalityStr}
-Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
+Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder \xFCber Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr \u2212 Geburtsjahr.
@@ -5064,7 +5064,7 @@ ${parts.join("\n")}`;
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Ged\xE4chtnis.
-Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
+Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder \xFCber Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr \u2212 Geburtsjahr.
@@ -5453,7 +5453,9 @@ async function runBackgroundTasks() {
       const profileRes = await db.select().from(userProfiles).where(eq5(userProfiles.userId, task.userId)).limit(1);
       const profile = profileRes[0];
       if (!user) continue;
-      const systemPrompt = "Du bist Jarvis. F\xFChre den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.";
+      const timeStr = `Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).`;
+      const systemPrompt = `Du bist Jarvis. F\xFChre den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.
+${timeStr}`;
       try {
         const response = await invokeLLM({
           messages: [
