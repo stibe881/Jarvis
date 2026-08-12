@@ -104,6 +104,10 @@ export default function JarvisProfile() {
     jarvisPersonality: "",
     language: "de" as "de" | "en" | "auto",
     elevenLabsVoiceId: "JBFqnCBsd6RMkjVDRZzb",
+    notifyPush: false,
+    notifyWebpush: false,
+    notifyEmail: false,
+    notifyChat: true,
   });
 
   useEffect(() => {
@@ -120,6 +124,10 @@ export default function JarvisProfile() {
         jarvisPersonality: profile.jarvisPersonality ?? "",
         language: (profile.language as "de" | "en" | "auto") ?? "de",
         elevenLabsVoiceId: profile.elevenLabsVoiceId ?? "JBFqnCBsd6RMkjVDRZzb",
+        notifyPush: profile.notifyPush ?? false,
+        notifyWebpush: profile.notifyWebpush ?? false,
+        notifyEmail: profile.notifyEmail ?? false,
+        notifyChat: profile.notifyChat ?? true,
       });
     } else if (!isLoading && user) {
       // Standardwerte aus OAuth-Profil
@@ -473,6 +481,69 @@ export default function JarvisProfile() {
               )}
             </div>
           )}
+        </section>
+
+        {/* Benachrichtigungen */}
+        <section className="jarvis-card rounded-xl p-5 space-y-4">
+          <h2 className="font-jarvis text-sm font-bold text-primary flex items-center gap-2">
+            <MessageSquare size={14} /> BENACHRICHTIGUNGEN
+          </h2>
+          <p className="text-xs text-muted-foreground mb-4">
+            Wie soll Jarvis dich bei Hintergrundaufgaben kontaktieren?
+          </p>
+          <div className="space-y-3">
+            {[
+              {
+                id: "notifyPush" as const,
+                label: "Smartphone Push-Nachricht (App)",
+              },
+              {
+                id: "notifyWebpush" as const,
+                label: "Browser-Benachrichtigung (PC/Mac)",
+              },
+              { id: "notifyEmail" as const, label: "E-Mail" },
+              { id: "notifyChat" as const, label: "Im Chat-Verlauf (immer)" },
+            ].map(toggle => (
+              <label
+                key={toggle.id}
+                className="flex items-center gap-3 cursor-pointer"
+              >
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={form[toggle.id]}
+                    onChange={e =>
+                      setForm(f => ({ ...f, [toggle.id]: e.target.checked }))
+                    }
+                    disabled={toggle.id === "notifyChat"}
+                  />
+                  <div
+                    className={cn(
+                      "block w-10 h-6 rounded-full transition-colors",
+                      form[toggle.id] ? "bg-primary" : "bg-muted"
+                    )}
+                  ></div>
+                  <div
+                    className={cn(
+                      "dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform",
+                      form[toggle.id] ? "transform translate-x-4" : ""
+                    )}
+                  ></div>
+                </div>
+                <span
+                  className={cn(
+                    "text-sm font-medium",
+                    toggle.id === "notifyChat"
+                      ? "text-muted-foreground"
+                      : "text-foreground"
+                  )}
+                >
+                  {toggle.label}
+                </span>
+              </label>
+            ))}
+          </div>
         </section>
 
         {/* Speichern */}

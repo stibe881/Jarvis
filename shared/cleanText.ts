@@ -10,13 +10,19 @@
 const INTERNE_TAGS =
   "person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar";
 
-/** Entfernt interne Kategorie-Markierungen und räumt Satzzeichen auf. */
+/** Entfernt interne Kategorie-Markierungen, Werkzeug-XML-Tags und räumt Satzzeichen auf. */
 export function removeInternalTags(text: string): string {
   if (!text) return text;
-  return text
-    .replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "")
-    .replace(/\s+([.,;:!?])/g, "$1")
-    .replace(/[ \t]{2,}/g, " ");
+  return (
+    text
+      // Entferne alle Werkzeug-XML-Blöcke (z.B. <app_action>...</app_action>)
+      // Das (?:<\/[a-z_]+_action>|$) stellt sicher, dass es auch während dem Streamen
+      // ausgeblendet wird, wenn das schließende Tag noch fehlt.
+      .replace(/<[a-z_]+_action>[\s\S]*?(?:<\/[a-z_]+_action>|$)/gi, "")
+      .replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "")
+      .replace(/\s+([.,;:!?])/g, "$1")
+      .replace(/[ \t]{2,}/g, " ")
+  );
 }
 
 /** Zerlegt einen Text in ganze Sätze. */

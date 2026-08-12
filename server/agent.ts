@@ -23,6 +23,7 @@ import {
   updateTask,
   upsertMemory,
 } from "./db";
+import { ToolCall } from "./_core/llm";
 
 /** Ein einzelner ausgeführter Schritt – wird dem Nutzer als Protokoll gezeigt. */
 export type AgentStep = {
@@ -133,6 +134,7 @@ export const ACTION_TAGS = [
   "device_action",
   "notes_action",
   "tasks_action",
+  "schedule_task",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];
@@ -285,6 +287,48 @@ export type ExecuteContext = {
   ) => Promise<string>;
 };
 
+async function executeScheduleTask(
+  userId: number,
+  params: Record<string, unknown>
+): Promise<string> {
+  const { getDb } = await import("./db");
+  const db = await getDb();
+  if (!db) return "Fehler: DB nicht verfügbar";
+  const { scheduledTasks } = await import("../drizzle/schema");
+
+  const prompt = typeof params.prompt === "string" ? params.prompt : "";
+  if (!prompt) return "Fehler: Ein Prompt wird für den Task benötigt.";
+
+  const cronExpression =
+    typeof params.cronExpression === "string" ? params.cronExpression : null;
+
+  let runAt: number | null = null;
+  if (typeof params.runAt === "string" && params.runAt.trim()) {
+    const d = new Date(params.runAt);
+    if (!Number.isNaN(d.getTime())) {
+      runAt = d.getTime();
+    }
+  }
+
+  const isImmediate = !cronExpression && !runAt;
+
+  await db.insert(scheduledTasks).values({
+    userId,
+    prompt,
+    cronExpression,
+    runAt: isImmediate ? new Date() : runAt ? new Date(runAt) : null,
+    isActive: true,
+  });
+
+  if (cronExpression) {
+    return `Wiederkehrender Task erstellt: «${prompt}» (Cron: ${cronExpression})`;
+  } else if (!isImmediate) {
+    return `Einmaliger Task erstellt für ${new Date(runAt!).toLocaleString("de-CH")}: «${prompt}»`;
+  } else {
+    return `Task erstellt und wird in Kürze ausgeführt: «${prompt}»`;
+  }
+}
+
 /**
  * Führt eine einzelne Aktion aus und liefert das Ergebnis als Beobachtung.
  * Fehler werden abgefangen und als Text zurückgegeben, damit das Modell
@@ -346,6 +390,10 @@ export async function executeAction(
       case "tasks_action": {
         const { action: _a, ...params } = payload;
         result = await executeTasksAction(ctx.userId, action, params);
+        break;
+      }
+      case "schedule_task": {
+        result = await executeScheduleTask(ctx.userId, payload);
         break;
       }
       default:
@@ -439,14 +487,14 @@ export type LoopMessage = {
 
 export type RunAgentLoopOptions = {
   /** Erste Modellantwort, die möglicherweise Aktionsblöcke enthält. */
-  firstResponse: string;
+  firstResponse: string | { text: string; tool_calls?: ToolCall[] };
   /** Gesprächsverlauf, wird um Beobachtungen erweitert. */
   messages: LoopMessage[];
   /** Ruft das Modell erneut auf und liefert die nächste Antwort. */
   callModel: (
     messages: LoopMessage[],
     onStream?: (chunk: string) => void
-  ) => Promise<string>;
+  ) => Promise<string | { text: string; tool_calls?: ToolCall[] }>;
   /** Führt eine einzelne Aktion aus. */
   runAction: (parsed: ParsedAction) => Promise<AgentStep>;
   /** Maximale Anzahl Runden. */
@@ -483,7 +531,29 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
   let rounds = 0;
 
   for (let round = 0; round < maxRounds; round++) {
-    const { text, actions } = parseActions(current);
+    // 1. Aktionen extrahieren (sowohl XML als auch native Tool-Calls)
+    let text = "";
+    let actions: ParsedAction[] = [];
+    if (typeof current === "string") {
+      const parsed = parseActions(current);
+      text = parsed.text;
+      actions = parsed.actions;
+    } else {
+      const parsed = parseActions(current.text);
+      text = parsed.text;
+      actions = parsed.actions;
+      if (current.tool_calls) {
+        for (const tc of current.tool_calls) {
+          try {
+            const payload = JSON.parse(tc.function.arguments || "{}");
+            actions.push({ tag: tc.function.name as ActionTag, payload });
+          } catch {
+            // ignorieren
+          }
+        }
+      }
+    }
+
     if (actions.length === 0) {
       current = text;
       break;
@@ -536,11 +606,16 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
     current = await opts.callModel(opts.messages, opts.onStream);
 
     if (round === maxRounds - 1) {
-      current = parseActions(current).text;
+      current =
+        typeof current === "string"
+          ? parseActions(current).text
+          : parseActions(current.text).text;
     }
   }
 
-  let finalText = ensureNextStep(current.trim(), steps);
+  let finalText =
+    typeof current === "string" ? current.trim() : current.text.trim();
+  finalText = ensureNextStep(finalText, steps);
   // Sicherheitsnetz: Fragt Jarvis nicht selbst nach, ergänzen wir die Rückfrage
   if (pending.length > 0 && !hasNextStep(finalText)) {
     const list = pending.map(p => `• ${p.description}`).join("\n");

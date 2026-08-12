@@ -9,8 +9,9 @@ import {
   getMessagesByConversation,
   updateConversationTitle,
 } from "../db";
-import { runAgentLoop, executeAction, formatStepLog } from "../agent";
+import { runAgentLoop, formatStepLog, executeAction } from "../agent";
 import type { LoopMessage } from "../agent";
+import { jarvisTools } from "../_core/tools";
 import { buildChatSystemPrompt, executeCalendarAction } from "./chat";
 import { fetchWithTimeout } from "../_core/http";
 import { rememberPending } from "../pendingApproval";
@@ -29,6 +30,7 @@ export async function handleChatStream(req: Request, res: Response) {
     fileUrl,
     fileName,
     approved,
+    context,
   } = req.body;
 
   if (typeof message !== "string" || !message.trim()) {
@@ -50,7 +52,7 @@ export async function handleChatStream(req: Request, res: Response) {
     let history: { role: string; content: string }[] = [];
 
     if (conversationId) {
-      const conv = await getConversationById(conversationId, userId);
+      const conv = await getConversationById(conversationId);
       if (!conv) {
         return res.status(404).json({ error: "Konversation nicht gefunden" });
       }
@@ -69,7 +71,22 @@ export async function handleChatStream(req: Request, res: Response) {
       content: message,
     });
 
-    const systemPrompt = await buildChatSystemPrompt(userId);
+    let systemPrompt = await buildChatSystemPrompt(userId, message);
+
+    if (context) {
+      const parts = [];
+      if (context.location) {
+        parts.push(
+          `- GPS: Breitengrad ${context.location.lat}, Längengrad ${context.location.lng}`
+        );
+      }
+      if (context.battery) {
+        parts.push(`- Batteriestatus: ${context.battery}`);
+      }
+      if (parts.length > 0) {
+        systemPrompt += `\n\nGERÄTE-KONTEXT (Smartphone/Browser des Nutzers):\n${parts.join("\n")}`;
+      }
+    }
 
     let userContent: any = message;
     if (searchResults && searchResults.length > 0) {
@@ -131,11 +148,15 @@ export async function handleChatStream(req: Request, res: Response) {
       model: "claude-sonnet-4-5",
       max_tokens: 4096,
       messages: llmMessages as any,
+      tools: jarvisTools,
       onStream,
     });
 
-    const fullResponse =
-      (firstResp.choices[0]?.message?.content as string) ?? "";
+    const msgContent = firstResp.choices[0]?.message;
+    const fullResponse = {
+      text: typeof msgContent?.content === "string" ? msgContent.content : "",
+      tool_calls: msgContent?.tool_calls,
+    };
 
     // Agenten-Schleife
     const loopFb = await runAgentLoop({
@@ -155,9 +176,14 @@ export async function handleChatStream(req: Request, res: Response) {
           model: "claude-sonnet-4-5",
           max_tokens: 4096,
           messages: msgs as any,
+          tools: jarvisTools,
           onStream: streamCb,
         });
-        return (next.choices[0]?.message?.content as string) ?? "";
+        const msg = next.choices[0]?.message;
+        return {
+          text: typeof msg?.content === "string" ? msg.content : "",
+          tool_calls: msg?.tool_calls,
+        };
       },
     });
 

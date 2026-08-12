@@ -938,6 +938,41 @@ function JarvisChatInner() {
         };
         if (authHeader) headers["Authorization"] = authHeader;
 
+        // Smart Context: Battery & GPS
+        let smartContext:
+          | { battery?: string; location?: { lat: number; lng: number } }
+          | undefined;
+        try {
+          const contextObj: any = {};
+          // Battery
+          if ("getBattery" in navigator) {
+            const battery = await (navigator as any).getBattery();
+            contextObj.battery = `${Math.round(battery.level * 100)}%${battery.charging ? " (lädt)" : ""}`;
+          }
+          // GPS (kurzer Timeout)
+          if ("geolocation" in navigator) {
+            const getPos = () =>
+              new Promise<GeolocationPosition>((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                  timeout: 2000,
+                  maximumAge: 60000,
+                });
+              });
+            try {
+              const pos = await getPos();
+              contextObj.location = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+              };
+            } catch {
+              // ignore GPS error or timeout
+            }
+          }
+          if (Object.keys(contextObj).length > 0) smartContext = contextObj;
+        } catch (e) {
+          console.error("Smart Context error", e);
+        }
+
         const response = await fetch("/api/chat/stream", {
           method: "POST",
           headers,
@@ -945,6 +980,7 @@ function JarvisChatInner() {
           body: JSON.stringify({
             conversationId: convId,
             message: text,
+            context: smartContext,
             fileUrl: file?.url ?? undefined,
             fileName: file?.name ?? undefined,
             searchResults,
@@ -1875,14 +1911,26 @@ function JarvisChatInner() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={isListening ? stopListening : startListening}
+                  onClick={() => {
+                    if (isListening) {
+                      setAutoListen(false);
+                      autoListenRef.current = false;
+                      stopListening();
+                    } else {
+                      setAutoListen(true);
+                      autoListenRef.current = true;
+                      startListening();
+                    }
+                  }}
                   className={cn(
                     "h-8 w-8",
                     isListening
                       ? "text-red-400 animate-pulse"
                       : "text-muted-foreground hover:text-primary"
                   )}
-                  title={isListening ? "Aufnahme stoppen" : "Spracheingabe"}
+                  title={
+                    isListening ? "Hands-free stoppen" : "Hands-free starten"
+                  }
                   aria-label={
                     isListening ? "Aufnahme stoppen" : "Spracheingabe starten"
                   }

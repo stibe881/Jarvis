@@ -17,8 +17,10 @@ import {
 } from "../_core/voiceTranscription";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
+import { getEmbedding, cosineSimilarity } from "../_core/embeddings";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
+import { jarvisTools } from "../_core/tools";
 import {
   getMemoriesByUser,
   upsertMemory,
@@ -321,17 +323,49 @@ export async function executeCalendarAction(
   }
 }
 
-export async function buildChatSystemPrompt(userId: number): Promise<string> {
+export async function buildChatSystemPrompt(
+  userId: number,
+  query?: string
+): Promise<string> {
   const profile = await getUserProfile(userId);
   let memoryContext = "";
   const memories = await getMemoriesByUser(userId);
   if (memories.length > 0) {
-    const memLines = memories.map(m => `- ${m.key}: ${m.value}`);
-    memoryContext = `\n\nGEDÄCHTNIS (Fakten über den Nutzer, die du in Antworten berücksichtigen solltest):\n${memLines.join("\n")}`;
+    if (query) {
+      // RAG: Semantische Suche über Cosine Similarity
+      try {
+        const queryEmbedding = await getEmbedding(query);
+        const scoredMemories = memories
+          .map(m => {
+            let score = 0;
+            if (m.embedding) {
+              score = cosineSimilarity(queryEmbedding, m.embedding as number[]);
+            }
+            return { ...m, score };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        // Nimm die Top 5 relevantesten Erinnerungen (oder solche mit gutem Score)
+        const topMemories = scoredMemories.slice(0, 5);
+        if (topMemories.length > 0) {
+          const memLines = topMemories.map(m => `- ${m.key}: ${m.value}`);
+          memoryContext = `\n\nRELEVANTE ERINNERUNGEN FÜR DIESE FRAGE:\n${memLines.join("\n")}`;
+        }
+      } catch (e) {
+        console.error("Embedding-Fehler, lade Fallback-Memories:", e);
+        const memLines = memories
+          .slice(0, 5)
+          .map(m => `- ${m.key}: ${m.value}`);
+        memoryContext = `\n\nERINNERUNGEN:\n${memLines.join("\n")}`;
+      }
+    } else {
+      const memLines = memories.slice(0, 5).map(m => `- ${m.key}: ${m.value}`);
+      memoryContext = `\n\nERINNERUNGEN:\n${memLines.join("\n")}`;
+    }
   }
 
   let approvalContext = "";
-  if (hasPending()) {
+  if (hasPending(userId)) {
     approvalContext = `\n\nWICHTIG: Es gibt aktuell offene Aktionen, die auf Freigabe warten. Diese Aktionen darfst du erst ausführen, wenn der Nutzer ausdrücklich "Ja" oder "Einverstanden" sagt.`;
   }
 
@@ -341,17 +375,17 @@ export async function buildChatSystemPrompt(userId: number): Promise<string> {
 - Um Termine zu aktualisieren/löschen, nutze update_event / delete_event mit eventId.`;
 
   if (profile) {
-    const addressStr = profile.address
-      ? `Wohnhaft in ${profile.address}`
+    const addressStr = profile.location
+      ? `Wohnhaft in ${profile.location}`
       : "Keine Adresse hinterlegt";
-    const personalityStr = profile.personality
-      ? `\nDeine Persönlichkeit: ${profile.personality}`
+    const personalityStr = profile.interests
+      ? `\nDeine Interessen: ${profile.interests}`
       : "";
     const langStr =
-      profile.language === "de-CH"
-        ? "Antworte auf Schweizerdeutsch (Mundart)."
-        : profile.language === "en"
-          ? "Answer in English."
+      profile.language === "en"
+        ? "Answer in English."
+        : profile.language === "auto"
+          ? "Antworte auf Schweizerdeutsch oder Deutsch, je nach Kontext."
           : "Antworte auf Deutsch.";
     const jarvisName = profile.jarvisName || "Jarvis";
 
@@ -627,11 +661,23 @@ export const chatRouter = router({
             })
           )
           .optional(),
+        context: z
+          .object({
+            location: z.object({ lat: z.number(), lng: z.number() }).optional(),
+            battery: z.string().optional(),
+          })
+          .optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { conversationId, message, fileUrl, fileName, searchResults } =
-        input;
+      const {
+        conversationId,
+        message,
+        fileUrl,
+        fileName,
+        searchResults,
+        context,
+      } = input;
       const userId = ctx.user.id;
 
       const conv = await getConversationById(conversationId);
@@ -825,7 +871,7 @@ ARBEITSWEISE (sehr wichtig):
    - Erfinde NIE Rechnungsnummern, Beträge oder Daten. Fehlt eine Angabe, frage nach oder markiere sie klar als [Platzhalter]
 
 5. VORLAGEN: Für wiederkehrende Dokumente (Angebot, IT-Konzept, Beschaffungsantrag, Protokoll, Statusbericht) gibt es im Bereich "Vorlagen" fertige Muster mit Platzhaltern. Weise Stefan darauf hin, wenn eine Vorlage schneller wäre.`;
-          const fullSystemPrompt =
+          let fullSystemPrompt =
             systemPrompt +
             grossIctContext +
             intelligenceContext +
@@ -856,6 +902,21 @@ Diese Befehle landen in einer Warteschlange, die sein iPhone abholt. Füge GENAU
 <device_action>{"type":"reminder","message":"Rechnung Muster AG prüfen","time":"14:00"}</device_action>
 Wenn Angaben fehlen (Empfänger, Text, Uhrzeit), frage zuerst nach. Zeige NIE den rohen device_action-Block.
 ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
+
+          if (context) {
+            const parts = [];
+            if (context.location) {
+              parts.push(
+                `- GPS: Breitengrad ${context.location.lat}, Längengrad ${context.location.lng}`
+              );
+            }
+            if (context.battery) {
+              parts.push(`- Batteriestatus: ${context.battery}`);
+            }
+            if (parts.length > 0) {
+              fullSystemPrompt += `\n\nGERÄTE-KONTEXT (Smartphone/Browser des Nutzers):\n${parts.join("\n")}`;
+            }
+          }
 
           // LLM aufrufen mit Profil-Kontext
           type LLMMessage = {
@@ -931,9 +992,16 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: llmMessages2 as any,
+            tools: jarvisTools,
           });
-          let fullResponse2 =
-            (llmResp2.choices[0]?.message?.content as string) ?? "";
+          const msgContent2 = llmResp2.choices[0]?.message;
+          const fullResponse2 = {
+            text:
+              typeof msgContent2?.content === "string"
+                ? msgContent2.content
+                : "",
+            tool_calls: msgContent2?.tool_calls,
+          };
           // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ──────
           // Jarvis darf mehrere Runden Werkzeuge nutzen. Nach jeder Runde
           // erhält er die Ergebnisse als Beobachtung und entscheidet selbst,
@@ -951,17 +1019,22 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
                 model: "claude-sonnet-4-5",
                 max_tokens: 4096,
                 messages: msgs as any,
+                tools: jarvisTools,
               });
-              return (next.choices[0]?.message?.content as string) ?? "";
+              const msg = next.choices[0]?.message;
+              return {
+                text: typeof msg?.content === "string" ? msg.content : "",
+                tool_calls: msg?.tool_calls,
+              };
             },
             // Hat Stefan im vorherigen Zug zugestimmt, dürfen kritische Aktionen laufen
           });
           // Interne Kategorie-Markierungen entfernen, bevor der Text gespeichert
           // und ausgegeben wird (sonst erscheint etwa «... 2019 [person].»).
-          fullResponse2 =
+          const finalResponseText2 =
             removeInternalTags(loopP.text) + formatStepLog(loopP.steps);
           rememberPending(conversationId, loopP.pending);
-          const convTitleP = fullResponse2
+          const convTitleP = finalResponseText2
             .slice(0, 50)
             .replace(/[\n]/g, " ")
             .trim();
@@ -973,16 +1046,32 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
           await addMessage({
             conversationId,
             role: "assistant",
-            content: fullResponse2,
+            content: finalResponseText2,
           });
-          return { response: fullResponse2 };
+          return { response: finalResponseText2 };
         }
       } catch (e) {
         console.error("[Profile] Fehler beim Laden:", e);
       }
 
-      // Fallback ohne Profil
-      const systemPrompt = `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
+      // Fallback: Ohne Profil: System-Prompt direkt bauen
+      let systemPrompt = await buildChatSystemPrompt(userId, message);
+      if (context) {
+        const parts = [];
+        if (context.location) {
+          parts.push(
+            `- GPS: Breitengrad ${context.location.lat}, Längengrad ${context.location.lng}`
+          );
+        }
+        if (context.battery) {
+          parts.push(`- Batteriestatus: ${context.battery}`);
+        }
+        if (parts.length > 0) {
+          systemPrompt += `\n\nGERÄTE-KONTEXT (Smartphone/Browser des Nutzers):\n${parts.join("\n")}`;
+        }
+      }
+
+      systemPrompt += `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
 
 ${JARVIS_PERSONA}
 
@@ -1081,9 +1170,13 @@ ${calendarContext}${memoryContext}${approvalContext}`;
         model: "claude-sonnet-4-5",
         max_tokens: 4096,
         messages: llmMessages as any,
+        tools: jarvisTools,
       });
-      const fullResponse =
-        (llmResp.choices[0]?.message?.content as string) ?? "";
+      const msgContent = llmResp.choices[0]?.message;
+      const fullResponse = {
+        text: typeof msgContent?.content === "string" ? msgContent.content : "",
+        tool_calls: msgContent?.tool_calls,
+      };
 
       // ── Agenten-Schleife: Werkzeuge ausführen und weiterarbeiten ─────────
       // Auch dieser Pfad (ohne Profil) nutzt die mehrstufige Werkzeugnutzung.
@@ -1097,8 +1190,13 @@ ${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: msgs as any,
+            tools: jarvisTools,
           });
-          return (next.choices[0]?.message?.content as string) ?? "";
+          const msg = next.choices[0]?.message;
+          return {
+            text: typeof msg?.content === "string" ? msg.content : "",
+            tool_calls: msg?.tool_calls,
+          };
         },
       });
       // Interne Kategorie-Markierungen entfernen (siehe cleanResponse.ts)

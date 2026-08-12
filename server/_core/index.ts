@@ -139,6 +139,9 @@ async function startServer() {
     serveStatic(app);
   }
 
+  // Hintergrund-Worker starten
+  import("../backgroundTasks").then(m => m.startBackgroundWorker());
+
   // Wenn die Umgebung einen Port/Socket vorgibt (Passenger auf Plesk-/Managed-
   // Hosting, PaaS, Docker), MUSS genau darauf gelauscht werden – ohne Port-
   // Probing. Unter Passenger würde ein Probe-Server über die gepatchte

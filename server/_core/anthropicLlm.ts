@@ -4,6 +4,7 @@ import type {
   InvokeResult,
   Message,
   MessageContent,
+  ToolCall,
 } from "./llm";
 
 /**
@@ -88,16 +89,30 @@ export async function invokeViaAnthropic(
     messages.unshift({ role: "user", content: "." });
   }
 
+  // Tools mappen
+  const tools = params.tools?.map(t => ({
+    name: t.function.name,
+    description: t.function.description ?? "",
+    input_schema: (t.function.parameters as any) ?? {
+      type: "object",
+      properties: {},
+    },
+  }));
+
   if (params.onStream) {
     const stream = await getClient().messages.create({
       model,
       max_tokens: maxTokens,
       ...(systemParts.length > 0 ? { system: systemParts.join("\n\n") } : {}),
       messages: messages as any,
+      tools,
       stream: true,
     });
 
     let fullText = "";
+    const toolCalls: ToolCall[] = [];
+    let currentToolCall: ToolCall | null = null;
+
     for await (const chunk of stream) {
       if (
         chunk.type === "content_block_delta" &&
@@ -105,6 +120,23 @@ export async function invokeViaAnthropic(
       ) {
         fullText += chunk.delta.text;
         params.onStream(chunk.delta.text);
+      } else if (
+        chunk.type === "content_block_start" &&
+        chunk.content_block.type === "tool_use"
+      ) {
+        currentToolCall = {
+          id: chunk.content_block.id,
+          type: "function",
+          function: { name: chunk.content_block.name, arguments: "" },
+        };
+        toolCalls.push(currentToolCall);
+      } else if (
+        chunk.type === "content_block_delta" &&
+        chunk.delta.type === "input_json_delta"
+      ) {
+        if (currentToolCall) {
+          currentToolCall.function.arguments += chunk.delta.partial_json;
+        }
       }
     }
 
@@ -115,8 +147,12 @@ export async function invokeViaAnthropic(
       choices: [
         {
           index: 0,
-          message: { role: "assistant", content: fullText },
-          finish_reason: "stop",
+          message: {
+            role: "assistant",
+            content: fullText,
+            tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+          },
+          finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop",
         },
       ],
       usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
@@ -129,12 +165,24 @@ export async function invokeViaAnthropic(
     ...(systemParts.length > 0 ? { system: systemParts.join("\n\n") } : {}),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: messages as any,
+    tools,
   });
 
   const text = resp.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map(b => b.text)
     .join("");
+
+  const toolCalls: ToolCall[] = resp.content
+    .filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use")
+    .map(b => ({
+      id: b.id,
+      type: "function",
+      function: {
+        name: b.name,
+        arguments: JSON.stringify(b.input),
+      },
+    }));
 
   return {
     id: resp.id,
@@ -143,8 +191,12 @@ export async function invokeViaAnthropic(
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content: text },
-        finish_reason: resp.stop_reason ?? "stop",
+        message: {
+          role: "assistant",
+          content: text,
+          tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+        },
+        finish_reason: resp.stop_reason === "tool_use" ? "tool_calls" : "stop",
       },
     ],
     usage: {

@@ -18,6 +18,7 @@ import {
   userProfiles,
   InsertUserProfile,
 } from "../drizzle/schema";
+import { getEmbedding } from "./_core/embeddings";
 import {
   documentTemplates,
   InsertDocumentTemplate,
@@ -350,6 +351,14 @@ export async function upsertMemory(
 ) {
   const db = await getDb();
   if (!db) return;
+
+  let embedding = null;
+  try {
+    embedding = await getEmbedding(`${category}: ${key} = ${value}`);
+  } catch (e) {
+    console.error("Fehler beim Generieren des Memory-Embeddings:", e);
+  }
+
   // Prüfen ob bereits vorhanden (gleicher key)
   const existing = await db
     .select()
@@ -359,10 +368,12 @@ export async function upsertMemory(
   if (existing.length > 0) {
     await db
       .update(memories)
-      .set({ value, category, source, updatedAt: new Date() })
+      .set({ value, category, source, embedding, updatedAt: new Date() })
       .where(and(eq(memories.userId, userId), eq(memories.key, key)));
   } else {
-    await db.insert(memories).values({ userId, category, key, value, source });
+    await db
+      .insert(memories)
+      .values({ userId, category, key, value, source, embedding });
   }
 }
 

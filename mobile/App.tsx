@@ -3,8 +3,9 @@ import { StyleSheet, SafeAreaView } from "react-native";
 import { WebView } from "react-native-webview";
 
 export default function App() {
-  // TODO: Replace with the actual URL of your hosted web app
-  const webAppUrl = "https://deine-web-app-url.com";
+  // TODO: Hier musst du die echte URL deines Hetzner-Servers eintragen (z.B. https://jarvis.deine-domain.ch)
+  // Ohne diese korrekte URL kann sich die App nicht mit deinem Server verbinden!
+  const webAppUrl = "https://BITTE-HIER-DEINE-ECHTE-URL-EINTRAGEN.com";
 
   return (
     <SafeAreaView style={styles.container}>

@@ -3,6 +3,7 @@ import {
   boolean,
   index,
   int,
+  json,
   mysqlEnum,
   mysqlTable,
   text,
@@ -158,6 +159,7 @@ export const memories = mysqlTable(
     // Kategorien: person, preference, fact, contact, project, other
     key: varchar("key", { length: 255 }).notNull(),
     value: text("value").notNull(),
+    embedding: json("embedding"), // Speichert den Vector als Float-Array für Cosine Similarity
     source: varchar("source", { length: 64 }).default("chat"),
     // source: chat = aus Gespräch gelernt, manual = manuell eingetragen
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -199,12 +201,40 @@ export const userProfiles = mysqlTable("user_profiles", {
   speechMode: mysqlEnum("speechMode", ["always", "voiceOnly", "never"]).default(
     "voiceOnly"
   ),
+  // Benachrichtigungen für autonome Hintergrund-Tasks
+  notifyPush: boolean("notifyPush").default(false),
+  notifyWebpush: boolean("notifyWebpush").default(false),
+  notifyEmail: boolean("notifyEmail").default(false),
+  notifyChat: boolean("notifyChat").default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type UserProfile = typeof userProfiles.$inferSelect;
 export type InsertUserProfile = typeof userProfiles.$inferInsert;
+
+// ── Agent Tasks (Hintergrund-Aufgaben) ───────────────────────────────────────
+export const agentTasks = mysqlTable(
+  "agent_tasks",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    executeAt: timestamp("executeAt").notNull(),
+    instruction: text("instruction").notNull(),
+    status: mysqlEnum("status", ["pending", "completed", "failed"])
+      .default("pending")
+      .notNull(),
+    result: text("result"), // LLM Output nach Ausführung
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [
+    index("agent_tasks_status_executeAt_idx").on(t.status, t.executeAt),
+    index("agent_tasks_userId_idx").on(t.userId),
+  ]
+);
+export type AgentTask = typeof agentTasks.$inferSelect;
+export type InsertAgentTask = typeof agentTasks.$inferInsert;
 
 // ── Gross ICT Kundenprojekte ──────────────────────────────────────────────────
 export const grossIctProjects = mysqlTable(
@@ -385,6 +415,22 @@ export const webhookKeys = mysqlTable("webhook_keys", {
 });
 export type WebhookKey = typeof webhookKeys.$inferSelect;
 export type InsertWebhookKey = typeof webhookKeys.$inferInsert;
+
+// Geplante Hintergrund-Tasks
+export const scheduledTasks = mysqlTable("scheduled_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  cronExpression: varchar("cronExpression", { length: 100 }), // optional für wiederkehrende
+  runAt: timestamp("runAt"), // für einmalige Tasks
+  prompt: text("prompt").notNull(), // Der Prompt für den Agenten
+  isActive: boolean("isActive").default(true).notNull(),
+  lastRunAt: timestamp("lastRunAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ScheduledTask = typeof scheduledTasks.$inferSelect;
+export type InsertScheduledTask = typeof scheduledTasks.$inferInsert;
 
 export const webhookEvents = mysqlTable(
   "webhook_events",

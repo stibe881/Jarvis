@@ -22,6 +22,10 @@ export const profileRouter = router({
         language: z.enum(["de", "en", "auto"]).optional(),
         elevenLabsVoiceId: z.string().max(64).optional(),
         speechMode: z.enum(["always", "voiceOnly", "never"]).optional(),
+        notifyPush: z.boolean().optional(),
+        notifyWebpush: z.boolean().optional(),
+        notifyEmail: z.boolean().optional(),
+        notifyChat: z.boolean().optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
