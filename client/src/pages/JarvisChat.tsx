@@ -921,9 +921,27 @@ function JarvisChatInner() {
       }
 
       try {
+        // Authorization-Header holen (analog zu main.tsx für WebView/Safari)
+        let authHeader = "";
+        try {
+          const raw = sessionStorage.getItem("manus-cookie");
+          if (raw) {
+            const prefix = `manus-session=`;
+            const pair = raw.split(";").find(s => s.trim().startsWith(prefix));
+            const token = pair?.trim().slice(prefix.length);
+            if (token) authHeader = `Bearer ${token}`;
+          }
+        } catch {}
+
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (authHeader) headers["Authorization"] = authHeader;
+
         const response = await fetch("/api/chat/stream", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
+          credentials: "include",
           body: JSON.stringify({
             conversationId: convId,
             message: text,
@@ -933,6 +951,14 @@ function JarvisChatInner() {
           }),
         });
 
+        if (!response.ok) {
+          let errMsg = "Unbekannter Fehler aufgetreten";
+          try {
+            const data = await response.json();
+            errMsg = data.error || errMsg;
+          } catch {}
+          throw new Error(errMsg);
+        }
         if (!response.body)
           throw new Error("Stream konnte nicht gelesen werden.");
         const reader = response.body.getReader();
