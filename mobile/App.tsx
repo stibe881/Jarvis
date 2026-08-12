@@ -5,7 +5,7 @@ import { WebView } from "react-native-webview";
 export default function App() {
   // TODO: Hier musst du die echte URL deines Hetzner-Servers eintragen (z.B. https://jarvis.deine-domain.ch)
   // Ohne diese korrekte URL kann sich die App nicht mit deinem Server verbinden!
-  const webAppUrl = "https://BITTE-HIER-DEINE-ECHTE-URL-EINTRAGEN.com";
+  const webAppUrl = "https://ai-gross-ict.ch";
 
   return (
     <SafeAreaView style={styles.container}>
