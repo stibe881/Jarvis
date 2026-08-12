@@ -1065,6 +1065,9 @@ function JarvisChatInner() {
         }
 
         utils.chat.listConversations.invalidate();
+        // Titel wird vom Backend erst nach dem `done`-Event generiert;
+        // deshalb nach 2 Sekunden nochmals laden.
+        setTimeout(() => utils.chat.listConversations.invalidate(), 2000);
 
         const modus = speechModeRef.current;
         const darfSprechen =

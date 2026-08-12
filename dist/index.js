@@ -2241,7 +2241,10 @@ var init_tools = __esm({
             type: "object",
             properties: {
               action: { type: "string", enum: ["list_repos", "get_repo"] },
-              repoName: { type: "string", description: "Name des Repositories (nur f\xFCr get_repo)" }
+              repoName: {
+                type: "string",
+                description: "Name des Repositories (nur f\xFCr get_repo)"
+              }
             },
             required: ["action"]
           }
@@ -3578,24 +3581,34 @@ async function executeGithubAction(userId, action, params) {
   try {
     const username = "stibe881";
     if (action === "list_repos") {
-      const response = await fetch(`https://api.github.com/users/${username}/repos?per_page=100`, {
-        headers: { "User-Agent": "Jarvis-AI" }
-      });
-      if (!response.ok) return `Fehler beim Abrufen der Repositories: ${response.status}`;
+      const response = await fetch(
+        `https://api.github.com/users/${username}/repos?per_page=100`,
+        {
+          headers: { "User-Agent": "Jarvis-AI" }
+        }
+      );
+      if (!response.ok)
+        return `Fehler beim Abrufen der Repositories: ${response.status}`;
       const repos = await response.json();
-      return JSON.stringify(repos.map((r) => ({
-        name: r.name,
-        description: r.description,
-        url: r.html_url,
-        language: r.language,
-        updated_at: r.updated_at
-      })));
+      return JSON.stringify(
+        repos.map((r) => ({
+          name: r.name,
+          description: r.description,
+          url: r.html_url,
+          language: r.language,
+          updated_at: r.updated_at
+        }))
+      );
     } else if (action === "get_repo") {
       if (!params.repoName) return "repoName fehlt.";
-      const response = await fetch(`https://api.github.com/repos/${username}/${params.repoName}`, {
-        headers: { "User-Agent": "Jarvis-AI" }
-      });
-      if (!response.ok) return `Fehler beim Abrufen des Repositories: ${response.status}`;
+      const response = await fetch(
+        `https://api.github.com/repos/${username}/${params.repoName}`,
+        {
+          headers: { "User-Agent": "Jarvis-AI" }
+        }
+      );
+      if (!response.ok)
+        return `Fehler beim Abrufen des Repositories: ${response.status}`;
       const repo = await response.json();
       return JSON.stringify({
         name: repo.name,
