@@ -357,7 +357,8 @@ export async function buildChatSystemPrompt(userId: number): Promise<string> {
 
     const intelligenceContext = `
 ARBEITSWEISE (sehr wichtig):
-1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enthält, um sie korrekt auszuführen, stelle GEZIELTE Rückfragen anstatt zu raten oder eine leere Antwort zu geben.`;
+1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enthält, um sie korrekt auszuführen, stelle GEZIELTE Rückfragen anstatt zu raten oder eine leere Antwort zu geben.
+2. ZEITGEFÜHL: Wenn du Termine oder Erinnerungen planst, vergleiche die berechnete Zeit IMMER logisch mit der aktuellen Uhrzeit. Schlage keine Erinnerungen oder Zeiten vor, die für den heutigen Tag bereits in der Vergangenheit liegen (z. B. keine Erinnerung für heute 21:00 Uhr anbieten, wenn es schon 22:58 Uhr ist).`;
 
     const grossIctContext = `
 GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
