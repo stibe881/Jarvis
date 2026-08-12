@@ -140,7 +140,9 @@ async function startServer() {
   }
 
   // Hintergrund-Worker starten
-  import("../backgroundTasks").then(m => m.startBackgroundWorker());
+  import("../backgroundTasks")
+    .then(m => m.startBackgroundWorker())
+    .catch(err => logger.error({ err }, "Failed to start background worker"));
 
   // Wenn die Umgebung einen Port/Socket vorgibt (Passenger auf Plesk-/Managed-
   // Hosting, PaaS, Docker), MUSS genau darauf gelauscht werden – ohne Port-
