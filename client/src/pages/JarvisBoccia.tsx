@@ -18,6 +18,7 @@ import {
   Camera,
   CameraOff,
   Crosshair,
+  ImagePlus,
   Pause,
   Play,
   Plus,
@@ -25,6 +26,7 @@ import {
   Settings2,
   Trash2,
   Trophy,
+  Video,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -298,6 +300,10 @@ function SetupView({
             Wird die Zielkugel nicht gefunden, einfach im Bild antippen – dann
             gilt diese Stelle als Zielkugel
           </li>
+          <li>
+            Ohne Live-Kamera geht es auch per Foto: „Foto analysieren" nimmt ein
+            Bild auf und wertet es aus
+          </li>
         </ul>
       </Card>
 
@@ -319,10 +325,14 @@ function PlayView({ setup }: { setup: Setup }) {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const procCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const manualJackRef = useRef<Point | null>(null);
+  const photoElRef = useRef<HTMLImageElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [frozen, setFrozen] = useState(false);
+  /** Objekt-URL eines aufgenommenen Fotos; ersetzt das Livebild als Quelle */
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [manualJack, setManualJack] = useState<Point | null>(null);
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [roundScores, setRoundScores] = useState<PlayerScore[] | null>(null);
@@ -361,7 +371,7 @@ function PlayView({ setup }: { setup: Setup }) {
       } catch {
         if (!cancelled) {
           setCameraError(
-            "Kamera konnte nicht gestartet werden. Bitte Kamerazugriff erlauben (die Seite muss über HTTPS laufen)."
+            "Live-Kamera nicht verfügbar. Du kannst stattdessen ein Foto vom Spielfeld aufnehmen – es wird genauso ausgewertet."
           );
         }
       }
@@ -373,26 +383,39 @@ function PlayView({ setup }: { setup: Setup }) {
     };
   }, []);
 
-  // ── Erkennungsschleife ──
+  // ── Erkennungsschleife (Quelle: Livebild oder aufgenommenes Foto) ──
   useEffect(() => {
-    if (!cameraReady) return;
+    if (!cameraReady && !photoUrl) return;
 
     const interval = setInterval(() => {
-      const video = videoRef.current;
       const overlay = overlayRef.current;
-      if (!video || !overlay || video.videoWidth === 0) return;
-      if (frozen) return;
+      if (!overlay) return;
+
+      let source: HTMLVideoElement | HTMLImageElement | null;
+      let srcW: number;
+      let srcH: number;
+      if (photoUrl) {
+        source = photoElRef.current;
+        srcW = source?.naturalWidth ?? 0;
+        srcH = source?.naturalHeight ?? 0;
+      } else {
+        source = videoRef.current;
+        srcW = (source as HTMLVideoElement | null)?.videoWidth ?? 0;
+        srcH = (source as HTMLVideoElement | null)?.videoHeight ?? 0;
+        if (frozen) return;
+      }
+      if (!source || srcW === 0) return;
 
       if (!procCanvasRef.current) {
         procCanvasRef.current = document.createElement("canvas");
       }
       const proc = procCanvasRef.current;
-      const scale = PROC_WIDTH / video.videoWidth;
+      const scale = PROC_WIDTH / srcW;
       proc.width = PROC_WIDTH;
-      proc.height = Math.round(video.videoHeight * scale);
+      proc.height = Math.round(srcH * scale);
       const ctx = proc.getContext("2d", { willReadFrequently: true });
       if (!ctx) return;
-      ctx.drawImage(video, 0, 0, proc.width, proc.height);
+      ctx.drawImage(source, 0, 0, proc.width, proc.height);
 
       const image = ctx.getImageData(0, 0, proc.width, proc.height);
       const result = detectScene(image, {
@@ -420,25 +443,33 @@ function PlayView({ setup }: { setup: Setup }) {
         setRoundScores(null);
       }
 
-      drawOverlay(overlay, video, result, jack, playerByColor, setup);
+      drawOverlay(overlay, srcW, srcH, result, jack, playerByColor, setup);
     }, DETECT_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [cameraReady, frozen, setup, playerByColor]);
+  }, [cameraReady, frozen, setup, playerByColor, photoUrl]);
 
   // ── Zielkugel manuell antippen ──
-  const handleTap = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const video = videoRef.current;
-    const overlay = overlayRef.current;
-    if (!video || !overlay || video.videoWidth === 0) return;
-    const rect = overlay.getBoundingClientRect();
-    const scale = PROC_WIDTH / video.videoWidth;
-    setManualJack({
-      x: ((e.clientX - rect.left) / rect.width) * video.videoWidth * scale,
-      y: ((e.clientY - rect.top) / rect.height) * video.videoHeight * scale,
-    });
-    toast.success("Zielkugel manuell gesetzt");
-  }, []);
+  const handleTap = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const overlay = overlayRef.current;
+      const srcW = photoUrl
+        ? (photoElRef.current?.naturalWidth ?? 0)
+        : (videoRef.current?.videoWidth ?? 0);
+      const srcH = photoUrl
+        ? (photoElRef.current?.naturalHeight ?? 0)
+        : (videoRef.current?.videoHeight ?? 0);
+      if (!overlay || srcW === 0) return;
+      const rect = overlay.getBoundingClientRect();
+      const scale = PROC_WIDTH / srcW;
+      setManualJack({
+        x: ((e.clientX - rect.left) / rect.width) * srcW * scale,
+        y: ((e.clientY - rect.top) / rect.height) * srcH * scale,
+      });
+      toast.success("Zielkugel manuell gesetzt");
+    },
+    [photoUrl]
+  );
 
   const toggleFreeze = () => {
     const video = videoRef.current;
@@ -449,6 +480,28 @@ function PlayView({ setup }: { setup: Setup }) {
       video.pause();
     }
     setFrozen(!frozen);
+  };
+
+  // ── Foto aufnehmen/auswählen: öffnet auf dem Handy direkt die Kamera ──
+  const onPhotoSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setPhotoUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return url;
+    });
+    setManualJack(null);
+    // gleiche Datei soll erneut wählbar sein
+    e.target.value = "";
+  };
+
+  const backToLive = () => {
+    setPhotoUrl(prev => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setManualJack(null);
   };
 
   const commitRound = () => {
@@ -487,14 +540,44 @@ function PlayView({ setup }: { setup: Setup }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Kamerabild mit Overlay ── */}
+      {/* ── Kamerabild/Foto mit Overlay ── */}
       <Card className="p-0 overflow-hidden relative bg-black">
-        {cameraError ? (
-          <div className="aspect-video flex flex-col items-center justify-center gap-3 p-6 text-center">
+        {photoUrl ? (
+          <div className="relative">
+            <img
+              ref={photoElRef}
+              src={photoUrl}
+              alt="Aufgenommenes Spielfeld"
+              className="w-full block"
+            />
+            <canvas
+              ref={overlayRef}
+              onClick={handleTap}
+              className="absolute inset-0 w-full h-full cursor-crosshair"
+            />
+            {!jackVisible && (
+              <div className="absolute bottom-2 left-2 right-2 flex justify-center pointer-events-none">
+                <Badge variant="secondary" className="gap-1.5">
+                  <Crosshair size={12} />
+                  Zielkugel nicht erkannt – im Bild antippen
+                </Badge>
+              </div>
+            )}
+          </div>
+        ) : cameraError ? (
+          <div className="aspect-video flex flex-col items-center justify-center gap-4 p-6 text-center">
             <CameraOff size={32} className="text-muted-foreground" />
             <p className="text-sm text-muted-foreground max-w-sm">
               {cameraError}
             </p>
+            <Button
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              className="gap-2"
+            >
+              <ImagePlus size={14} />
+              Foto aufnehmen
+            </Button>
           </div>
         ) : (
           <div className="relative">
@@ -524,8 +607,36 @@ function PlayView({ setup }: { setup: Setup }) {
       </Card>
 
       {/* ── Steuerleiste ── */}
-      {!cameraError && (
-        <div className="flex flex-wrap gap-2">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onPhotoSelected}
+        className="hidden"
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          className="gap-2"
+        >
+          <ImagePlus size={14} />
+          {photoUrl ? "Neues Foto" : "Foto analysieren"}
+        </Button>
+        {photoUrl && !cameraError && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={backToLive}
+            className="gap-2"
+          >
+            <Video size={14} />
+            Live-Kamera
+          </Button>
+        )}
+        {!photoUrl && !cameraError && (
           <Button
             variant="outline"
             size="sm"
@@ -536,28 +647,28 @@ function PlayView({ setup }: { setup: Setup }) {
             {frozen ? <Play size={14} /> : <Pause size={14} />}
             {frozen ? "Weiter" : "Standbild"}
           </Button>
-          {manualJack && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setManualJack(null)}
-              className="gap-2"
-            >
-              <Crosshair size={14} />
-              Manuelle Zielkugel entfernen
-            </Button>
-          )}
+        )}
+        {manualJack && (
           <Button
+            variant="outline"
             size="sm"
-            onClick={commitRound}
-            disabled={!leader}
-            className="gap-2 ml-auto"
+            onClick={() => setManualJack(null)}
+            className="gap-2"
           >
-            <Trophy size={14} />
-            Runde übernehmen
+            <Crosshair size={14} />
+            Manuelle Zielkugel entfernen
           </Button>
-        </div>
-      )}
+        )}
+        <Button
+          size="sm"
+          onClick={commitRound}
+          disabled={!leader}
+          className="gap-2 ml-auto"
+        >
+          <Trophy size={14} />
+          Runde übernehmen
+        </Button>
+      </div>
 
       {/* ── Aktuelle Runde ── */}
       <Card className="p-4 space-y-3">
@@ -608,9 +719,13 @@ function PlayView({ setup }: { setup: Setup }) {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            {cameraReady
-              ? "Warte auf Zielkugel… Kamera auf das Spielfeld richten oder Zielkugel im Bild antippen."
-              : "Kamera wird gestartet…"}
+            {photoUrl
+              ? "Zielkugel nicht gefunden – tippe sie im Foto an."
+              : cameraError
+                ? "Nimm ein Foto vom Spielfeld auf, um die Punkte zu zählen."
+                : cameraReady
+                  ? "Warte auf Zielkugel… Kamera auf das Spielfeld richten oder Zielkugel im Bild antippen."
+                  : "Kamera wird gestartet…"}
           </p>
         )}
       </Card>
@@ -661,26 +776,27 @@ function PlayView({ setup }: { setup: Setup }) {
   );
 }
 
-/** Erkannte Kugeln und Zielkugel als Markierungen über das Video zeichnen */
+/** Erkannte Kugeln und Zielkugel als Markierungen über Video oder Foto zeichnen */
 function drawOverlay(
   overlay: HTMLCanvasElement,
-  video: HTMLVideoElement,
+  srcW: number,
+  srcH: number,
   detection: DetectionResult,
   jack: Point | null,
   playerByColor: Map<BallColorKey, Player>,
   setup: Setup
 ) {
-  overlay.width = video.videoWidth;
-  overlay.height = video.videoHeight;
+  overlay.width = srcW;
+  overlay.height = srcH;
   const ctx = overlay.getContext("2d");
   if (!ctx) return;
   ctx.clearRect(0, 0, overlay.width, overlay.height);
 
   // Analyse lief auf PROC_WIDTH – Markierungen aufs volle Bild hochskalieren
-  const scale = video.videoWidth / PROC_WIDTH;
-  const lineWidth = Math.max(2, video.videoWidth / 400);
+  const scale = srcW / PROC_WIDTH;
+  const lineWidth = Math.max(2, srcW / 400);
   ctx.lineWidth = lineWidth;
-  ctx.font = `${Math.max(12, video.videoWidth / 55)}px sans-serif`;
+  ctx.font = `${Math.max(12, srcW / 55)}px sans-serif`;
 
   for (const [colorKey, blobs] of Object.entries(detection.balls)) {
     const def = BALL_COLORS.find(c => c.key === colorKey);
