@@ -18,7 +18,6 @@ import {
   userProfiles,
   InsertUserProfile,
 } from "../drizzle/schema";
-import { getEmbedding } from "./_core/embeddings";
 import {
   documentTemplates,
   InsertDocumentTemplate,
@@ -352,12 +351,7 @@ export async function upsertMemory(
   const db = await getDb();
   if (!db) return;
 
-  let embedding = null;
-  try {
-    embedding = await getEmbedding(`${category}: ${key} = ${value}`);
-  } catch (e) {
-    console.error("Fehler beim Generieren des Memory-Embeddings:", e);
-  }
+  const embedding = null;
 
   // Prüfen ob bereits vorhanden (gleicher key)
   const existing = await db

@@ -17,7 +17,6 @@ import {
 } from "../_core/voiceTranscription";
 import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
-import { getEmbedding, cosineSimilarity } from "../_core/embeddings";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
 import { jarvisTools } from "../_core/tools";
@@ -331,37 +330,8 @@ export async function buildChatSystemPrompt(
   let memoryContext = "";
   const memories = await getMemoriesByUser(userId);
   if (memories.length > 0) {
-    if (query) {
-      // RAG: Semantische Suche über Cosine Similarity
-      try {
-        const queryEmbedding = await getEmbedding(query);
-        const scoredMemories = memories
-          .map(m => {
-            let score = 0;
-            if (m.embedding) {
-              score = cosineSimilarity(queryEmbedding, m.embedding as number[]);
-            }
-            return { ...m, score };
-          })
-          .sort((a, b) => b.score - a.score);
-
-        // Nimm die Top 5 relevantesten Erinnerungen (oder solche mit gutem Score)
-        const topMemories = scoredMemories.slice(0, 5);
-        if (topMemories.length > 0) {
-          const memLines = topMemories.map(m => `- ${m.key}: ${m.value}`);
-          memoryContext = `\n\nRELEVANTE ERINNERUNGEN FÜR DIESE FRAGE:\n${memLines.join("\n")}`;
-        }
-      } catch (e) {
-        console.error("Embedding-Fehler, lade Fallback-Memories:", e);
-        const memLines = memories
-          .slice(0, 5)
-          .map(m => `- ${m.key}: ${m.value}`);
-        memoryContext = `\n\nERINNERUNGEN:\n${memLines.join("\n")}`;
-      }
-    } else {
-      const memLines = memories.slice(0, 5).map(m => `- ${m.key}: ${m.value}`);
-      memoryContext = `\n\nERINNERUNGEN:\n${memLines.join("\n")}`;
-    }
+    const memLines = memories.slice(0, 5).map(m => `- ${m.key}: ${m.value}`);
+    memoryContext = `\n\nERINNERUNGEN:\n${memLines.join("\n")}`;
   }
 
   let approvalContext = "";
