@@ -4856,6 +4856,7 @@ ${langStr}
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Ged\xE4chtnis.${personalityStr}
+WICHTIG: Nutze f\xFCr echte "Erinnerungen" (z.B. "Erinnere mich um X Uhr an Y") zwingend das 'schedule_task' Werkzeug (Hintergrund-Task), damit der Nutzer eine Push-Benachrichtigung erh\xE4lt! Nutze den Kalender NUR f\xFCr tats\xE4chliche "Termine" oder wenn explizit ein Kalendereintrag gew\xFCnscht ist.
 Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder \xFCber Geburtstage sprichst:
@@ -5026,11 +5027,12 @@ ${fileContent}
             const finalResponseText2 = removeInternalTags(loopP.text) + formatStepLog(loopP.steps);
             rememberPending(conversationId, loopP.pending);
             const convTitleP = finalResponseText2.slice(0, 50).replace(/[\n]/g, " ").trim();
-            if (history.length === 0)
+            if (history.length <= 1) {
               await updateConversationTitle(
                 conversationId,
                 convTitleP || message.slice(0, 50)
               );
+            }
             await addMessage({
               conversationId,
               role: "assistant",
@@ -5064,6 +5066,7 @@ ${parts.join("\n")}`;
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Ged\xE4chtnis.
+WICHTIG: Nutze f\xFCr echte "Erinnerungen" (z.B. "Erinnere mich um X Uhr an Y") zwingend das 'schedule_task' Werkzeug (Hintergrund-Task), damit der Nutzer eine Push-Benachrichtigung erh\xE4lt! Nutze den Kalender NUR f\xFCr tats\xE4chliche "Termine" oder wenn explizit ein Kalendereintrag gew\xFCnscht ist.
 Heute ist der ${(/* @__PURE__ */ new Date()).toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${(/* @__PURE__ */ new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${(/* @__PURE__ */ new Date()).toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder \xFCber Geburtstage sprichst:

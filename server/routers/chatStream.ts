@@ -639,6 +639,7 @@ ${langStr}
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
+WICHTIG: Nutze für echte "Erinnerungen" (z.B. "Erinnere mich um X Uhr an Y") zwingend das 'schedule_task' Werkzeug (Hintergrund-Task), damit der Nutzer eine Push-Benachrichtigung erhält! Nutze den Kalender NUR für tatsächliche "Termine" oder wenn explizit ein Kalendereintrag gewünscht ist.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
@@ -820,7 +821,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             .slice(0, 50)
             .replace(/[\n]/g, " ")
             .trim();
-          if (history.length === 0)
+          if (history.length <= 1)
             await updateConversationTitle(
               conversationId,
               convTitleP || message.slice(0, 50)
@@ -842,6 +843,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
+WICHTIG: Nutze für echte "Erinnerungen" (z.B. "Erinnere mich um X Uhr an Y") zwingend das 'schedule_task' Werkzeug (Hintergrund-Task), damit der Nutzer eine Push-Benachrichtigung erhält! Nutze den Kalender NUR für tatsächliche "Termine" oder wenn explizit ein Kalendereintrag gewünscht ist.
 Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
@@ -969,7 +971,7 @@ ${calendarContext}${memoryContext}${approvalContext}`;
       });
 
       // Gesprächstitel generieren (nur beim ersten Austausch)
-      if (history.length === 0) {
+      if (history.length <= 1) {
         try {
           const titleRes = await invokeLLM({
             model: "claude-haiku-4-5",
