@@ -1484,8 +1484,8 @@ function JarvisChatInner() {
       <div
         className={cn(
           "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
-          "md:w-52 md:flex-shrink-0 md:relative md:translate-x-0",
-          "fixed top-0 bottom-0 left-0 z-40 w-72",
+          "md:w-40 md:flex-shrink-0 md:relative md:translate-x-0",
+          "fixed top-0 bottom-0 left-0 z-40 w-56",
           showConvSidebar
             ? "translate-x-0"
             : "-translate-x-full md:translate-x-0",
