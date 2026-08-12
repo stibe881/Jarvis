@@ -11,9 +11,7 @@ import { invokeLLM, Message } from "./_core/llm";
 import { logger } from "./_core/logger";
 import { runAgentLoop } from "./agent";
 import { createContext } from "./_core/context";
-import Expo from "expo-server-sdk";
-
-const expo = new Expo();
+import axios from "axios";
 
 // Sehr simpler Cron-Evaluator für den Anfang (unterstützt nur "*", "*/n" und genaue Zahlen)
 function getNextCronTime(
@@ -169,9 +167,14 @@ export async function runBackgroundTasks() {
 
         if (notifyPush && profile?.expoPushToken) {
           const token = profile.expoPushToken;
-          if (Expo.isExpoPushToken(token)) {
+          // Simple Check für den Token (ExponentPushToken[...] oder ExponentPushToken[...])
+          if (
+            token.startsWith("ExponentPushToken[") ||
+            token.startsWith("ExpoPushToken[")
+          ) {
             try {
-              const chunks = expo.chunkPushNotifications([
+              await axios.post(
+                "https://exp.host/--/api/v2/push/send",
                 {
                   to: token,
                   sound: "default",
@@ -179,10 +182,14 @@ export async function runBackgroundTasks() {
                   body: resultText.slice(0, 200),
                   data: { type: "reminder" },
                 },
-              ]);
-              for (const chunk of chunks) {
-                await expo.sendPushNotificationsAsync(chunk);
-              }
+                {
+                  headers: {
+                    Accept: "application/json",
+                    "Accept-encoding": "gzip, deflate",
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
               logger.info(`Push-Notification gesendet an User ${user.id}`);
             } catch (pushErr) {
               logger.error(

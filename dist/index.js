@@ -5543,7 +5543,7 @@ __export(backgroundTasks_exports, {
   startBackgroundWorker: () => startBackgroundWorker
 });
 import { eq as eq5, and as and5, lte as lte2, asc, desc as desc3 } from "drizzle-orm";
-import Expo from "expo-server-sdk";
+import axios2 from "axios";
 function getNextCronTime(cronExp, fromDate = /* @__PURE__ */ new Date()) {
   const next = new Date(fromDate);
   next.setHours(next.getHours() + 1);
@@ -5639,20 +5639,25 @@ ${resultText}`
         }
         if (notifyPush && profile?.expoPushToken) {
           const token = profile.expoPushToken;
-          if (Expo.isExpoPushToken(token)) {
+          if (token.startsWith("ExponentPushToken[") || token.startsWith("ExpoPushToken[")) {
             try {
-              const chunks = expo.chunkPushNotifications([
+              await axios2.post(
+                "https://exp.host/--/api/v2/push/send",
                 {
                   to: token,
                   sound: "default",
                   title: "Jarvis",
                   body: resultText.slice(0, 200),
                   data: { type: "reminder" }
+                },
+                {
+                  headers: {
+                    Accept: "application/json",
+                    "Accept-encoding": "gzip, deflate",
+                    "Content-Type": "application/json"
+                  }
                 }
-              ]);
-              for (const chunk of chunks) {
-                await expo.sendPushNotificationsAsync(chunk);
-              }
+              );
               logger.info(`Push-Notification gesendet an User ${user.id}`);
             } catch (pushErr) {
               logger.error({ pushErr }, "Fehler beim Senden der Push-Notification");
@@ -5683,7 +5688,6 @@ function startBackgroundWorker() {
   }, 30 * 1e3);
   logger.info("Background Worker gestartet.");
 }
-var expo;
 var init_backgroundTasks = __esm({
   "server/backgroundTasks.ts"() {
     "use strict";
@@ -5693,7 +5697,6 @@ var init_backgroundTasks = __esm({
     init_logger();
     init_agent();
     init_context();
-    expo = new Expo();
   }
 });
 
