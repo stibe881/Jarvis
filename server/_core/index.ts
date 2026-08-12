@@ -202,5 +202,23 @@ async function startServer() {
 
 startServer().catch(err => {
   logger.error({ err }, "Server failed to start");
-  process.exit(1);
+  
+  // Fallback-Server für Passenger, um 503 zu vermeiden und den echten Fehler zu zeigen
+  const fallbackServer = createServer((req, res) => {
+    res.writeHead(500, { "Content-Type": "text/plain" });
+    res.end("Server failed to start: " + (err instanceof Error ? err.stack : String(err)));
+  });
+  
+  const envPort = process.env.PORT || process.argv.slice(2).find(a => /^\d{2,5}$/.test(a));
+  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes("listen_systemd_fd");
+  const hatSocketActivation = Boolean(process.env.LISTEN_FDS);
+  
+  if (hatSystemdShim || hatSocketActivation) {
+    fallbackServer.listen({ fd: 3 });
+  } else if (envPort) {
+    const listenTarget = /^\d+$/.test(envPort) ? Number(envPort) : envPort;
+    fallbackServer.listen(listenTarget);
+  } else {
+    fallbackServer.listen(3000);
+  }
 });
