@@ -364,13 +364,33 @@ GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-i
 Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server – für KMU in der Zentralschweiz.
 Wenn Stefan Hilfe zu Gross ICT braucht (Angebote, Texte, Kundenprojekte), kannst du helfen. Verwende immer CHF (nicht €) und Schweizer Schreibweise (ss statt ß).`;
 
+    const now = new Date();
+    const isoDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Zurich",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+    const dateStr = now.toLocaleDateString("de-DE", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "Europe/Zurich",
+    });
+    const timeStr = now.toLocaleTimeString("de-DE", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Zurich",
+    });
+
     return `Du bist ${jarvisName}, der persönliche Assistent von Stefan Gross. ${addressStr}.
 ${langStr}
 
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.${personalityStr}
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
+Heute ist der ${dateStr}, es ist ${timeStr} Uhr (ISO: ${isoDate}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr − Geburtsjahr.
@@ -395,12 +415,32 @@ Fehlen Angaben, frage zuerst nach. Zeige NIE den rohen Block.
 ${calendarContext}${memoryContext}${approvalContext}`;
   }
 
+  const now = new Date();
+  const isoDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Zurich",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const dateStr = now.toLocaleDateString("de-DE", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "Europe/Zurich",
+  });
+  const timeStr = now.toLocaleTimeString("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Zurich",
+  });
+
   return `Du bist Jarvis, der persönliche Assistent von Stefan Gross. Du antwortest immer auf Deutsch.
 
 ${JARVIS_PERSONA}
 
 Du kannst Dateien analysieren, Web-Suchergebnisse verarbeiten, Notizen, Aufgaben und den Google Kalender verwalten. Du hast ein dauerhaftes Gedächtnis.
-Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).
+Heute ist der ${dateStr}, es ist ${timeStr} Uhr (ISO: ${isoDate}).
 
 ALTERSBERECHNUNG (strikt einhalten): Wenn du das Alter einer Person berechnest oder über Geburtstage sprichst:
 1. Rohes Alter = heutiges Jahr − Geburtsjahr.
