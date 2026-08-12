@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { startLogin } from "@/const";
+import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "wouter";
 import {
@@ -83,6 +84,8 @@ export default function JarvisLayout({
   const isWidget = useWidgetMode();
   useAppBadge();
 
+  const updateProfile = trpc.profile.update.useMutation();
+
   // Mehr-Menü schliessen wenn ausserhalb geklickt
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -96,6 +99,27 @@ export default function JarvisLayout({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  // Listen for Expo Push Token from React Native
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data =
+          typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        if (data && data.type === "EXPO_PUSH_TOKEN" && data.token) {
+          updateProfile.mutate({ expoPushToken: data.token });
+        }
+      } catch (e) {}
+    };
+    window.addEventListener("message", handleMessage);
+
+    (window as any).setExpoPushToken = (token: string) => {
+      updateProfile.mutate({ expoPushToken: token });
+    };
+
+    return () => window.removeEventListener("message", handleMessage);
+  }, [isAuthenticated, updateProfile]);
 
   if (loading) {
     return (

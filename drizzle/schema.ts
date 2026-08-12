@@ -206,6 +206,7 @@ export const userProfiles = mysqlTable("user_profiles", {
   notifyWebpush: boolean("notifyWebpush").default(false),
   notifyEmail: boolean("notifyEmail").default(false),
   notifyChat: boolean("notifyChat").default(true),
+  expoPushToken: varchar("expoPushToken", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

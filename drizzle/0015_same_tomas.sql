@@ -1,0 +1,1 @@
+ALTER TABLE `user_profiles` ADD `expoPushToken` varchar(255);

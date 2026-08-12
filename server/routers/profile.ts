@@ -26,6 +26,7 @@ export const profileRouter = router({
         notifyWebpush: z.boolean().optional(),
         notifyEmail: z.boolean().optional(),
         notifyChat: z.boolean().optional(),
+        expoPushToken: z.string().max(255).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {

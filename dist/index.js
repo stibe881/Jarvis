@@ -378,6 +378,7 @@ var init_schema = __esm({
       notifyWebpush: boolean("notifyWebpush").default(false),
       notifyEmail: boolean("notifyEmail").default(false),
       notifyChat: boolean("notifyChat").default(true),
+      expoPushToken: varchar("expoPushToken", { length: 255 }),
       createdAt: timestamp("createdAt").defaultNow().notNull(),
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
     });
@@ -2675,7 +2676,9 @@ async function getAppDashboard() {
     sbFetch("/tickets?status=eq.open&select=id&limit=1000"),
     sbFetch("/quotes?status=eq.draft&select=id&limit=1000"),
     sbFetch(`/invoices?status=in.(open,sent)&select=id,total&limit=1000`),
-    sbFetch(`/invoices?status=in.(open,sent)&due_date=lt.${today}&select=id,total&limit=1000`),
+    sbFetch(
+      `/invoices?status=in.(open,sent)&due_date=lt.${today}&select=id,total&limit=1000`
+    ),
     sbFetch("/projects?status=eq.active&select=id&limit=1000"),
     sbFetch("/leads?status=eq.new&select=id&limit=1000")
   ]);
@@ -5540,6 +5543,7 @@ __export(backgroundTasks_exports, {
   startBackgroundWorker: () => startBackgroundWorker
 });
 import { eq as eq5, and as and5, lte as lte2, asc, desc as desc3 } from "drizzle-orm";
+import Expo from "expo-server-sdk";
 function getNextCronTime(cronExp, fromDate = /* @__PURE__ */ new Date()) {
   const next = new Date(fromDate);
   next.setHours(next.getHours() + 1);
@@ -5633,10 +5637,29 @@ ${resultText}`
             await db.update(conversations).set({ updatedAt: /* @__PURE__ */ new Date() }).where(eq5(conversations.id, lastConv.id));
           }
         }
-        if (notifyPush) {
-          logger.info(
-            `W\xFCrde Push-Notification senden an User ${user.id}: ${resultText}`
-          );
+        if (notifyPush && profile?.expoPushToken) {
+          const token = profile.expoPushToken;
+          if (Expo.isExpoPushToken(token)) {
+            try {
+              const chunks = expo.chunkPushNotifications([
+                {
+                  to: token,
+                  sound: "default",
+                  title: "Jarvis",
+                  body: resultText.slice(0, 200),
+                  data: { type: "reminder" }
+                }
+              ]);
+              for (const chunk of chunks) {
+                await expo.sendPushNotificationsAsync(chunk);
+              }
+              logger.info(`Push-Notification gesendet an User ${user.id}`);
+            } catch (pushErr) {
+              logger.error({ pushErr }, "Fehler beim Senden der Push-Notification");
+            }
+          } else {
+            logger.warn(`Ung\xFCltiger Expo-Push-Token f\xFCr User ${user.id}: ${token}`);
+          }
         }
         if (notifyEmail) {
           logger.info(`W\xFCrde E-Mail senden an User ${user.id}: ${resultText}`);
@@ -5660,6 +5683,7 @@ function startBackgroundWorker() {
   }, 30 * 1e3);
   logger.info("Background Worker gestartet.");
 }
+var expo;
 var init_backgroundTasks = __esm({
   "server/backgroundTasks.ts"() {
     "use strict";
@@ -5669,6 +5693,7 @@ var init_backgroundTasks = __esm({
     init_logger();
     init_agent();
     init_context();
+    expo = new Expo();
   }
 });
 
@@ -6431,7 +6456,8 @@ var profileRouter = router({
       notifyPush: z11.boolean().optional(),
       notifyWebpush: z11.boolean().optional(),
       notifyEmail: z11.boolean().optional(),
-      notifyChat: z11.boolean().optional()
+      notifyChat: z11.boolean().optional(),
+      expoPushToken: z11.string().max(255).optional()
     })
   ).mutation(async ({ ctx, input }) => {
     await upsertUserProfile(ctx.user.id, input);

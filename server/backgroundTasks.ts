@@ -11,6 +11,9 @@ import { invokeLLM, Message } from "./_core/llm";
 import { logger } from "./_core/logger";
 import { runAgentLoop } from "./agent";
 import { createContext } from "./_core/context";
+import Expo from "expo-server-sdk";
+
+const expo = new Expo();
 
 // Sehr simpler Cron-Evaluator für den Anfang (unterstützt nur "*", "*/n" und genaue Zahlen)
 function getNextCronTime(
@@ -81,8 +84,7 @@ export async function runBackgroundTasks() {
       if (!user) continue;
 
       const timeStr = `Heute ist der ${new Date().toLocaleDateString("de-DE", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: "Europe/Zurich" })}, es ist ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Zurich" })} Uhr (ISO: ${new Date().toISOString().split("T")[0]}).`;
-      const systemPrompt =
-        `Du bist Jarvis. Führe den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.\n${timeStr}`;
+      const systemPrompt = `Du bist Jarvis. Führe den folgenden geplanten Hintergrund-Task aus und fasse das Ergebnis kurz zusammen.\n${timeStr}`;
 
       try {
         const response = await invokeLLM({
@@ -165,10 +167,34 @@ export async function runBackgroundTasks() {
           }
         }
 
-        if (notifyPush) {
-          logger.info(
-            `Würde Push-Notification senden an User ${user.id}: ${resultText}`
-          );
+        if (notifyPush && profile?.expoPushToken) {
+          const token = profile.expoPushToken;
+          if (Expo.isExpoPushToken(token)) {
+            try {
+              const chunks = expo.chunkPushNotifications([
+                {
+                  to: token,
+                  sound: "default",
+                  title: "Jarvis",
+                  body: resultText.slice(0, 200),
+                  data: { type: "reminder" },
+                },
+              ]);
+              for (const chunk of chunks) {
+                await expo.sendPushNotificationsAsync(chunk);
+              }
+              logger.info(`Push-Notification gesendet an User ${user.id}`);
+            } catch (pushErr) {
+              logger.error(
+                { pushErr },
+                "Fehler beim Senden der Push-Notification"
+              );
+            }
+          } else {
+            logger.warn(
+              `Ungültiger Expo-Push-Token für User ${user.id}: ${token}`
+            );
+          }
         }
         if (notifyEmail) {
           logger.info(`Würde E-Mail senden an User ${user.id}: ${resultText}`);
