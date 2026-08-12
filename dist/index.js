@@ -2661,10 +2661,12 @@ async function createLead(data) {
   });
 }
 async function getAppDashboard() {
+  const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   const [
     customers,
     openTickets,
     openQuotes,
+    openInvoices,
     overdueInvoices,
     activeProjects,
     newLeads
@@ -2673,10 +2675,15 @@ async function getAppDashboard() {
     sbFetch("/tickets?status=eq.open&select=id&limit=1000"),
     sbFetch("/quotes?status=eq.draft&select=id&limit=1000"),
     sbFetch(`/invoices?status=in.(open,sent)&select=id,total&limit=1000`),
+    sbFetch(`/invoices?status=in.(open,sent)&due_date=lt.${today}&select=id,total&limit=1000`),
     sbFetch("/projects?status=eq.active&select=id&limit=1000"),
     sbFetch("/leads?status=eq.new&select=id&limit=1000")
   ]);
   const get = (r) => r.status === "fulfilled" ? r.value : [];
+  const openList = get(
+    openInvoices
+  );
+  const openTotal = openList.reduce((s, i) => s + (i.total ?? 0), 0);
   const overdueList = get(
     overdueInvoices
   );
@@ -2685,6 +2692,8 @@ async function getAppDashboard() {
     customers: get(customers).length,
     openTickets: get(openTickets).length,
     openQuotes: get(openQuotes).length,
+    openInvoices: openList.length,
+    openTotal,
     overdueInvoices: overdueList.length,
     overdueTotal,
     activeProjects: get(activeProjects).length,
@@ -2960,11 +2969,16 @@ async function executeAppAction(action, params) {
       }
       case "dashboard": {
         const d = await getAppDashboard();
+        let invoiceInfo = `\u2022 \u{1F4C4} Offene Rechnungen: ${d.openInvoices} (CHF ${d.openTotal.toLocaleString("de-CH")})`;
+        if (d.overdueInvoices > 0) {
+          invoiceInfo += `
+\u2022 \u26A0\uFE0F Davon \xFCberf\xE4llig: ${d.overdueInvoices} (CHF ${d.overdueTotal.toLocaleString("de-CH")})`;
+        }
         return `**App-Dashboard:**
 \u2022 \u{1F465} Kunden: ${d.customers}
 \u2022 \u{1F3AB} Offene Tickets: ${d.openTickets}
-\u2022 \u{1F4C4} Offene Angebote: ${d.openQuotes}
-\u2022 \u26A0\uFE0F \xDCberf\xE4llige Rechnungen: ${d.overdueInvoices} (CHF ${d.overdueTotal.toLocaleString("de-CH")})
+\u2022 \u{1F4DD} Offene Angebote: ${d.openQuotes}
+${invoiceInfo}
 \u2022 \u{1F680} Aktive Projekte: ${d.activeProjects}
 \u2022 \u{1F3AF} Neue Leads: ${d.newLeads}`;
       }

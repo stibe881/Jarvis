@@ -506,10 +506,12 @@ export async function createLead(data: {
 
 // ── Dashboard-Zusammenfassung ─────────────────────────────────────────────────
 export async function getAppDashboard() {
+  const today = new Date().toISOString().split("T")[0];
   const [
     customers,
     openTickets,
     openQuotes,
+    openInvoices,
     overdueInvoices,
     activeProjects,
     newLeads,
@@ -518,12 +520,20 @@ export async function getAppDashboard() {
     sbFetch("/tickets?status=eq.open&select=id&limit=1000"),
     sbFetch("/quotes?status=eq.draft&select=id&limit=1000"),
     sbFetch(`/invoices?status=in.(open,sent)&select=id,total&limit=1000`),
+    sbFetch(
+      `/invoices?status=in.(open,sent)&due_date=lt.${today}&select=id,total&limit=1000`
+    ),
     sbFetch("/projects?status=eq.active&select=id&limit=1000"),
     sbFetch("/leads?status=eq.new&select=id&limit=1000"),
   ]);
 
   const get = (r: PromiseSettledResult<unknown[]>) =>
     r.status === "fulfilled" ? r.value : [];
+
+  const openList = get(
+    openInvoices as PromiseSettledResult<unknown[]>
+  ) as Array<{ total?: number }>;
+  const openTotal = openList.reduce((s, i) => s + (i.total ?? 0), 0);
 
   const overdueList = get(
     overdueInvoices as PromiseSettledResult<unknown[]>
@@ -534,6 +544,8 @@ export async function getAppDashboard() {
     customers: get(customers as PromiseSettledResult<unknown[]>).length,
     openTickets: get(openTickets as PromiseSettledResult<unknown[]>).length,
     openQuotes: get(openQuotes as PromiseSettledResult<unknown[]>).length,
+    openInvoices: openList.length,
+    openTotal,
     overdueInvoices: overdueList.length,
     overdueTotal,
     activeProjects: get(activeProjects as PromiseSettledResult<unknown[]>)
@@ -932,7 +944,11 @@ export async function executeAppAction(
       }
       case "dashboard": {
         const d = await getAppDashboard();
-        return `**App-Dashboard:**\n• 👥 Kunden: ${d.customers}\n• 🎫 Offene Tickets: ${d.openTickets}\n• 📄 Offene Angebote: ${d.openQuotes}\n• ⚠️ Überfällige Rechnungen: ${d.overdueInvoices} (CHF ${d.overdueTotal.toLocaleString("de-CH")})\n• 🚀 Aktive Projekte: ${d.activeProjects}\n• 🎯 Neue Leads: ${d.newLeads}`;
+        let invoiceInfo = `• 📄 Offene Rechnungen: ${d.openInvoices} (CHF ${d.openTotal.toLocaleString("de-CH")})`;
+        if (d.overdueInvoices > 0) {
+          invoiceInfo += `\n• ⚠️ Davon überfällig: ${d.overdueInvoices} (CHF ${d.overdueTotal.toLocaleString("de-CH")})`;
+        }
+        return `**App-Dashboard:**\n• 👥 Kunden: ${d.customers}\n• 🎫 Offene Tickets: ${d.openTickets}\n• 📝 Offene Angebote: ${d.openQuotes}\n${invoiceInfo}\n• 🚀 Aktive Projekte: ${d.activeProjects}\n• 🎯 Neue Leads: ${d.newLeads}`;
       }
 
       case "create_quote": {
