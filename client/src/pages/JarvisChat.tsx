@@ -843,7 +843,7 @@ function JarvisChatInner() {
   }, [usageData]);
 
   useEffect(() => {
-    if (dbMessages) setMessages(dbMessages as Message[]);
+    if (dbMessages && !isBusyRef.current) setMessages(dbMessages as Message[]);
   }, [dbMessages]);
 
   useEffect(() => {
