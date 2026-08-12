@@ -8,7 +8,9 @@ git reset --hard HEAD
 git pull origin main
 
 echo "📦 Installiere neue Node-Abhängigkeiten..."
-pnpm install --prod
+# Plesk/Passenger kommt oft nicht mit pnpm-Symlinks zurecht. Wir erzwingen npm
+# mit legacy-peer-deps, um ERESOLVE-Fehler bei Vite zu ignorieren (dev deps).
+npm install --omit=dev --legacy-peer-deps
 
 mkdir -p tmp
 touch tmp/restart.txt
