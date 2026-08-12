@@ -138,7 +138,8 @@ export async function getConversationsByUser(userId: number) {
     .select()
     .from(conversations)
     .where(eq(conversations.userId, userId))
-    .orderBy(desc(conversations.updatedAt));
+    .orderBy(desc(conversations.updatedAt))
+    .limit(30);
 }
 
 export async function getConversationById(id: number) {

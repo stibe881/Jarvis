@@ -774,7 +774,7 @@ async function createConversation(data) {
 async function getConversationsByUser(userId) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt));
+  return db.select().from(conversations).where(eq(conversations.userId, userId)).orderBy(desc(conversations.updatedAt)).limit(30);
 }
 async function getConversationById(id) {
   const db = await getDb();
