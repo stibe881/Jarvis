@@ -991,8 +991,11 @@ function JarvisChatInner() {
                     const data = JSON.parse(dataLine);
                     if (eventName === "text") {
                       fullText += data.chunk;
-                      // Verstecke die XML-Befehle (Tags) live im UI
-                      displayedText = fullText.replace(/<[^>]*>?/g, "");
+                      // Verstecke die XML-Befehle und deren JSON-Inhalt live im UI
+                      displayedText = fullText.replace(
+                        /<(?:[a-z_]+_)?action>[\s\S]*?(?:<\/(?:[a-z_]+_)?action>|$)/gi,
+                        ""
+                      );
                       setMessages(prev => {
                         const updated = [...prev];
                         if (updated.length > 0) {
