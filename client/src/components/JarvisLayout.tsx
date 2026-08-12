@@ -23,6 +23,7 @@ import {
   Plug,
   Smartphone,
   IdCard,
+  Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
@@ -65,6 +66,7 @@ const navItems = [
   { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
   { href: "/app", label: "Meine App", icon: LayoutDashboard },
   { href: "/customer", label: "Kunden-Dossier", icon: IdCard },
+  { href: "/boccia", label: "Boccia-Zähler", icon: Target },
   { href: "/integrations", label: "Verbindungen", icon: Plug },
   { href: "/shortcuts", label: "iPhone-Setup", icon: Smartphone },
   { href: "/profile", label: "Profil", icon: Settings },

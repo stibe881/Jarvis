@@ -20,6 +20,7 @@ import JarvisDelegation from "./pages/JarvisDelegation";
 import JarvisIntegrations from "./pages/JarvisIntegrations";
 import JarvisShortcuts from "./pages/JarvisShortcuts";
 import CustomerDossier from "./pages/CustomerDossier";
+import JarvisBoccia from "./pages/JarvisBoccia";
 import OnboardingWizard from "./components/OnboardingWizard";
 import Login from "./pages/Login";
 
@@ -50,6 +51,7 @@ function Router() {
         <Route path={"/integrations"} component={JarvisIntegrations} />
         <Route path={"/shortcuts"} component={JarvisShortcuts} />
         <Route path={"/customer"} component={CustomerDossier} />
+        <Route path={"/boccia"} component={JarvisBoccia} />
         <Route path={"/404"} component={NotFound} />
         <Route component={NotFound} />
       </Switch>
