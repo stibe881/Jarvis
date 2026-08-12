@@ -197,6 +197,28 @@ export async function handleChatStream(req: Request, res: Response) {
       content: cleanResponse,
     });
 
+    if (history.length <= 1) {
+      try {
+        const titleRes = await invokeLLM({
+          model: "claude-haiku-4-5",
+          max_tokens: 30,
+          messages: [
+            {
+              role: "user",
+              content: `Erstelle einen kurzen Gesprächstitel (max. 5 Wörter, kein Punkt am Ende) für diese Frage: "${message}"`,
+            },
+          ],
+        });
+        const title = titleRes.choices[0]?.message?.content;
+        await updateConversationTitle(
+          conversationId,
+          typeof title === "string" ? title.trim() : message.slice(0, 40)
+        );
+      } catch {
+        /* ignorieren */
+      }
+    }
+
     sendEvent("done", { conversationId, response: cleanResponse });
     res.end();
   } catch (err: any) {

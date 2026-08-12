@@ -2231,6 +2231,21 @@ var init_tools = __esm({
             required: ["prompt"]
           }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "github_action",
+          description: "GitHub Repositories abrufen (\xF6ffentliche Repos des Nutzers)",
+          parameters: {
+            type: "object",
+            properties: {
+              action: { type: "string", enum: ["list_repos", "get_repo"] },
+              repoName: { type: "string", description: "Name des Repositories (nur f\xFCr get_repo)" }
+            },
+            required: ["action"]
+          }
+        }
       }
     ];
   }
@@ -3559,6 +3574,46 @@ __export(agent_exports, {
   parseActions: () => parseActions,
   runAgentLoop: () => runAgentLoop
 });
+async function executeGithubAction(userId, action, params) {
+  try {
+    const username = "stibe881";
+    if (action === "list_repos") {
+      const response = await fetch(`https://api.github.com/users/${username}/repos?per_page=100`, {
+        headers: { "User-Agent": "Jarvis-AI" }
+      });
+      if (!response.ok) return `Fehler beim Abrufen der Repositories: ${response.status}`;
+      const repos = await response.json();
+      return JSON.stringify(repos.map((r) => ({
+        name: r.name,
+        description: r.description,
+        url: r.html_url,
+        language: r.language,
+        updated_at: r.updated_at
+      })));
+    } else if (action === "get_repo") {
+      if (!params.repoName) return "repoName fehlt.";
+      const response = await fetch(`https://api.github.com/repos/${username}/${params.repoName}`, {
+        headers: { "User-Agent": "Jarvis-AI" }
+      });
+      if (!response.ok) return `Fehler beim Abrufen des Repositories: ${response.status}`;
+      const repo = await response.json();
+      return JSON.stringify({
+        name: repo.name,
+        description: repo.description,
+        url: repo.html_url,
+        language: repo.language,
+        created_at: repo.created_at,
+        updated_at: repo.updated_at,
+        open_issues: repo.open_issues_count,
+        forks: repo.forks_count,
+        stars: repo.stargazers_count
+      });
+    }
+    return `Unbekannte GitHub Aktion: ${action}`;
+  } catch (e) {
+    return `GitHub API Fehler: ${e.message}`;
+  }
+}
 function isWritingAction(action) {
   return WRITING_ACTIONS.includes(action);
 }
@@ -3613,7 +3668,9 @@ function describe(tag, action, params) {
     spotify_action: "Spotify",
     device_action: "iPhone",
     notes_action: "Notizen",
-    tasks_action: "Aufgaben"
+    tasks_action: "Aufgaben",
+    schedule_task: "Hintergrund-Task",
+    github_action: "GitHub"
   };
   return `${map[tag] ?? tag} \xB7 ${action}${suffix}`;
 }
@@ -3748,6 +3805,11 @@ async function executeAction(ctx, parsed2) {
       }
       case "schedule_task": {
         result = await executeScheduleTask(ctx.userId, payload);
+        break;
+      }
+      case "github_action": {
+        const { action: _a, ...params } = payload;
+        result = await executeGithubAction(ctx.userId, action, params);
         break;
       }
       default:
@@ -3955,7 +4017,8 @@ var init_agent = __esm({
       "device_action",
       "notes_action",
       "tasks_action",
-      "schedule_task"
+      "schedule_task",
+      "github_action"
     ];
     STEP_LOG_MARKER = "\u27E6schritte\u27E7 ";
     MAX_AGENT_ROUNDS = 5;
@@ -4052,6 +4115,8 @@ C) SELBST\xC4NDIG NACHFASSEN: Erkennst du eine Pendenz, die sonst untergeht (Ang
 D) BEWERTEN STATT AUFZ\xC4HLEN: Wenn du Listen zeigst, nenne zuerst in einem Satz die Kernaussage
    ("F\xFCnf Rechnungen offen, davon zwei \xFCber 30 Tage \xFCberf\xE4llig \u2013 zusammen CHF 922"), danach die Details.
 
+E) AUTONOMES GED\xC4CHTNIS: Merke dir selbst\xE4ndig wichtige Details aus dem Gespr\xE4ch (z.B. Namen, Vorlieben, Fakten, Projekt-Ideen), auch wenn Stefan nicht explizit darum bittet. Nutze daf\xFCr unaufgefordert den <memory_action>-Block, um dieses Wissen dauerhaft f\xFCr die Zukunft zu speichern. Erw\xE4hne kurz beil\xE4ufig in deiner Antwort, dass du dir das gemerkt hast.
+
 NOTIZEN: Du kannst Notizen durchsuchen und anlegen:
 <notes_action>{"action":"list","search":"Passwort"}</notes_action>
 <notes_action>{"action":"create","title":"Besprechung Muster AG","content":"Kernpunkte ..."}</notes_action>
@@ -4071,6 +4136,11 @@ KALENDER: Wenn der Nutzer Kalender-Aktionen m\xF6chte, nutze einen Aktionsblock:
 <calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
 <calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
 WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
+
+GITHUB: Wenn Stefan nach seinen Repositories (Code-Projekten) fragt, nutze das GitHub-Werkzeug:
+<github_action>{"action":"list_repos"}</github_action>
+<github_action>{"action":"get_repo","repoName":"Jarvis"}</github_action>
+Zeige auch hier NIE den rohen Block, sondern pr\xE4sentiere die Antwort in nat\xFCrlicher Sprache.
 
 GED\xC4CHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
@@ -5392,6 +5462,26 @@ ${fileContent}
       role: "assistant",
       content: cleanResponse
     });
+    if (history.length <= 1) {
+      try {
+        const titleRes = await invokeLLM({
+          model: "claude-haiku-4-5",
+          max_tokens: 30,
+          messages: [
+            {
+              role: "user",
+              content: `Erstelle einen kurzen Gespr\xE4chstitel (max. 5 W\xF6rter, kein Punkt am Ende) f\xFCr diese Frage: "${message}"`
+            }
+          ]
+        });
+        const title = titleRes.choices[0]?.message?.content;
+        await updateConversationTitle(
+          conversationId,
+          typeof title === "string" ? title.trim() : message.slice(0, 40)
+        );
+      } catch {
+      }
+    }
     sendEvent("done", { conversationId, response: cleanResponse });
     res.end();
   } catch (err) {

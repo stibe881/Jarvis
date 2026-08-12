@@ -25,6 +25,61 @@ import {
 } from "./db";
 import { ToolCall } from "./_core/llm";
 
+async function executeGithubAction(
+  userId: number,
+  action: string,
+  params: any
+) {
+  try {
+    const username = "stibe881";
+    if (action === "list_repos") {
+      const response = await fetch(
+        `https://api.github.com/users/${username}/repos?per_page=100`,
+        {
+          headers: { "User-Agent": "Jarvis-AI" },
+        }
+      );
+      if (!response.ok)
+        return `Fehler beim Abrufen der Repositories: ${response.status}`;
+      const repos = await response.json();
+      return JSON.stringify(
+        repos.map((r: any) => ({
+          name: r.name,
+          description: r.description,
+          url: r.html_url,
+          language: r.language,
+          updated_at: r.updated_at,
+        }))
+      );
+    } else if (action === "get_repo") {
+      if (!params.repoName) return "repoName fehlt.";
+      const response = await fetch(
+        `https://api.github.com/repos/${username}/${params.repoName}`,
+        {
+          headers: { "User-Agent": "Jarvis-AI" },
+        }
+      );
+      if (!response.ok)
+        return `Fehler beim Abrufen des Repositories: ${response.status}`;
+      const repo = await response.json();
+      return JSON.stringify({
+        name: repo.name,
+        description: repo.description,
+        url: repo.html_url,
+        language: repo.language,
+        created_at: repo.created_at,
+        updated_at: repo.updated_at,
+        open_issues: repo.open_issues_count,
+        forks: repo.forks_count,
+        stars: repo.stargazers_count,
+      });
+    }
+    return `Unbekannte GitHub Aktion: ${action}`;
+  } catch (e: any) {
+    return `GitHub API Fehler: ${e.message}`;
+  }
+}
+
 /** Ein einzelner ausgeführter Schritt – wird dem Nutzer als Protokoll gezeigt. */
 export type AgentStep = {
   /** Art des Werkzeugs, z.B. "app" oder "calendar". */
@@ -135,6 +190,7 @@ export const ACTION_TAGS = [
   "notes_action",
   "tasks_action",
   "schedule_task",
+  "github_action",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];
@@ -195,6 +251,8 @@ function describe(
     device_action: "iPhone",
     notes_action: "Notizen",
     tasks_action: "Aufgaben",
+    schedule_task: "Hintergrund-Task",
+    github_action: "GitHub",
   };
   return `${map[tag] ?? tag} · ${action}${suffix}`;
 }
@@ -394,6 +452,11 @@ export async function executeAction(
       }
       case "schedule_task": {
         result = await executeScheduleTask(ctx.userId, payload);
+        break;
+      }
+      case "github_action": {
+        const { action: _a, ...params } = payload;
+        result = await executeGithubAction(ctx.userId, action, params);
         break;
       }
       default:

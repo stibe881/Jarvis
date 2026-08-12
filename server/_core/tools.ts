@@ -183,4 +183,23 @@ export const jarvisTools: Tool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "github_action",
+      description:
+        "GitHub Repositories abrufen (öffentliche Repos des Nutzers)",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["list_repos", "get_repo"] },
+          repoName: {
+            type: "string",
+            description: "Name des Repositories (nur für get_repo)",
+          },
+        },
+        required: ["action"],
+      },
+    },
+  },
 ];
