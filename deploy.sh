@@ -8,8 +8,8 @@ git reset --hard HEAD
 git pull origin main
 
 echo "📦 Installiere neue Node-Abhängigkeiten..."
-# Da Plesk standardmäßig npm verwendet:
-npm install --omit=dev
+pnpm install --prod
 
+mkdir -p tmp
 touch tmp/restart.txt
 echo "✅ Fertig! Jarvis wurde neu gestartet."
