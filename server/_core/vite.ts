@@ -6,12 +6,14 @@ import path from "path";
 
 // vite wird NUR im Entwicklungsmodus importiert. Im Production-Build
 // existiert dieses Paket nicht auf dem Server.
+// WICHTIG: vite.config.ts wird NICHT per import() geladen – das würde esbuild
+// zwingen, alle darin enthaltenen Dev-Pakete in den Production-Bundle aufzunehmen.
+// Stattdessen lässt Vite seine Konfiguration selbst per configFile-Pfad laden.
 async function createViteServer(app: Express, server: Server) {
   const { createServer } = await import("vite");
-  const { default: viteConfig } = await import("../../vite.config");
+  const configFile = path.resolve(import.meta.dirname, "../../vite.config.ts");
   const vite = await createServer({
-    ...viteConfig,
-    configFile: false,
+    configFile,
     server: {
       middlewareMode: true,
       hmr: { server },

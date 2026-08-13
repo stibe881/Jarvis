@@ -12,7 +12,7 @@ import { registerLocalAuthRoutes } from "./localAuth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { serveStatic, setupVite } from "./vite";
+import { serveStatic } from "./serveStatic";
 import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
 import { handleMorningBriefing } from "../routers/morningBriefing";
 import { handleWeeklyReport } from "../routers/weeklyReport";
@@ -134,6 +134,9 @@ async function startServer() {
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
+    // setupVite nur im Dev-Modus dynamisch laden – so bleiben alle Vite-
+    // Abhängigkeiten aus dem Production-Bundle ferngehalten.
+    const { setupVite } = await import("./vite");
     await setupVite(app, server);
   } else {
     serveStatic(app);
@@ -202,17 +205,23 @@ async function startServer() {
 
 startServer().catch(err => {
   logger.error({ err }, "Server failed to start");
-  
+
   // Fallback-Server für Passenger, um 503 zu vermeiden und den echten Fehler zu zeigen
   const fallbackServer = createServer((req, res) => {
     res.writeHead(500, { "Content-Type": "text/plain" });
-    res.end("Server failed to start: " + (err instanceof Error ? err.stack : String(err)));
+    res.end(
+      "Server failed to start: " +
+        (err instanceof Error ? err.stack : String(err))
+    );
   });
-  
-  const envPort = process.env.PORT || process.argv.slice(2).find(a => /^\d{2,5}$/.test(a));
-  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes("listen_systemd_fd");
+
+  const envPort =
+    process.env.PORT || process.argv.slice(2).find(a => /^\d{2,5}$/.test(a));
+  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes(
+    "listen_systemd_fd"
+  );
   const hatSocketActivation = Boolean(process.env.LISTEN_FDS);
-  
+
   if (hatSystemdShim || hatSocketActivation) {
     fallbackServer.listen({ fd: 3 });
   } else if (envPort) {
