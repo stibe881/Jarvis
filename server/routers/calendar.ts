@@ -72,8 +72,11 @@ async function refreshMsAccessToken(
 }
 
 // ─── Gültiges Access-Token holen (auto-refresh) ───────────────────────────────
-async function getValidGoogleAccessToken(userId: number): Promise<string> {
-  const token = await getGoogleToken(userId);
+async function getValidGoogleAccessToken(
+  userId: number,
+  email: string
+): Promise<string> {
+  const token = await getGoogleToken(userId, email);
   if (!token) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (token.expiresAt > Math.floor(Date.now() / 1000) + 60)
     return token.accessToken;
@@ -89,8 +92,11 @@ async function getValidGoogleAccessToken(userId: number): Promise<string> {
   return refreshed.accessToken;
 }
 
-async function getValidMsAccessToken(userId: number): Promise<string> {
-  const token = await getMicrosoftToken(userId);
+async function getValidMsAccessToken(
+  userId: number,
+  email: string
+): Promise<string> {
+  const token = await getMicrosoftToken(userId, email);
   if (!token) throw new TRPCError({ code: "UNAUTHORIZED" });
   if (token.expiresAt > Math.floor(Date.now() / 1000) + 60)
     return token.accessToken;
@@ -109,10 +115,11 @@ async function getValidMsAccessToken(userId: number): Promise<string> {
 // ─── API-Aufruf Helpers ───────────────────────────────────────────────────────
 async function gcalFetch(
   userId: number,
+  email: string,
   path: string,
   options: RequestInit = {}
 ) {
-  const accessToken = await getValidGoogleAccessToken(userId);
+  const accessToken = await getValidGoogleAccessToken(userId, email);
   const resp = await fetch(`https://www.googleapis.com/calendar/v3${path}`, {
     ...options,
     headers: {
@@ -135,10 +142,11 @@ async function gcalFetch(
 
 async function msFetch(
   userId: number,
+  email: string,
   path: string,
   options: RequestInit = {}
 ) {
-  const accessToken = await getValidMsAccessToken(userId);
+  const accessToken = await getValidMsAccessToken(userId, email);
   const resp = await fetch(`https://graph.microsoft.com/v1.0${path}`, {
     ...options,
     headers: {
@@ -163,14 +171,20 @@ async function msFetch(
 export const calendarRouter = router({
   // Verbindungsstatus prüfen
   getStatus: protectedProcedure.query(async ({ ctx }) => {
-    const gToken = await getGoogleToken(ctx.user.id);
-    const msToken = await getMicrosoftToken(ctx.user.id);
+    const gTokens = await getGoogleTokens(ctx.user.id);
+    const msTokens = await getMicrosoftTokens(ctx.user.id);
     return {
-      connected: !!gToken || !!msToken,
-      googleConnected: !!gToken,
-      googleEmail: gToken?.email ?? null,
-      msConnected: !!msToken,
-      msEmail: msToken?.email ?? null,
+      connected: gTokens.length > 0 || msTokens.length > 0,
+      googleAccounts: gTokens.map(t => ({
+        email: t.email,
+        provider: "google",
+      })),
+      msAccounts: msTokens.map(t => ({ email: t.email, provider: "ms" })),
+      // Fallbacks for old UI if any
+      googleConnected: gTokens.length > 0,
+      googleEmail: gTokens[0]?.email ?? null,
+      msConnected: msTokens.length > 0,
+      msEmail: msTokens[0]?.email ?? null,
     };
   }),
 
@@ -208,20 +222,24 @@ export const calendarRouter = router({
   }),
 
   // Verbindung trennen
-  disconnect: protectedProcedure.mutation(async ({ ctx }) => {
-    await deleteGoogleToken(ctx.user.id);
-    return { success: true };
-  }),
+  disconnect: protectedProcedure
+    .input(z.object({ email: z.string().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      await deleteGoogleToken(ctx.user.id, input?.email);
+      return { success: true };
+    }),
 
-  disconnectMs: protectedProcedure.mutation(async ({ ctx }) => {
-    await deleteMicrosoftToken(ctx.user.id);
-    return { success: true };
-  }),
+  disconnectMs: protectedProcedure
+    .input(z.object({ email: z.string().optional() }).optional())
+    .mutation(async ({ ctx, input }) => {
+      await deleteMicrosoftToken(ctx.user.id, input?.email);
+      return { success: true };
+    }),
 
   // Kalender-Liste
   listCalendars: protectedProcedure.query(async ({ ctx }) => {
-    const gToken = await getGoogleToken(ctx.user.id);
-    const msToken = await getMicrosoftToken(ctx.user.id);
+    const gTokens = await getGoogleTokens(ctx.user.id);
+    const msTokens = await getMicrosoftTokens(ctx.user.id);
     const calendars: Array<{
       id: string;
       summary: string;
@@ -229,16 +247,18 @@ export const calendarRouter = router({
       backgroundColor?: string;
     }> = [];
 
-    if (gToken) {
+    for (const gToken of gTokens) {
+      if (!gToken.email) continue;
       const gData = (await gcalFetch(
         ctx.user.id,
+        gToken.email,
         "/users/me/calendarList"
       )) as any;
       if (gData.items) {
         calendars.push(
           ...gData.items.map((c: any) => ({
-            id: `google:${c.id}`,
-            summary: c.summary,
+            id: `google:${gToken.email}:${c.id}`,
+            summary: `[${gToken.email}] ${c.summary}`,
             primary: c.primary,
             backgroundColor: c.backgroundColor,
           }))
@@ -246,13 +266,18 @@ export const calendarRouter = router({
       }
     }
 
-    if (msToken) {
-      const msData = (await msFetch(ctx.user.id, "/me/calendars")) as any;
+    for (const msToken of msTokens) {
+      if (!msToken.email) continue;
+      const msData = (await msFetch(
+        ctx.user.id,
+        msToken.email,
+        "/me/calendars"
+      )) as any;
       if (msData.value) {
         calendars.push(
           ...msData.value.map((c: any) => ({
-            id: `ms:${c.id}`,
-            summary: c.name,
+            id: `ms:${msToken.email}:${c.id}`,
+            summary: `[${msToken.email}] ${c.name}`,
             primary: c.isDefaultCalendar,
             backgroundColor: c.hexColor,
           }))
@@ -274,8 +299,9 @@ export const calendarRouter = router({
       })
     )
     .query(async ({ ctx, input }) => {
-      const isMs = input.calendarId.startsWith("ms:");
-      const rawCalId = input.calendarId.replace(/^(google:|ms:)/, "");
+      const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+      const rawCalId = rawIdParts.join(":");
+      const isMs = provider === "ms";
 
       if (isMs) {
         const query: string[] = [
@@ -291,6 +317,7 @@ export const calendarRouter = router({
         }
         const data = (await msFetch(
           ctx.user.id,
+          email,
           `/me/calendars/${encodeURIComponent(rawCalId)}/events?${query.join("&")}`
         )) as any;
 
@@ -336,8 +363,9 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const isMs = input.calendarId.startsWith("ms:");
-      const rawCalId = input.calendarId.replace(/^(google:|ms:)/, "");
+      const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+      const rawCalId = rawIdParts.join(":");
+      const isMs = provider === "ms";
 
       if (isMs) {
         const msEvent = {
@@ -350,6 +378,7 @@ export const calendarRouter = router({
         };
         const data = (await msFetch(
           ctx.user.id,
+          email,
           `/me/calendars/${encodeURIComponent(rawCalId)}/events`,
           { method: "POST", body: JSON.stringify(msEvent) }
         )) as any;
@@ -368,6 +397,7 @@ export const calendarRouter = router({
         };
         const data = (await gcalFetch(
           ctx.user.id,
+          email,
           `/calendars/${encodeURIComponent(rawCalId)}/events`,
           { method: "POST", body: JSON.stringify(gEvent) }
         )) as any;
@@ -390,8 +420,9 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const isMs = input.calendarId.startsWith("ms:");
-      const rawCalId = input.calendarId.replace(/^(google:|ms:)/, "");
+      const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+      const rawCalId = rawIdParts.join(":");
+      const isMs = provider === "ms";
 
       if (isMs) {
         const patch: Record<string, any> = {};
@@ -410,12 +441,14 @@ export const calendarRouter = router({
 
         return msFetch(
           ctx.user.id,
+          email,
           `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
           { method: "PATCH", body: JSON.stringify(patch) }
         );
       } else {
         const current = (await gcalFetch(
           ctx.user.id,
+          email,
           `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`
         )) as any;
         const patch: Record<string, any> = { ...current };
@@ -432,6 +465,7 @@ export const calendarRouter = router({
           patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
         return gcalFetch(
           ctx.user.id,
+          email,
           `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
           { method: "PUT", body: JSON.stringify(patch) }
         );
@@ -447,18 +481,21 @@ export const calendarRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const isMs = input.calendarId.startsWith("ms:");
-      const rawCalId = input.calendarId.replace(/^(google:|ms:)/, "");
+      const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+      const rawCalId = rawIdParts.join(":");
+      const isMs = provider === "ms";
 
       if (isMs) {
         await msFetch(
           ctx.user.id,
+          email,
           `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
           { method: "DELETE" }
         );
       } else {
         await gcalFetch(
           ctx.user.id,
+          email,
           `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
           { method: "DELETE" }
         );

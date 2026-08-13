@@ -82,12 +82,8 @@ export default function JarvisCalendar() {
 
   const utils = trpc.useUtils();
   const { data: status } = trpc.calendar.getStatus.useQuery();
-  const { data: authUrl } = trpc.calendar.getAuthUrl.useQuery(undefined, {
-    enabled: !status?.googleConnected,
-  });
-  const { data: msAuthUrl } = trpc.calendar.getMsAuthUrl.useQuery(undefined, {
-    enabled: !status?.msConnected,
-  });
+  const { data: authUrl } = trpc.calendar.getAuthUrl.useQuery();
+  const { data: msAuthUrl } = trpc.calendar.getMsAuthUrl.useQuery();
   const { data: calendars } = trpc.calendar.listCalendars.useQuery(undefined, {
     enabled: !!status?.connected,
   });
@@ -117,7 +113,7 @@ export default function JarvisCalendar() {
     const searchParams = new URLSearchParams(window.location.search);
     const error = searchParams.get("error");
     const success = searchParams.get("success");
-    
+
     if (error) {
       toast.error(`Verbindungsfehler: ${error}`);
       // Remove query param from URL without reloading
@@ -346,55 +342,59 @@ export default function JarvisCalendar() {
             <Plus size={14} /> <span className="hidden sm:inline">TERMIN</span>
           </Button>
 
-          {/* Connect / Disconnect Google */}
-          {!status.googleConnected ? (
+          {/* Connect Google */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (authUrl?.url) window.location.href = authUrl.url;
+            }}
+            className="text-muted-foreground hover:text-primary px-2"
+            title="Weiteres Google Konto verbinden"
+          >
+            <Plus size={14} /> G
+          </Button>
+
+          {/* Disconnect Google Accounts */}
+          {status.googleAccounts?.map(acc => (
             <Button
+              key={acc.email}
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (authUrl?.url) window.location.href = authUrl.url;
-              }}
-              className="text-muted-foreground hover:text-primary px-2"
-              title="Google Kalender verbinden"
-            >
-              <Plus size={14} /> G
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => disconnectMutation.mutate()}
+              onClick={() => disconnectMutation.mutate({ email: acc.email })}
               className="text-muted-foreground hover:text-destructive px-2"
-              title="Google trennen"
+              title={`Google trennen (${acc.email})`}
             >
               <Unlink size={14} /> G
             </Button>
-          )}
+          ))}
 
-          {/* Connect / Disconnect Microsoft */}
-          {!status.msConnected ? (
+          {/* Connect Microsoft */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (msAuthUrl?.url) window.location.href = msAuthUrl.url;
+            }}
+            className="text-muted-foreground hover:text-[#00a4ef] px-2"
+            title="Weiteres Microsoft Konto verbinden"
+          >
+            <Plus size={14} /> M
+          </Button>
+
+          {/* Disconnect Microsoft Accounts */}
+          {status.msAccounts?.map(acc => (
             <Button
+              key={acc.email}
               variant="ghost"
               size="sm"
-              onClick={() => {
-                if (msAuthUrl?.url) window.location.href = msAuthUrl.url;
-              }}
-              className="text-muted-foreground hover:text-[#00a4ef] px-2"
-              title="Microsoft Kalender verbinden"
-            >
-              <Plus size={14} /> M
-            </Button>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => disconnectMsMutation.mutate()}
+              onClick={() => disconnectMsMutation.mutate({ email: acc.email })}
               className="text-muted-foreground hover:text-destructive px-2"
-              title="Microsoft trennen"
+              title={`Microsoft trennen (${acc.email})`}
             >
               <Unlink size={14} /> M
             </Button>
-          )}
+          ))}
         </div>
       </div>
 

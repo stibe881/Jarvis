@@ -290,15 +290,28 @@ export async function deleteTask(id: number, userId: number) {
 
 // ─── Google Token Helpers ─────────────────────────────────────────────────────
 
-export async function getGoogleToken(userId: number) {
+export async function getGoogleToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const rows = await db
+
+  let q = db.select().from(googleTokens).where(eq(googleTokens.userId, userId));
+  if (email) {
+    q = q.where(
+      and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
+    );
+  }
+
+  const rows = await q.limit(1);
+  return rows[0];
+}
+
+export async function getGoogleTokens(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
     .select()
     .from(googleTokens)
-    .where(eq(googleTokens.userId, userId))
-    .limit(1);
-  return rows[0];
+    .where(eq(googleTokens.userId, userId));
 }
 
 export async function upsertGoogleToken(data: {
@@ -325,23 +338,47 @@ export async function upsertGoogleToken(data: {
     });
 }
 
-export async function deleteGoogleToken(userId: number) {
+export async function deleteGoogleToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
+  if (email) {
+    await db
+      .delete(googleTokens)
+      .where(
+        and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
+      );
+  } else {
+    await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
+  }
 }
 
 // ─── Microsoft Token Helpers ──────────────────────────────────────────────────
 
-export async function getMicrosoftToken(userId: number) {
+export async function getMicrosoftToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const rows = await db
+
+  let q = db
     .select()
     .from(microsoftTokens)
-    .where(eq(microsoftTokens.userId, userId))
-    .limit(1);
+    .where(eq(microsoftTokens.userId, userId));
+  if (email) {
+    q = q.where(
+      and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email))
+    );
+  }
+
+  const rows = await q.limit(1);
   return rows[0];
+}
+
+export async function getMicrosoftTokens(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(microsoftTokens)
+    .where(eq(microsoftTokens.userId, userId));
 }
 
 export async function upsertMicrosoftToken(data: {
@@ -368,10 +405,21 @@ export async function upsertMicrosoftToken(data: {
     });
 }
 
-export async function deleteMicrosoftToken(userId: number) {
+export async function deleteMicrosoftToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return;
-  await db.delete(microsoftTokens).where(eq(microsoftTokens.userId, userId));
+  if (email) {
+    await db
+      .delete(microsoftTokens)
+      .where(
+        and(
+          eq(microsoftTokens.userId, userId),
+          eq(microsoftTokens.email, email)
+        )
+      );
+  } else {
+    await db.delete(microsoftTokens).where(eq(microsoftTokens.userId, userId));
+  }
 }
 
 // ─── Memory Helpers ───────────────────────────────────────────────────────────

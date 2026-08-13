@@ -134,33 +134,41 @@ export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
 
 // Google OAuth Tokens
-export const googleTokens = mysqlTable("google_tokens", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  accessToken: text("accessToken").notNull(),
-  refreshToken: text("refreshToken"),
-  expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
-  scope: text("scope"),
-  email: varchar("email", { length: 320 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const googleTokens = mysqlTable(
+  "google_tokens",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    accessToken: text("accessToken").notNull(),
+    refreshToken: text("refreshToken"),
+    expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
+    scope: text("scope"),
+    email: varchar("email", { length: 320 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [uniqueIndex("google_tokens_userId_email_idx").on(t.userId, t.email)]
+);
 
 export type GoogleToken = typeof googleTokens.$inferSelect;
 export type InsertGoogleToken = typeof googleTokens.$inferInsert;
 
 // Microsoft Graph API Tokens
-export const microsoftTokens = mysqlTable("microsoft_tokens", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
-  accessToken: text("accessToken").notNull(),
-  refreshToken: text("refreshToken"),
-  expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
-  scope: text("scope"),
-  email: varchar("email", { length: 320 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const microsoftTokens = mysqlTable(
+  "microsoft_tokens",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    accessToken: text("accessToken").notNull(),
+    refreshToken: text("refreshToken"),
+    expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
+    scope: text("scope"),
+    email: varchar("email", { length: 320 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [uniqueIndex("microsoft_tokens_userId_email_idx").on(t.userId, t.email)]
+);
 
 export type MicrosoftToken = typeof microsoftTokens.$inferSelect;
 export type InsertMicrosoftToken = typeof microsoftTokens.$inferInsert;

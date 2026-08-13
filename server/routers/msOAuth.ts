@@ -65,6 +65,11 @@ export async function handleMsOAuthCallback(req: Request, res: Response) {
       email = profile.mail || profile.userPrincipalName || null;
     }
 
+    if (!email) {
+      console.error("[MS OAuth] No email found in profile");
+      return res.redirect("/calendar?error=no_email");
+    }
+
     // Token speichern
     await upsertMicrosoftToken({
       userId: Number(userId),

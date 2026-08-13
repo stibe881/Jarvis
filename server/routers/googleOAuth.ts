@@ -67,6 +67,11 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
       /* ignorieren */
     }
 
+    if (!email) {
+      console.error("[Google OAuth] No email found in profile");
+      return res.redirect("/calendar?error=no_email");
+    }
+
     // Token in DB speichern
     await upsertGoogleToken({
       userId,
