@@ -229,7 +229,11 @@ class SDKServer {
         !isNonEmptyString(appId) ||
         !isNonEmptyString(name)
       ) {
-        console.warn("[Auth] Session payload missing required fields");
+        console.error("[Auth] Session payload missing required fields:", {
+          openId,
+          appId,
+          name,
+        });
         return null;
       }
 
@@ -239,7 +243,10 @@ class SDKServer {
         name,
       };
     } catch (error) {
-      console.warn("[Auth] Session verification failed", String(error));
+      console.error(
+        "[Auth] Session verification failed (JWT invalid or expired):",
+        String(error)
+      );
       return null;
     }
   }
@@ -286,6 +293,10 @@ class SDKServer {
     const session = await this.verifySession(sessionToken);
 
     if (!session) {
+      console.error(
+        "[Auth] authenticateRequest failed: session is null. Cookie was:",
+        sessionToken
+      );
       throw ForbiddenError("Invalid session cookie");
     }
 
@@ -321,7 +332,11 @@ class SDKServer {
     }
 
     if (!user) {
-      throw ForbiddenError("User not found");
+      console.error(
+        "[Auth] authenticateRequest failed: user still not found after sync for openId:",
+        sessionUserId
+      );
+      throw ForbiddenError("User not found after sync");
     }
 
     await db.upsertUser({
