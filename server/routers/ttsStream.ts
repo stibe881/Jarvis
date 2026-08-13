@@ -23,7 +23,6 @@ import { fetchLiveQuota, invalidateQuotaCache } from "../ttsQuota";
 
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY ?? "";
 const JARVIS_VOICE_ID = "JBFqnCBsd6RMkjVDRZzb";
-const OPENAI_KEY = process.env.OPENAI_API_KEY ?? "";
 
 export async function handleTtsStream(
   req: Request,
@@ -44,7 +43,8 @@ export async function handleTtsStream(
       return;
     }
 
-    const useOpenAI = Boolean(OPENAI_KEY);
+    const openAiKey = process.env.OPENAI_API_KEY ?? "";
+    const useOpenAI = Boolean(openAiKey);
 
     // Wenn OpenAI aktiv ist, ignorieren wir die ElevenLabs-Quotas.
     let state = {
@@ -99,7 +99,7 @@ export async function handleTtsStream(
       upstream = await fetch("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${OPENAI_KEY}`,
+          Authorization: `Bearer ${openAiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
