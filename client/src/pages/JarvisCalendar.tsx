@@ -236,7 +236,7 @@ export default function JarvisCalendar() {
       days.push({ date: null, events: [] });
     for (let d = 1; d <= daysInMonth; d++) {
       const date = new Date(year, month, d);
-      const dayEvents = (events ?? []).filter(ev => {
+      const dayEvents = (events ?? []).filter((ev: any) => {
         const evDate = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
         return (
           evDate.getDate() === d &&
@@ -303,9 +303,9 @@ export default function JarvisCalendar() {
         <h1 className="font-jarvis text-base font-bold text-primary">
           KALENDER
         </h1>
-        {status.email && (
+        {(status.googleEmail || status.msEmail) && (
           <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[180px]">
-            {status.email}
+            {status.googleEmail || status.msEmail}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
