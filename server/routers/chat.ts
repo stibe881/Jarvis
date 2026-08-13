@@ -5,6 +5,7 @@ import {
   addMessage,
   createConversation,
   deleteConversation,
+  deleteConversations,
   getConversationById,
   getConversationsByUser,
   getMessagesByConversation,
@@ -311,6 +312,19 @@ export const chatRouter = router({
       if (!conv || conv.userId !== ctx.user.id)
         throw new TRPCError({ code: "FORBIDDEN" });
       await deleteConversation(input.id);
+      return { success: true };
+    }),
+
+  deleteConversations: protectedProcedure
+    .input(z.object({ ids: z.array(z.number()) }))
+    .mutation(async ({ ctx, input }) => {
+      for (const id of input.ids) {
+        const conv = await getConversationById(id);
+        if (conv && conv.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+      }
+      await deleteConversations(input.ids);
       return { success: true };
     }),
 

@@ -699,11 +699,11 @@ __export(db_exports, {
   getDelegationsByUser: () => getDelegationsByUser,
   getDeviceCommandsByUser: () => getDeviceCommandsByUser,
   getGoogleToken: () => getGoogleToken,
-  getGoogleTokens: () => getGoogleTokens2,
+  getGoogleTokens: () => getGoogleTokens,
   getMemoriesByUser: () => getMemoriesByUser,
   getMessagesByConversation: () => getMessagesByConversation,
   getMicrosoftToken: () => getMicrosoftToken,
-  getMicrosoftTokens: () => getMicrosoftTokens2,
+  getMicrosoftTokens: () => getMicrosoftTokens,
   getNoteById: () => getNoteById,
   getNotesByUser: () => getNotesByUser,
   getSpotifyToken: () => getSpotifyToken,
@@ -919,7 +919,7 @@ async function getGoogleToken(userId, email) {
   const rows = await q.limit(1);
   return rows[0];
 }
-async function getGoogleTokens2(userId) {
+async function getGoogleTokens(userId) {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(googleTokens).where(eq(googleTokens.userId, userId));
@@ -966,7 +966,7 @@ async function getMicrosoftToken(userId, email) {
   const rows = await q.limit(1);
   return rows[0];
 }
-async function getMicrosoftTokens2(userId) {
+async function getMicrosoftTokens(userId) {
   const db = await getDb();
   if (!db) return [];
   return await db.select().from(microsoftTokens).where(eq(microsoftTokens.userId, userId));
@@ -1909,7 +1909,10 @@ var init_calendar = __esm({
           } else {
             if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
           }
-          await upsertGoogleToken({ ...token, disabledCalendars: JSON.stringify(disabledList) });
+          await upsertGoogleToken({
+            ...token,
+            disabledCalendars: JSON.stringify(disabledList)
+          });
         } else if (provider === "ms") {
           const token = await getMicrosoftToken(ctx.user.id, email);
           if (!token) throw new TRPCError3({ code: "NOT_FOUND" });
@@ -1923,7 +1926,10 @@ var init_calendar = __esm({
           } else {
             if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
           }
-          await upsertMicrosoftToken({ ...token, disabledCalendars: JSON.stringify(disabledList) });
+          await upsertMicrosoftToken({
+            ...token,
+            disabledCalendars: JSON.stringify(disabledList)
+          });
         }
         return { success: true };
       }),
@@ -2128,8 +2134,8 @@ var init_calendar = __esm({
 
 // server/_core/calendarAI.ts
 async function executeCalendarAction(userId, action, params) {
-  const gTokens = await getGoogleTokens2(userId);
-  const msTokens = await getMicrosoftTokens2(userId);
+  const gTokens = await getGoogleTokens(userId);
+  const msTokens = await getMicrosoftTokens(userId);
   if (gTokens.length === 0 && msTokens.length === 0) {
     return "Kein Kalender ist verbunden.";
   }
@@ -2142,11 +2148,20 @@ async function executeCalendarAction(userId, action, params) {
         disabledList = JSON.parse(gToken.disabledCalendars || "[]");
       } catch (e) {
       }
-      const gData = await gcalFetch(userId, gToken.email, "/users/me/calendarList").catch(() => null);
+      const gData = await gcalFetch(
+        userId,
+        gToken.email,
+        "/users/me/calendarList"
+      ).catch(() => null);
       if (gData?.items) {
         for (const c of gData.items) {
           if (!disabledList.includes(c.id)) {
-            enabled.push({ provider: "google", email: gToken.email, rawId: c.id, name: c.summary });
+            enabled.push({
+              provider: "google",
+              email: gToken.email,
+              rawId: c.id,
+              name: c.summary
+            });
           }
         }
       }
@@ -2158,11 +2173,20 @@ async function executeCalendarAction(userId, action, params) {
         disabledList = JSON.parse(msToken.disabledCalendars || "[]");
       } catch (e) {
       }
-      const msData = await msFetch(userId, msToken.email, "/me/calendars").catch(() => null);
+      const msData = await msFetch(
+        userId,
+        msToken.email,
+        "/me/calendars"
+      ).catch(() => null);
       if (msData?.value) {
         for (const c of msData.value) {
           if (!disabledList.includes(c.id)) {
-            enabled.push({ provider: "ms", email: msToken.email, rawId: c.id, name: c.name });
+            enabled.push({
+              provider: "ms",
+              email: msToken.email,
+              rawId: c.id,
+              name: c.name
+            });
           }
         }
       }
@@ -2190,8 +2214,17 @@ async function executeCalendarAction(userId, action, params) {
         if (data?.items) {
           for (const ev of data.items) {
             const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
-            const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
-            const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganzt\xE4gig";
+            const dateStr = d.toLocaleDateString("de-DE", {
+              weekday: "short",
+              day: "2-digit",
+              month: "2-digit",
+              timeZone: tz
+            });
+            const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", {
+              hour: "2-digit",
+              minute: "2-digit",
+              timeZone: tz
+            }) : "Ganzt\xE4gig";
             let inviteInfo = "";
             if (ev.organizer && !ev.organizer.self) {
               const organizerName = ev.organizer.displayName || ev.organizer.email?.split("@")[0] || "jemanden";
@@ -2211,9 +2244,20 @@ async function executeCalendarAction(userId, action, params) {
         ).catch(() => null);
         if (data?.value) {
           for (const ev of data.value) {
-            const d = /* @__PURE__ */ new Date(ev.start?.dateTime ? ev.start.dateTime + "Z" : "");
-            const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
-            const timeStr = !ev.isAllDay ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganzt\xE4gig";
+            const d = /* @__PURE__ */ new Date(
+              ev.start?.dateTime ? ev.start.dateTime + "Z" : ""
+            );
+            const dateStr = d.toLocaleDateString("de-DE", {
+              weekday: "short",
+              day: "2-digit",
+              month: "2-digit",
+              timeZone: tz
+            });
+            const timeStr = !ev.isAllDay ? d.toLocaleTimeString("de-DE", {
+              hour: "2-digit",
+              minute: "2-digit",
+              timeZone: tz
+            }) : "Ganzt\xE4gig";
             let inviteInfo = "";
             if (ev.organizer?.emailAddress?.name) {
               inviteInfo = ` [Einladung von ${ev.organizer.emailAddress.name}]`;
@@ -2234,7 +2278,9 @@ async function executeCalendarAction(userId, action, params) {
   if (calIdParam && calIdParam !== "primary") {
     const [provider, email, ...rawIdParts] = calIdParam.split(":");
     const rawId = rawIdParts.join(":");
-    const found = enabledCalendars.find((c) => c.provider === provider && c.email === email && c.rawId === rawId);
+    const found = enabledCalendars.find(
+      (c) => c.provider === provider && c.email === email && c.rawId === rawId
+    );
     if (found) targetCal = found;
   }
   if (action === "create_event") {
@@ -2246,10 +2292,15 @@ async function executeCalendarAction(userId, action, params) {
         start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
         end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" }
       };
-      const data = await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events`, {
-        method: "POST",
-        body: JSON.stringify(event)
-      });
+      const data = await gcalFetch(
+        userId,
+        targetCal.email,
+        `/calendars/${encodeURIComponent(targetCal.rawId)}/events`,
+        {
+          method: "POST",
+          body: JSON.stringify(event)
+        }
+      );
       return `Termin "${data.summary}" wurde in [${targetCal.name}] erstellt.`;
     } else {
       const event = {
@@ -2259,10 +2310,15 @@ async function executeCalendarAction(userId, action, params) {
         start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
         end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" }
       };
-      const data = await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events`, {
-        method: "POST",
-        body: JSON.stringify(event)
-      });
+      const data = await msFetch(
+        userId,
+        targetCal.email,
+        `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events`,
+        {
+          method: "POST",
+          body: JSON.stringify(event)
+        }
+      );
       return `Termin "${data.subject}" wurde in [${targetCal.name}] erstellt.`;
     }
   }
@@ -2273,34 +2329,65 @@ async function executeCalendarAction(userId, action, params) {
       if (params.summary) event.summary = params.summary;
       if (params.description) event.description = params.description;
       if (params.location) event.location = params.location;
-      if (params.startDateTime) event.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
-      if (params.endDateTime) event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
-      await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, {
-        method: "PATCH",
-        body: JSON.stringify(event)
-      });
+      if (params.startDateTime)
+        event.start = {
+          dateTime: params.startDateTime,
+          timeZone: "Europe/Zurich"
+        };
+      if (params.endDateTime)
+        event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
+      await gcalFetch(
+        userId,
+        targetCal.email,
+        `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(event)
+        }
+      );
       return `Termin wurde in [${targetCal.name}] aktualisiert.`;
     } else {
       const event = {};
       if (params.summary) event.subject = params.summary;
-      if (params.description) event.body = { contentType: "text", content: params.description };
+      if (params.description)
+        event.body = { contentType: "text", content: params.description };
       if (params.location) event.location = { displayName: params.location };
-      if (params.startDateTime) event.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
-      if (params.endDateTime) event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
-      await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, {
-        method: "PATCH",
-        body: JSON.stringify(event)
-      });
+      if (params.startDateTime)
+        event.start = {
+          dateTime: params.startDateTime,
+          timeZone: "Europe/Zurich"
+        };
+      if (params.endDateTime)
+        event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
+      await msFetch(
+        userId,
+        targetCal.email,
+        `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(event)
+        }
+      );
       return `Termin wurde in [${targetCal.name}] aktualisiert.`;
     }
   }
   if (action === "delete_event") {
     if (!params.eventId) return "Event ID fehlt.";
     if (targetCal.provider === "google") {
-      await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, { method: "DELETE" });
+      await gcalFetch(
+        userId,
+        targetCal.email,
+        `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`,
+        { method: "DELETE" }
+      );
       return `Termin in [${targetCal.name}] gel\xF6scht.`;
     } else {
-      await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, { method: "DELETE" });
+      await msFetch(
+        userId,
+        targetCal.email,
+        `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`,
+        { method: "DELETE" }
+      );
       return `Termin in [${targetCal.name}] gel\xF6scht.`;
     }
   }
