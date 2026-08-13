@@ -5471,6 +5471,16 @@ var init_chat = __esm({
         await deleteConversation(input.id);
         return { success: true };
       }),
+      deleteConversations: protectedProcedure.input(z6.object({ ids: z6.array(z6.number()) })).mutation(async ({ ctx, input }) => {
+        for (const id of input.ids) {
+          const conv = await getConversationById(id);
+          if (conv && conv.userId !== ctx.user.id) {
+            throw new TRPCError5({ code: "FORBIDDEN" });
+          }
+        }
+        await deleteConversations(input.ids);
+        return { success: true };
+      }),
       getMessages: protectedProcedure.input(z6.object({ conversationId: z6.number() })).query(async ({ ctx, input }) => {
         const conv = await getConversationById(input.conversationId);
         if (!conv || conv.userId !== ctx.user.id)
@@ -8496,8 +8506,14 @@ async function handleGoogleOAuthCallback(req, res) {
     if (!code || !state) {
       return res.redirect("/calendar?error=missing_params");
     }
-    const userId = parseInt(state);
-    if (isNaN(userId)) {
+    const stateStr = Buffer.from(state, "base64").toString("utf-8");
+    let userId = null;
+    try {
+      userId = JSON.parse(stateStr).userId;
+    } catch (e) {
+      console.error("[Google OAuth] Invalid state JSON:", e);
+    }
+    if (!userId) {
       return res.redirect("/calendar?error=invalid_state");
     }
     const tokenResp = await fetch("https://oauth2.googleapis.com/token", {
