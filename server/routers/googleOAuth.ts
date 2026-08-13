@@ -17,8 +17,15 @@ export async function handleGoogleOAuthCallback(req: Request, res: Response) {
     }
 
     // Nutzer-ID aus state (gesetzt beim Login-URL-Aufruf)
-    const userId = parseInt(state);
-    if (isNaN(userId)) {
+    const stateStr = Buffer.from(state as string, "base64").toString("utf-8");
+    let userId: number | null = null;
+    try {
+      userId = JSON.parse(stateStr).userId;
+    } catch (e) {
+      console.error("[Google OAuth] Invalid state JSON:", e);
+    }
+    
+    if (!userId) {
       return res.redirect("/calendar?error=invalid_state");
     }
 
