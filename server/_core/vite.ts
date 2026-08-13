@@ -3,27 +3,30 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
 
-export async function setupVite(app: Express, server: Server) {
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true as const,
-  };
-
-  const vite = await createViteServer({
+// vite wird NUR im Entwicklungsmodus importiert. Im Production-Build
+// existiert dieses Paket nicht auf dem Server.
+async function createViteServer(app: Express, server: Server) {
+  const { createServer } = await import("vite");
+  const { default: viteConfig } = await import("../../vite.config");
+  const vite = await createServer({
     ...viteConfig,
     configFile: false,
-    server: serverOptions,
+    server: {
+      middlewareMode: true,
+      hmr: { server },
+      allowedHosts: true as const,
+    },
     appType: "custom",
   });
+  return vite;
+}
 
+export async function setupVite(app: Express, server: Server) {
+  const vite = await createViteServer(app, server);
   app.use(vite.middlewares);
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
-
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -31,8 +34,6 @@ export async function setupVite(app: Express, server: Server) {
         "client",
         "index.html"
       );
-
-      // always reload the index.html file from disk incase it changes
       let template = await fs.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
