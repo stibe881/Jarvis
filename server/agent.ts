@@ -22,7 +22,9 @@ import {
   getTasksByUser,
   updateTask,
   upsertMemory,
+  getMicrosoftTokens
 } from "./db";
+import { msFetch } from "./routers/calendar";
 import { ToolCall } from "./_core/llm";
 
 async function executeGithubAction(
@@ -457,6 +459,60 @@ export async function executeAction(
       case "github_action": {
         const { action: _a, ...params } = payload;
         result = await executeGithubAction(ctx.userId, action, params);
+        break;
+      }
+      case "email_action": {
+        const msTokens = await getMicrosoftTokens(ctx.userId);
+        if (msTokens.length === 0) {
+          result = "Kein Microsoft-Konto verknüpft.";
+          break;
+        }
+        const email = msTokens[0].email;
+        if (action === "list_unread") {
+          try {
+            const data = (await msFetch(
+              ctx.userId,
+              email,
+              "/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=10"
+            )) as any;
+            if (!data.value || data.value.length === 0) {
+              result = "Keine ungelesenen E-Mails gefunden.";
+            } else {
+              result = data.value
+                .map(
+                  (m: any) =>
+                    `- Von: ${m.sender?.emailAddress?.name}\n  Betreff: ${m.subject}\n  Auszug: ${m.bodyPreview}`
+                )
+                .join("\n\n");
+            }
+          } catch (e: any) {
+            result = "Fehler beim Abruf der Mails: " + e.message;
+          }
+        } else {
+          result = "Unbekannte Mail-Aktion";
+        }
+        break;
+      }
+      case "web_search": {
+        const query = typeof payload.query === "string" ? payload.query : "";
+        try {
+          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
+          const html = await res.text();
+          const results = [];
+          const snippetRegex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/g;
+          let match;
+          while ((match = snippetRegex.exec(html)) !== null && results.length < 5) {
+            results.push("- " + match[1].replace(/<\/?[^>]+(>|$)/g, "").trim());
+          }
+          if (results.length === 0) result = "Keine Suchergebnisse gefunden.";
+          else result = results.join("\n");
+        } catch (e: any) {
+          result = "Fehler bei der Websuche: " + e.message;
+        }
+        break;
+      }
+      case "maps_action": {
+        result = `Google Maps Ansicht für ${payload.location || "den Ort"} wurde auf dem Dashboard aktualisiert (Der Nutzer sieht dies als eingebettete Karte in der App).`;
         break;
       }
       default:

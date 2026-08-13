@@ -19,6 +19,7 @@ import { voiceNotesRouter } from "./routers/voiceNotes";
 import { webhooksRouter } from "./routers/webhooks";
 import { spotifyRouter } from "./routers/spotify";
 import { deviceRouter } from "./routers/deviceCommands";
+import { newsRouter } from "./routers/news";
 
 export const appRouter = router({
   system: systemRouter,

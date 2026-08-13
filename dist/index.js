@@ -1891,7 +1891,7 @@ var init_calendar = __esm({
           const gData = await gcalFetch(
             ctx.user.id,
             gToken.email,
-            "/users/me/calendarList"
+            "/users/me/calendarList?showHidden=true"
           );
           let disabledList = [];
           try {
@@ -2053,6 +2053,7 @@ var init_calendar = __esm({
           });
           const data = await gcalFetch(
             ctx.user.id,
+            email,
             `/calendars/${encodeURIComponent(rawCalId)}/events?${params}`
           );
           return data.items ?? [];

@@ -20,7 +20,7 @@ const GOOGLE_SCOPES = [
   "profile",
 ].join(" ");
 
-const MS_SCOPES = ["Calendars.ReadWrite", "offline_access", "User.Read"].join(
+const MS_SCOPES = ["Calendars.ReadWrite", "Mail.Read", "offline_access", "User.Read"].join(
   " "
 );
 

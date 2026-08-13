@@ -202,4 +202,49 @@ export const jarvisTools: Tool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "email_action",
+      description: "E-Mails abrufen (Microsoft 365 / Outlook)",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["list_unread", "search"] },
+          query: { type: "string" },
+        },
+        required: ["action"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "web_search",
+      description: "Eine Websuche durchführen (z.B. für Konkurrenz-Monitoring)",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string" },
+        },
+        required: ["query"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "maps_action",
+      description: "Google Maps Karte für den Nutzer einblenden (als Antwort-Widget)",
+      parameters: {
+        type: "object",
+        properties: {
+          location: { type: "string" },
+          mode: { type: "string", enum: ["place", "directions"] },
+          origin: { type: "string" },
+        },
+        required: ["location", "mode"],
+      },
+    },
+  },
 ];
