@@ -37,16 +37,28 @@ export const elevenLabsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const voiceId = input.voiceId ?? JARVIS_VOICE_ID;
 
-      // Verbindlich ist der Kontostand bei ElevenLabs (der lokale Zähler kennt
-      // nur den Verbrauch über diese App).
-      const live = await fetchLiveQuota();
-      const used = await getTtsUsage(ctx.user.id, currentYearMonth());
-      const state = live ?? budgetState(used);
-      if (state.remaining <= 0) {
-        throw new Error(
-          "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. " +
-            "Jarvis wechselt auf die Browser-Stimme, die Antworten erscheinen weiterhin im Chat."
-        );
+      const openAiKey = process.env.OPENAI_API_KEY ?? "";
+      const useOpenAI = Boolean(openAiKey);
+
+      let state = {
+        remaining: 9999999,
+        limit: 9999999,
+        percentUsed: 0,
+        charsUsed: 0,
+        level: "green",
+      };
+      let live = null;
+
+      if (!useOpenAI) {
+        live = await fetchLiveQuota();
+        const used = await getTtsUsage(ctx.user.id, currentYearMonth());
+        state = live ?? budgetState(used);
+        if (state.remaining <= 0) {
+          throw new Error(
+            "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. " +
+              "Jarvis wechselt auf die Browser-Stimme, die Antworten erscheinen weiterhin im Chat."
+          );
+        }
       }
 
       // Kurzfassung sprechen, damit das Budget für viele Antworten reicht
@@ -62,44 +74,58 @@ export const elevenLabsRouter = router({
           };
       if (!spoken) throw new Error("Kein sprechbarer Text vorhanden.");
 
-      const resp = await fetchWithRetry(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
+      let resp: globalThis.Response;
+
+      if (useOpenAI) {
+        resp = await fetchWithRetry("https://api.openai.com/v1/audio/speech", {
           method: "POST",
           timeoutMs: 20_000,
           headers: {
-            "xi-api-key": ELEVENLABS_KEY,
+            Authorization: `Bearer ${openAiKey}`,
             "Content-Type": "application/json",
-            Accept: "audio/mpeg",
           },
           body: JSON.stringify({
-            text: spoken,
-            // Gleiches Modell und gleiche Einstellungen wie im Stream-Weg
-            // (server/routers/ttsStream.ts). Sonst klingt Jarvis je nach
-            // genutztem Weg unterschiedlich laut.
-            model_id: "eleven_flash_v2_5",
-            voice_settings: {
-              // Höhere Stabilität, kein Stil-Anteil und kein Speaker-Boost:
-              // ElevenLabs variiert damit Betonung und Lautheit weniger stark
-              stability: 0.75,
-              similarity_boost: 0.8,
-              style: 0,
-              use_speaker_boost: false,
-            },
+            model: "tts-1",
+            input: spoken,
+            voice: "onyx",
+            response_format: "mp3",
           }),
-        }
-      );
+        });
+      } else {
+        resp = await fetchWithRetry(
+          `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+          {
+            method: "POST",
+            timeoutMs: 20_000,
+            headers: {
+              "xi-api-key": ELEVENLABS_KEY,
+              "Content-Type": "application/json",
+              Accept: "audio/mpeg",
+            },
+            body: JSON.stringify({
+              text: spoken,
+              model_id: "eleven_flash_v2_5",
+              voice_settings: {
+                stability: 0.75,
+                similarity_boost: 0.8,
+                style: 0,
+                use_speaker_boost: false,
+              },
+            }),
+          }
+        );
+      }
 
       if (!resp.ok) {
         const err = await resp.text();
-        if (err.includes("quota_exceeded")) {
+        if (!useOpenAI && err.includes("quota_exceeded")) {
           invalidateQuotaCache();
           throw new Error(
             "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. " +
               "Jarvis wechselt auf die Browser-Stimme."
           );
         }
-        throw new Error(`ElevenLabs TTS Fehler: ${resp.status} – ${err}`);
+        throw new Error(`TTS Fehler: ${resp.status} – ${err}`);
       }
 
       const arrayBuffer = await resp.arrayBuffer();
@@ -116,12 +142,29 @@ export const elevenLabsRouter = router({
         mimeType: "audio/mpeg",
         spokenText: spoken,
         truncated,
-        usage: budgetState(total),
+        usage: useOpenAI ? state : budgetState(total),
       };
     }),
 
   /** Aktueller Zeichenverbrauch des Monats */
   usage: protectedProcedure.query(async ({ ctx }) => {
+    const openAiKey = process.env.OPENAI_API_KEY ?? "";
+    if (openAiKey) {
+      return {
+        remaining: 9999999,
+        limit: 9999999,
+        percentUsed: 0,
+        charsUsed: 0,
+        level: "green",
+        yearMonth: currentYearMonth(),
+        monthlyLimit: 9999999,
+        resetAt: null,
+        tier: "openai",
+        live: true,
+        localCharsUsed: 0,
+      };
+    }
+
     const live = await fetchLiveQuota();
     const used = await getTtsUsage(ctx.user.id, currentYearMonth());
     if (live) {
