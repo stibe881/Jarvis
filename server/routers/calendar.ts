@@ -3,9 +3,11 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   getGoogleToken,
+  getGoogleTokens,
   upsertGoogleToken,
   deleteGoogleToken,
   getMicrosoftToken,
+  getMicrosoftTokens,
   upsertMicrosoftToken,
   deleteMicrosoftToken,
 } from "../db";
