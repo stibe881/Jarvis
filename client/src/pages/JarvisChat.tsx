@@ -23,6 +23,9 @@ import {
   Wrench,
   ChevronDown,
   CheckSquare,
+  Folder,
+  FolderPlus,
+  FolderOpen,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { detectWakeWord } from "@shared/wakeWord";
@@ -813,6 +816,17 @@ function JarvisChatInner() {
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
   const { data: suggestions } = trpc.chat.suggestions.useQuery();
+  const { data: groups } = trpc.chat.listGroups.useQuery();
+  const createGroupMutation = trpc.chat.createGroup.useMutation({ onSuccess: () => utils.chat.listGroups.invalidate() });
+  const moveToGroupMutation = trpc.chat.moveToGroup.useMutation({ 
+    onSuccess: () => { 
+      utils.chat.listConversations.invalidate(); 
+      utils.chat.listGroups.invalidate(); 
+      setSelectedConvs([]); 
+      setManageMode(false); 
+    } 
+  });
+  const [expandedGroups, setExpandedGroups] = useState<number[]>([]);
   const createConvMutation = trpc.chat.createConversation.useMutation({
     onSuccess: data => {
       utils.chat.listConversations.invalidate();
@@ -1543,21 +1557,102 @@ function JarvisChatInner() {
                 {manageMode ? "Fertig" : "Verwalten"}
               </button>
               {manageMode && selectedConvs.length > 0 && (
-                <button
-                  onClick={() =>
-                    deleteConvsMutation.mutate({ ids: selectedConvs })
-                  }
-                  className="text-[10px] text-destructive hover:text-red-400 uppercase tracking-wider font-semibold flex items-center gap-1"
-                >
-                  <Trash2 size={10} /> {selectedConvs.length} Löschen
-                </button>
+                <div className="flex items-center gap-2">
+                  <select
+                    className="text-[10px] bg-background text-muted-foreground border rounded px-1"
+                    value=""
+                    onChange={(e) => {
+                      if(e.target.value) {
+                        moveToGroupMutation.mutate({ conversationIds: selectedConvs, groupId: e.target.value === "none" ? null : parseInt(e.target.value) });
+                      }
+                    }}
+                  >
+                    <option value="">Verschieben...</option>
+                    <option value="none">Ohne Ordner</option>
+                    {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                  </select>
+                  <button
+                    onClick={() =>
+                      deleteConvsMutation.mutate({ ids: selectedConvs })
+                    }
+                    className="text-[10px] text-destructive hover:text-red-400 uppercase tracking-wider font-semibold flex items-center gap-1"
+                  >
+                    <Trash2 size={10} /> {selectedConvs.length}
+                  </button>
+                </div>
               )}
             </div>
           )}
         </div>
         <ScrollArea className="flex-1">
+          {manageMode && (
+            <div className="p-2 border-b">
+              <Button variant="outline" size="sm" className="w-full text-xs h-7 gap-1" onClick={() => {
+                const name = prompt("Name der neuen Gruppe:");
+                if (name) createGroupMutation.mutate({ name });
+              }}>
+                <FolderPlus size={12} /> Neuer Ordner
+              </Button>
+            </div>
+          )}
           <div className="p-2 space-y-1">
-            {conversations?.map(conv => (
+            {/* Groups */}
+            {groups?.map(group => {
+              const isExpanded = expandedGroups.includes(group.id);
+              const groupConvs = conversations?.filter(c => c.groupId === group.id) || [];
+              return (
+                <div key={`group-${group.id}`} className="mb-1">
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground hover:bg-accent/50"
+                    onClick={() => setExpandedGroups(prev => prev.includes(group.id) ? prev.filter(id => id !== group.id) : [...prev, group.id])}
+                  >
+                    {isExpanded ? <FolderOpen size={12} /> : <Folder size={12} />}
+                    <span className="flex-1 truncate">{group.name}</span>
+                    <span className="text-[10px] opacity-50">{groupConvs.length}</span>
+                  </div>
+                  {isExpanded && groupConvs.length > 0 && (
+                    <div className="pl-3 mt-1 space-y-1 border-l ml-3 border-border/50">
+                      {groupConvs.map(conv => (
+                        <div
+                          key={conv.id}
+                          className={cn(
+                            "group flex items-center gap-2 px-2 py-1.5 rounded text-xs cursor-pointer transition-all",
+                            activeConvId === conv.id && !manageMode
+                              ? "bg-primary/20 text-primary"
+                              : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                            manageMode && selectedConvs.includes(conv.id) && "bg-accent text-foreground"
+                          )}
+                          onClick={() => {
+                            if (manageMode) {
+                              setSelectedConvs(prev => prev.includes(conv.id) ? prev.filter(id => id !== conv.id) : [...prev, conv.id]);
+                            } else {
+                              setActiveConvId(conv.id);
+                              setShowConvSidebar(false);
+                            }
+                          }}
+                        >
+                          {manageMode && (
+                            <div className={cn("w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0", selectedConvs.includes(conv.id) ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground")}>
+                              {selectedConvs.includes(conv.id) && <CheckSquare size={10} />}
+                            </div>
+                          )}
+                          <span className="flex-1 truncate">{conv.title}</span>
+                          {!manageMode && (
+                            <button onClick={e => { e.stopPropagation(); deleteConvMutation.mutate({ id: conv.id }); if (activeConvId === conv.id) { setActiveConvId(null); setMessages([]); } }} className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Ungrouped */}
+            {groups && groups.length > 0 && <div className="h-px bg-border my-2" />}
+            {conversations?.filter(c => !c.groupId).map(conv => (
               <div
                 key={conv.id}
                 className={cn(
@@ -1565,17 +1660,11 @@ function JarvisChatInner() {
                   activeConvId === conv.id && !manageMode
                     ? "bg-primary/20 text-primary"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                  manageMode &&
-                    selectedConvs.includes(conv.id) &&
-                    "bg-accent text-foreground"
+                  manageMode && selectedConvs.includes(conv.id) && "bg-accent text-foreground"
                 )}
                 onClick={() => {
                   if (manageMode) {
-                    setSelectedConvs(prev =>
-                      prev.includes(conv.id)
-                        ? prev.filter(id => id !== conv.id)
-                        : [...prev, conv.id]
-                    );
+                    setSelectedConvs(prev => prev.includes(conv.id) ? prev.filter(id => id !== conv.id) : [...prev, conv.id]);
                   } else {
                     setActiveConvId(conv.id);
                     setShowConvSidebar(false);
@@ -1583,32 +1672,13 @@ function JarvisChatInner() {
                 }}
               >
                 {manageMode && (
-                  <div
-                    className={cn(
-                      "w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 transition-colors",
-                      selectedConvs.includes(conv.id)
-                        ? "bg-primary border-primary text-primary-foreground"
-                        : "border-muted-foreground"
-                    )}
-                  >
-                    {selectedConvs.includes(conv.id) && (
-                      <CheckSquare size={10} />
-                    )}
+                  <div className={cn("w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0", selectedConvs.includes(conv.id) ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground")}>
+                    {selectedConvs.includes(conv.id) && <CheckSquare size={10} />}
                   </div>
                 )}
                 <span className="flex-1 truncate">{conv.title}</span>
                 {!manageMode && (
-                  <button
-                    onClick={e => {
-                      e.stopPropagation();
-                      deleteConvMutation.mutate({ id: conv.id });
-                      if (activeConvId === conv.id) {
-                        setActiveConvId(null);
-                        setMessages([]);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                  >
+                  <button onClick={e => { e.stopPropagation(); deleteConvMutation.mutate({ id: conv.id }); if (activeConvId === conv.id) { setActiveConvId(null); setMessages([]); } }} className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity">
                     <Trash2 size={12} />
                   </button>
                 )}

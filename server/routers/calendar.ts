@@ -277,31 +277,59 @@ export const calendarRouter = router({
       }
     }
 
-    for (const msToken of msTokens) {
-      if (!msToken.email) continue;
-      const msData = (await msFetch(
-        ctx.user.id,
-        msToken.email,
-        "/me/calendars"
-      )) as any;
-      let disabledList: string[] = [];
+      for (const msToken of msTokens) {
+        if (!msToken.email) continue;
+        
+        let allMsCalendars: any[] = [];
+        try {
+          // Lade zuerst alle Kalendergruppen (inkl. "Geburtstage", "Andere Kalender")
+          const groupsData = (await msFetch(
+            ctx.user.id,
+            msToken.email,
+            "/me/calendarGroups"
+          )) as any;
+          
+          if (groupsData.value) {
+            const groupPromises = groupsData.value.map((group: any) => 
+              msFetch(ctx.user.id, msToken.email, `/me/calendarGroups/${group.id}/calendars`)
+            );
+            const groupsCalendars = await Promise.all(groupPromises);
+            for (const group of groupsCalendars) {
+              if ((group as any).value) {
+                allMsCalendars.push(...(group as any).value);
+              }
+            }
+          } else {
+            // Fallback auf Standard-Kalender, falls Gruppen nicht geladen werden können
+            const msData = (await msFetch(
+              ctx.user.id,
+              msToken.email,
+              "/me/calendars"
+            )) as any;
+            if (msData.value) allMsCalendars.push(...msData.value);
+          }
+        } catch (e) {
+          console.error("Error fetching MS calendars:", e);
+        }
+
+        let disabledList: string[] = [];
       try {
         disabledList = JSON.parse(msToken.disabledCalendars || "[]");
       } catch (e) {
         disabledList = [];
       }
 
-      if (msData.value) {
-        calendars.push(
-          ...msData.value.map((c: any) => ({
-            id: `ms:${msToken.email}:${c.id}`,
-            summary: `[${msToken.email}] ${c.name}`,
-            primary: c.isDefaultCalendar,
-            backgroundColor: c.hexColor,
-            enabled: !disabledList.includes(c.id),
-          }))
-        );
-      }
+        if (allMsCalendars.length > 0) {
+          calendars.push(
+            ...allMsCalendars.map((c: any) => ({
+              id: `ms:${msToken.email}:${c.id}`,
+              summary: `[${msToken.email}] ${c.name}`,
+              primary: c.isDefaultCalendar,
+              backgroundColor: c.hexColor,
+              enabled: !disabledList.includes(c.id),
+            }))
+          );
+        }
     }
 
     return calendars;

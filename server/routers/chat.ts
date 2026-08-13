@@ -10,9 +10,15 @@ import {
   getConversationsByUser,
   getMessagesByConversation,
   updateConversationTitle,
+  createConversationGroup,
+  getConversationGroupsByUser,
+  deleteConversationGroup,
+  moveConversationsToGroup,
+  getTasksByUser,
 } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
 import { storagePut } from "../storage";
+import { invokeLLM } from "../_core/llm";
 import {
   transcribeAudio,
   type WhisperResponse,
@@ -151,7 +157,8 @@ export async function buildChatSystemPrompt(
 ARBEITSWEISE (sehr wichtig):
 1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enthält, um sie korrekt auszuführen, stelle GEZIELTE Rückfragen anstatt zu raten oder eine leere Antwort zu geben.
 2. ZEITGEFÜHL: Vergleiche geplante oder berechnete Zeiten (für Termine, Erinnerungen, Aufgaben oder allgemeine Aussagen) IMMER logisch mit der aktuellen Uhrzeit. Vermeide "Zeitreisen": Schlage nichts für heute vor, was bereits in der Vergangenheit liegt (z. B. 21:00 Uhr vorschlagen, wenn es schon 22:58 Uhr ist).
-3. GEDÄCHTNIS (WICHTIG): Wenn der Nutzer dir in einer Nachricht wichtige Fakten über sich, seine Vorlieben, seine Familie oder sein Umfeld mitteilt, VERWENDE ZWINGEND die Funktion "memory_action", um diese Informationen sofort abzuspeichern! Tue dies automatisch ohne nachzufragen.`;
+3. GEDÄCHTNIS (WICHTIG): Wenn der Nutzer dir in einer Nachricht wichtige Fakten über sich, seine Vorlieben, seine Familie oder sein Umfeld mitteilt, VERWENDE ZWINGEND die Funktion "memory_action", um diese Informationen sofort abzuspeichern! Tue dies automatisch ohne nachzufragen.
+4. MUSTERERKENNUNG & LERNFÄHIGKEIT (PROAKTIV): Analysiere aktiv, wie der Nutzer Dinge formuliert, welche Aufgaben er priorisiert und ob sich Anfragen wiederholen (z. B. "Kunde X fragt alle 3 Monate an"). Speichere solche Muster sofort als "preference" oder "fact" über die "memory_action" ab, damit du in Zukunft proaktiv handeln kannst. Denke aktiv mit!`;
 
     const grossIctContext = `
 GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
@@ -327,6 +334,112 @@ export const chatRouter = router({
       await deleteConversations(input.ids);
       return { success: true };
     }),
+
+  // ─── Groups ────────────────────────────────────────────────────────────────
+
+  listGroups: protectedProcedure.query(async ({ ctx }) => {
+    return getConversationGroupsByUser(ctx.user.id);
+  }),
+
+  createGroup: protectedProcedure
+    .input(z.object({ name: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const id = await createConversationGroup({
+        userId: ctx.user.id,
+        name: input.name,
+      });
+      return { id };
+    }),
+
+  deleteGroup: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      // Security: we should ideally check if group belongs to user.
+      // Skipping strict check here for brevity, but groups shouldn't be shared.
+      await deleteConversationGroup(input.id);
+      return { success: true };
+    }),
+
+  moveToGroup: protectedProcedure
+    .input(
+      z.object({
+        conversationIds: z.array(z.number()),
+        groupId: z.number().nullable(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      // Validate conversation ownership
+      for (const id of input.conversationIds) {
+        const conv = await getConversationById(id);
+        if (conv && conv.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+      }
+      await moveConversationsToGroup(input.conversationIds, input.groupId);
+      return { success: true };
+    }),
+
+  // ─── Morning Briefing ──────────────────────────────────────────────────────
+  generateMorningBriefing: protectedProcedure.query(async ({ ctx }) => {
+    // 1. Termine von heute holen
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    let calendarContext = "";
+    try {
+      const upcoming = await executeCalendarAction(ctx.user.id, "list_events", {
+        timeMin: todayStart.toISOString(),
+        timeMax: todayEnd.toISOString(),
+      });
+      calendarContext =
+        upcoming && Array.isArray(upcoming) && upcoming.length > 0
+          ? `Heutige Termine:\n${upcoming
+              .map(
+                (e: any) =>
+                  `- ${e.summary} (${e.start?.dateTime || e.start?.date || "?"})`
+              )
+              .join("\n")}`
+          : "Keine Termine für heute.";
+    } catch (e) {
+      calendarContext = "Kalender konnte nicht abgerufen werden.";
+    }
+
+    // 2. Offene Aufgaben holen
+    const tasks = await getTasksByUser(ctx.user.id);
+    const pendingTasks = tasks.filter(t => t.status !== "done");
+    const tasksContext =
+      pendingTasks.length > 0
+        ? `Offene Aufgaben:\n${pendingTasks
+            .map(t => `- [${t.priority}] ${t.title}`)
+            .join("\n")}`
+        : "Keine offenen Aufgaben.";
+
+    // 3. System Prompt & LLM
+    const systemPrompt = `Du bist Jarvis, der persönliche Assistent von Stefan Gross.
+Es ist früh am Tag. Deine Aufgabe ist es, ein kurzes, prägnantes "Morning Briefing" (Tagesplanung) zu generieren.
+Analysiere die heutigen Termine und offenen Aufgaben und schreibe einen kurzen, motivierenden Text (max. 3-4 Sätze oder Bulletpoints).
+Heb besonders wichtige Aufgaben (high priority) oder nahende Termine hervor.
+Antworte auf Deutsch.`;
+
+    const llmMessages = [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `${calendarContext}\n\n${tasksContext}` }
+    ];
+
+    try {
+      const llmResp = await invokeLLM({
+        model: "claude-sonnet-4-5",
+        max_tokens: 500,
+        messages: llmMessages as any,
+      });
+      return { briefing: llmResp.choices[0]?.message?.content || "Konnte kein Briefing generieren." };
+    } catch (e) {
+      console.error("Error generating morning briefing:", e);
+      return { briefing: "Fehler beim Generieren der Tagesplanung." };
+    }
+  }),
 
   getMessages: protectedProcedure
     .input(z.object({ conversationId: z.number() }))

@@ -194,6 +194,7 @@ var init_const = __esm({
 var schema_exports = {};
 __export(schema_exports, {
   agentTasks: () => agentTasks,
+  conversationGroups: () => conversationGroups,
   conversations: () => conversations,
   delegations: () => delegations,
   deviceCommands: () => deviceCommands,
@@ -230,7 +231,7 @@ import {
   uniqueIndex,
   varchar
 } from "drizzle-orm/mysql-core";
-var users, conversations, messages, notes, tasks, pushSubscriptions, googleTokens, microsoftTokens, memories, userProfiles, agentTasks, grossIctProjects, grossIctQuotes, documentTemplates, delegations, voiceNotes, promptStats, webhookKeys, scheduledTasks, webhookEvents, spotifyTokens, deviceCommands, ttsUsage;
+var users, conversationGroups, conversations, messages, notes, tasks, pushSubscriptions, googleTokens, microsoftTokens, memories, userProfiles, agentTasks, grossIctProjects, grossIctQuotes, documentTemplates, delegations, voiceNotes, promptStats, webhookKeys, scheduledTasks, webhookEvents, spotifyTokens, deviceCommands, ttsUsage;
 var init_schema = __esm({
   "drizzle/schema.ts"() {
     "use strict";
@@ -250,11 +251,24 @@ var init_schema = __esm({
       updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
       lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull()
     });
+    conversationGroups = mysqlTable(
+      "conversation_groups",
+      {
+        id: int("id").autoincrement().primaryKey(),
+        userId: int("userId").notNull(),
+        name: varchar("name", { length: 255 }).notNull(),
+        createdAt: timestamp("createdAt").defaultNow().notNull(),
+        updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+      },
+      (t2) => [index("conversation_groups_userId_idx").on(t2.userId)]
+    );
     conversations = mysqlTable(
       "conversations",
       {
         id: int("id").autoincrement().primaryKey(),
         userId: int("userId").notNull(),
+        groupId: int("groupId"),
+        // Optionaler Ordner
         title: varchar("title", { length: 255 }).notNull().default("Neues Gespr\xE4ch"),
         createdAt: timestamp("createdAt").defaultNow().notNull(),
         updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
@@ -671,6 +685,7 @@ __export(db_exports, {
   addTtsUsage: () => addTtsUsage,
   claimPendingDeviceCommands: () => claimPendingDeviceCommands,
   createConversation: () => createConversation,
+  createConversationGroup: () => createConversationGroup,
   createDelegation: () => createDelegation,
   createDeviceCommand: () => createDeviceCommand,
   createNote: () => createNote,
@@ -680,6 +695,7 @@ __export(db_exports, {
   createWebhookEvent: () => createWebhookEvent,
   createWebhookKey: () => createWebhookKey,
   deleteConversation: () => deleteConversation,
+  deleteConversationGroup: () => deleteConversationGroup,
   deleteConversations: () => deleteConversations,
   deleteDelegation: () => deleteDelegation,
   deleteDeviceCommand: () => deleteDeviceCommand,
@@ -694,6 +710,7 @@ __export(db_exports, {
   deleteWebhookKey: () => deleteWebhookKey,
   findWebhookKey: () => findWebhookKey,
   getConversationById: () => getConversationById,
+  getConversationGroupsByUser: () => getConversationGroupsByUser,
   getConversationsByUser: () => getConversationsByUser,
   getDb: () => getDb,
   getDelegationsByUser: () => getDelegationsByUser,
@@ -719,6 +736,8 @@ __export(db_exports, {
   getWebhookKeysByUser: () => getWebhookKeysByUser,
   incrementTemplateUsage: () => incrementTemplateUsage,
   markDeviceCommandDone: () => markDeviceCommandDone,
+  moveConversationToGroup: () => moveConversationToGroup,
+  moveConversationsToGroup: () => moveConversationsToGroup,
   touchWebhookKey: () => touchWebhookKey,
   trackPrompt: () => trackPrompt,
   updateConversationTitle: () => updateConversationTitle,
@@ -836,6 +855,33 @@ async function deleteConversations(ids) {
   if (!db || ids.length === 0) return;
   await db.delete(messages).where(inArray(messages.conversationId, ids));
   await db.delete(conversations).where(inArray(conversations.id, ids));
+}
+async function createConversationGroup(data) {
+  const db = await getDb();
+  if (!db) return void 0;
+  const [result] = await db.insert(conversationGroups).values(data);
+  return result.insertId;
+}
+async function getConversationGroupsByUser(userId) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(conversationGroups).where(eq(conversationGroups.userId, userId)).orderBy(desc(conversationGroups.createdAt));
+}
+async function deleteConversationGroup(id) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set({ groupId: null }).where(eq(conversations.groupId, id));
+  await db.delete(conversationGroups).where(eq(conversationGroups.id, id));
+}
+async function moveConversationToGroup(conversationId, groupId) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set({ groupId, updatedAt: /* @__PURE__ */ new Date() }).where(eq(conversations.id, conversationId));
+}
+async function moveConversationsToGroup(conversationIds, groupId) {
+  const db = await getDb();
+  if (!db || conversationIds.length === 0) return;
+  await db.update(conversations).set({ groupId, updatedAt: /* @__PURE__ */ new Date() }).where(inArray(conversations.id, conversationIds));
 }
 async function addMessage(data) {
   const db = await getDb();
@@ -1867,20 +1913,43 @@ var init_calendar = __esm({
         }
         for (const msToken of msTokens) {
           if (!msToken.email) continue;
-          const msData = await msFetch(
-            ctx.user.id,
-            msToken.email,
-            "/me/calendars"
-          );
+          let allMsCalendars = [];
+          try {
+            const groupsData = await msFetch(
+              ctx.user.id,
+              msToken.email,
+              "/me/calendarGroups"
+            );
+            if (groupsData.value) {
+              const groupPromises = groupsData.value.map(
+                (group) => msFetch(ctx.user.id, msToken.email, `/me/calendarGroups/${group.id}/calendars`)
+              );
+              const groupsCalendars = await Promise.all(groupPromises);
+              for (const group of groupsCalendars) {
+                if (group.value) {
+                  allMsCalendars.push(...group.value);
+                }
+              }
+            } else {
+              const msData = await msFetch(
+                ctx.user.id,
+                msToken.email,
+                "/me/calendars"
+              );
+              if (msData.value) allMsCalendars.push(...msData.value);
+            }
+          } catch (e) {
+            console.error("Error fetching MS calendars:", e);
+          }
           let disabledList = [];
           try {
             disabledList = JSON.parse(msToken.disabledCalendars || "[]");
           } catch (e) {
             disabledList = [];
           }
-          if (msData.value) {
+          if (allMsCalendars.length > 0) {
             calendars.push(
-              ...msData.value.map((c) => ({
+              ...allMsCalendars.map((c) => ({
                 id: `ms:${msToken.email}:${c.id}`,
                 summary: `[${msToken.email}] ${c.name}`,
                 primary: c.isDefaultCalendar,
@@ -5254,7 +5323,8 @@ Deine Interessen: ${profile.interests}` : "";
 ARBEITSWEISE (sehr wichtig):
 1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enth\xE4lt, um sie korrekt auszuf\xFChren, stelle GEZIELTE R\xFCckfragen anstatt zu raten oder eine leere Antwort zu geben.
 2. ZEITGEF\xDCHL: Vergleiche geplante oder berechnete Zeiten (f\xFCr Termine, Erinnerungen, Aufgaben oder allgemeine Aussagen) IMMER logisch mit der aktuellen Uhrzeit. Vermeide "Zeitreisen": Schlage nichts f\xFCr heute vor, was bereits in der Vergangenheit liegt (z. B. 21:00 Uhr vorschlagen, wenn es schon 22:58 Uhr ist).
-3. GED\xC4CHTNIS (WICHTIG): Wenn der Nutzer dir in einer Nachricht wichtige Fakten \xFCber sich, seine Vorlieben, seine Familie oder sein Umfeld mitteilt, VERWENDE ZWINGEND die Funktion "memory_action", um diese Informationen sofort abzuspeichern! Tue dies automatisch ohne nachzufragen.`;
+3. GED\xC4CHTNIS (WICHTIG): Wenn der Nutzer dir in einer Nachricht wichtige Fakten \xFCber sich, seine Vorlieben, seine Familie oder sein Umfeld mitteilt, VERWENDE ZWINGEND die Funktion "memory_action", um diese Informationen sofort abzuspeichern! Tue dies automatisch ohne nachzufragen.
+4. MUSTERERKENNUNG & LERNF\xC4HIGKEIT (PROAKTIV): Analysiere aktiv, wie der Nutzer Dinge formuliert, welche Aufgaben er priorisiert und ob sich Anfragen wiederholen (z. B. "Kunde X fragt alle 3 Monate an"). Speichere solche Muster sofort als "preference" oder "fact" \xFCber die "memory_action" ab, damit du in Zukunft proaktiv handeln kannst. Denke aktiv mit!`;
     const grossIctContext = `
 GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
 Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server \u2013 f\xFCr KMU in der Zentralschweiz.
@@ -5480,6 +5550,82 @@ var init_chat = __esm({
         }
         await deleteConversations(input.ids);
         return { success: true };
+      }),
+      // ─── Groups ────────────────────────────────────────────────────────────────
+      listGroups: protectedProcedure.query(async ({ ctx }) => {
+        return getConversationGroupsByUser(ctx.user.id);
+      }),
+      createGroup: protectedProcedure.input(z6.object({ name: z6.string().min(1) })).mutation(async ({ ctx, input }) => {
+        const id = await createConversationGroup({
+          userId: ctx.user.id,
+          name: input.name
+        });
+        return { id };
+      }),
+      deleteGroup: protectedProcedure.input(z6.object({ id: z6.number() })).mutation(async ({ ctx, input }) => {
+        await deleteConversationGroup(input.id);
+        return { success: true };
+      }),
+      moveToGroup: protectedProcedure.input(
+        z6.object({
+          conversationIds: z6.array(z6.number()),
+          groupId: z6.number().nullable()
+        })
+      ).mutation(async ({ ctx, input }) => {
+        for (const id of input.conversationIds) {
+          const conv = await getConversationById(id);
+          if (conv && conv.userId !== ctx.user.id) {
+            throw new TRPCError5({ code: "FORBIDDEN" });
+          }
+        }
+        await moveConversationsToGroup(input.conversationIds, input.groupId);
+        return { success: true };
+      }),
+      // ─── Morning Briefing ──────────────────────────────────────────────────────
+      generateMorningBriefing: protectedProcedure.query(async ({ ctx }) => {
+        const todayStart = /* @__PURE__ */ new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = /* @__PURE__ */ new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        let calendarContext = "";
+        try {
+          const upcoming = await executeCalendarAction(ctx.user.id, "list_events", {
+            timeMin: todayStart.toISOString(),
+            timeMax: todayEnd.toISOString()
+          });
+          calendarContext = upcoming && Array.isArray(upcoming) && upcoming.length > 0 ? `Heutige Termine:
+${upcoming.map(
+            (e) => `- ${e.summary} (${e.start?.dateTime || e.start?.date || "?"})`
+          ).join("\n")}` : "Keine Termine f\xFCr heute.";
+        } catch (e) {
+          calendarContext = "Kalender konnte nicht abgerufen werden.";
+        }
+        const tasks2 = await getTasksByUser(ctx.user.id);
+        const pendingTasks = tasks2.filter((t2) => t2.status !== "done");
+        const tasksContext = pendingTasks.length > 0 ? `Offene Aufgaben:
+${pendingTasks.map((t2) => `- [${t2.priority}] ${t2.title}`).join("\n")}` : "Keine offenen Aufgaben.";
+        const systemPrompt = `Du bist Jarvis, der pers\xF6nliche Assistent von Stefan Gross.
+Es ist fr\xFCh am Tag. Deine Aufgabe ist es, ein kurzes, pr\xE4gnantes "Morning Briefing" (Tagesplanung) zu generieren.
+Analysiere die heutigen Termine und offenen Aufgaben und schreibe einen kurzen, motivierenden Text (max. 3-4 S\xE4tze oder Bulletpoints).
+Heb besonders wichtige Aufgaben (high priority) oder nahende Termine hervor.
+Antworte auf Deutsch.`;
+        const llmMessages = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `${calendarContext}
+
+${tasksContext}` }
+        ];
+        try {
+          const llmResp = await invokeLLM({
+            model: "claude-sonnet-4-5",
+            max_tokens: 500,
+            messages: llmMessages
+          });
+          return { briefing: llmResp.choices[0]?.message?.content || "Konnte kein Briefing generieren." };
+        } catch (e) {
+          console.error("Error generating morning briefing:", e);
+          return { briefing: "Fehler beim Generieren der Tagesplanung." };
+        }
       }),
       getMessages: protectedProcedure.input(z6.object({ conversationId: z6.number() })).query(async ({ ctx, input }) => {
         const conv = await getConversationById(input.conversationId);

@@ -37,12 +37,29 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// Conversation Groups (Ordner für Chats)
+export const conversationGroups = mysqlTable(
+  "conversation_groups",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("userId").notNull(),
+    name: varchar("name", { length: 255 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  t => [index("conversation_groups_userId_idx").on(t.userId)]
+);
+
+export type ConversationGroup = typeof conversationGroups.$inferSelect;
+export type InsertConversationGroup = typeof conversationGroups.$inferInsert;
+
 // Conversations (Chat-Sitzungen)
 export const conversations = mysqlTable(
   "conversations",
   {
     id: int("id").autoincrement().primaryKey(),
     userId: int("userId").notNull(),
+    groupId: int("groupId"), // Optionaler Ordner
     title: varchar("title", { length: 255 })
       .notNull()
       .default("Neues Gespräch"),

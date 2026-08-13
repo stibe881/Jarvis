@@ -6,6 +6,8 @@ import {
   InsertNote,
   InsertTask,
   conversations,
+  conversationGroups,
+  InsertConversationGroup,
   messages,
   notes,
   tasks,
@@ -172,6 +174,55 @@ export async function deleteConversations(ids: number[]) {
   if (!db || ids.length === 0) return;
   await db.delete(messages).where(inArray(messages.conversationId, ids));
   await db.delete(conversations).where(inArray(conversations.id, ids));
+}
+
+// ─── Conversation Groups ──────────────────────────────────────────────────────
+
+export async function createConversationGroup(data: InsertConversationGroup) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [result] = await db.insert(conversationGroups).values(data);
+  return result.insertId;
+}
+
+export async function getConversationGroupsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(conversationGroups)
+    .where(eq(conversationGroups.userId, userId))
+    .orderBy(desc(conversationGroups.createdAt));
+}
+
+export async function deleteConversationGroup(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Setze zuerst bei allen zugehörigen Conversations die groupId auf null
+  await db
+    .update(conversations)
+    .set({ groupId: null })
+    .where(eq(conversations.groupId, id));
+  // Lösche dann die Gruppe
+  await db.delete(conversationGroups).where(eq(conversationGroups.id, id));
+}
+
+export async function moveConversationToGroup(conversationId: number, groupId: number | null) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(conversations)
+    .set({ groupId, updatedAt: new Date() })
+    .where(eq(conversations.id, conversationId));
+}
+
+export async function moveConversationsToGroup(conversationIds: number[], groupId: number | null) {
+  const db = await getDb();
+  if (!db || conversationIds.length === 0) return;
+  await db
+    .update(conversations)
+    .set({ groupId, updatedAt: new Date() })
+    .where(inArray(conversations.id, conversationIds));
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────────
