@@ -4,8 +4,6 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getGoogleToken, upsertGoogleToken, deleteGoogleToken } from "../db";
 import { getGoogleRedirectUri } from "../_core/baseUrl";
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID!;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET!;
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
@@ -21,8 +19,8 @@ async function refreshAccessToken(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       refresh_token: refreshToken,
       grant_type: "refresh_token",
     }),
@@ -109,7 +107,7 @@ export const calendarRouter = router({
   // OAuth-Login-URL generieren
   getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
     const params = new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
       redirect_uri: getGoogleRedirectUri(ctx.req),
       response_type: "code",
       scope: SCOPES,

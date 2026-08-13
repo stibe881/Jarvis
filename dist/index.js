@@ -6269,8 +6269,6 @@ init_db();
 init_baseUrl();
 import { z as z9 } from "zod";
 import { TRPCError as TRPCError6 } from "@trpc/server";
-var GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-var GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 var SCOPES2 = [
   "https://www.googleapis.com/auth/calendar",
   "https://www.googleapis.com/auth/calendar.events",
@@ -6282,8 +6280,8 @@ async function refreshAccessToken(refreshToken) {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       refresh_token: refreshToken,
       grant_type: "refresh_token"
     })
@@ -6352,7 +6350,7 @@ var calendarRouter = router({
   // OAuth-Login-URL generieren
   getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
     const params = new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
       redirect_uri: getGoogleRedirectUri(ctx.req),
       response_type: "code",
       scope: SCOPES2,
@@ -7989,8 +7987,6 @@ function serveStatic(app) {
 // server/routers/googleOAuth.ts
 init_db();
 init_baseUrl();
-var GOOGLE_CLIENT_ID2 = process.env.GOOGLE_CLIENT_ID;
-var GOOGLE_CLIENT_SECRET2 = process.env.GOOGLE_CLIENT_SECRET;
 async function handleGoogleOAuthCallback(req, res) {
   try {
     const { code, state, error } = req.query;
@@ -8008,8 +8004,8 @@ async function handleGoogleOAuthCallback(req, res) {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
-        client_id: GOOGLE_CLIENT_ID2,
-        client_secret: GOOGLE_CLIENT_SECRET2,
+        client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
         code,
         grant_type: "authorization_code",
         // Muss exakt der redirect_uri aus der Auth-URL (calendar.getAuthUrl)
