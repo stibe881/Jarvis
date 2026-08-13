@@ -35,6 +35,12 @@ export default function OnboardingWizard() {
   const { data: authUrlData } = trpc.calendar.getAuthUrl.useQuery(undefined, {
     retry: false,
   });
+  const { data: msAuthUrlData } = trpc.calendar.getMsAuthUrl.useQuery(
+    undefined,
+    {
+      retry: false,
+    }
+  );
   const { data: voices } = trpc.elevenlabs.voices.useQuery(undefined, {
     retry: false,
   });
@@ -211,21 +217,44 @@ export default function OnboardingWizard() {
             dich morgens über den Tag informieren.
           </p>
           {calStatus?.connected ? (
-            <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-3 text-sm text-primary">
-              <Check size={16} /> Kalender ist verbunden
-              {calStatus.email ? ` (${calStatus.email})` : ""}
+            <div className="flex flex-col gap-2">
+              {calStatus.googleConnected && (
+                <div className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 p-3 text-sm text-primary">
+                  <Check size={16} /> Google Kalender verbunden
+                  {calStatus.googleEmail ? ` (${calStatus.googleEmail})` : ""}
+                </div>
+              )}
+              {calStatus.msConnected && (
+                <div className="flex items-center gap-2 rounded-md border border-[#00a4ef]/40 bg-[#00a4ef]/10 p-3 text-sm text-[#00a4ef]">
+                  <Check size={16} /> Microsoft Kalender verbunden
+                  {calStatus.msEmail ? ` (${calStatus.msEmail})` : ""}
+                </div>
+              )}
             </div>
           ) : (
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() => {
-                if (authUrlData?.url) window.location.href = authUrlData.url;
-                else toast.error("Kalender-Link nicht verfügbar");
-              }}
-            >
-              <CalendarDays size={15} /> Google Kalender jetzt verbinden
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => {
+                  if (authUrlData?.url) window.location.href = authUrlData.url;
+                  else toast.error("Google-Link nicht verfügbar");
+                }}
+              >
+                <CalendarDays size={15} /> Google Kalender verbinden
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-[#00a4ef]/40 text-[#00a4ef] hover:bg-[#00a4ef]/10 hover:text-[#00a4ef]"
+                onClick={() => {
+                  if (msAuthUrlData?.url)
+                    window.location.href = msAuthUrlData.url;
+                  else toast.error("Microsoft-Link nicht verfügbar");
+                }}
+              >
+                <CalendarDays size={15} /> Microsoft Kalender verbinden
+              </Button>
+            </div>
           )}
           <p className="text-xs text-muted-foreground">
             Du kannst diesen Schritt auch später im Bereich Kalender erledigen.

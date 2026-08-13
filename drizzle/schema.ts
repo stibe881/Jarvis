@@ -149,6 +149,22 @@ export const googleTokens = mysqlTable("google_tokens", {
 export type GoogleToken = typeof googleTokens.$inferSelect;
 export type InsertGoogleToken = typeof googleTokens.$inferInsert;
 
+// Microsoft Graph API Tokens
+export const microsoftTokens = mysqlTable("microsoft_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken"),
+  expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
+  scope: text("scope"),
+  email: varchar("email", { length: 320 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MicrosoftToken = typeof microsoftTokens.$inferSelect;
+export type InsertMicrosoftToken = typeof microsoftTokens.$inferInsert;
+
 // Jarvis Gedächtnis
 export const memories = mysqlTable(
   "memories",

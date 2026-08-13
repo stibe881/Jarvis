@@ -50,3 +50,11 @@ export function getGoogleRedirectUri(req?: Request): string {
 export function getSpotifyRedirectUri(req?: Request): string {
   return `${getAppBaseUrl(req)}/api/oauth/spotify/callback`;
 }
+
+/**
+ * Redirect-URI für den Microsoft-OAuth-Flow (Hotmail/Outlook/Exchange).
+ * Muss in der Azure/Entra-ID App Registration hinterlegt sein.
+ */
+export function getMsRedirectUri(req?: Request): string {
+  return `${getAppBaseUrl(req)}/api/oauth/ms/callback`;
+}

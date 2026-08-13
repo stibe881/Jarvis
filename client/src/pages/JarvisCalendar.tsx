@@ -83,7 +83,10 @@ export default function JarvisCalendar() {
   const utils = trpc.useUtils();
   const { data: status } = trpc.calendar.getStatus.useQuery();
   const { data: authUrl } = trpc.calendar.getAuthUrl.useQuery(undefined, {
-    enabled: !status?.connected,
+    enabled: !status?.googleConnected,
+  });
+  const { data: msAuthUrl } = trpc.calendar.getMsAuthUrl.useQuery(undefined, {
+    enabled: !status?.msConnected,
   });
   const { data: calendars } = trpc.calendar.listCalendars.useQuery(undefined, {
     enabled: !!status?.connected,
@@ -119,6 +122,13 @@ export default function JarvisCalendar() {
     onSuccess: () => {
       utils.calendar.getStatus.invalidate();
       toast.success("Google Kalender getrennt");
+    },
+  });
+
+  const disconnectMsMutation = trpc.calendar.disconnectMs.useMutation({
+    onSuccess: () => {
+      utils.calendar.getStatus.invalidate();
+      toast.success("Microsoft Kalender getrennt");
     },
   });
 
@@ -254,21 +264,32 @@ export default function JarvisCalendar() {
             <Calendar className="text-primary" size={28} />
           </div>
           <h2 className="font-jarvis text-xl font-bold text-primary">
-            GOOGLE KALENDER
+            KALENDER VERBINDEN
           </h2>
           <p className="text-muted-foreground text-sm">
-            Verbinde deinen Google Kalender, damit Jarvis Termine lesen,
-            erstellen und bearbeiten kann.
+            Verbinde deinen Kalender, damit Jarvis Termine lesen, erstellen und
+            bearbeiten kann.
           </p>
-          {authUrl?.url && (
-            <Button
-              onClick={() => (window.location.href = authUrl.url)}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-wider gap-2"
-            >
-              <ExternalLink size={16} />
-              MIT GOOGLE VERBINDEN
-            </Button>
-          )}
+          <div className="flex flex-col gap-2 w-full mt-2">
+            {authUrl?.url && (
+              <Button
+                onClick={() => (window.location.href = authUrl.url)}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-wider gap-2"
+              >
+                <ExternalLink size={16} />
+                GOOGLE KALENDER
+              </Button>
+            )}
+            {msAuthUrl?.url && (
+              <Button
+                onClick={() => (window.location.href = msAuthUrl.url)}
+                className="w-full bg-[#00a4ef] text-white hover:bg-[#00a4ef]/90 font-jarvis tracking-wider gap-2"
+              >
+                <ExternalLink size={16} />
+                MICROSOFT KALENDER
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -304,15 +325,56 @@ export default function JarvisCalendar() {
           >
             <Plus size={14} /> <span className="hidden sm:inline">TERMIN</span>
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => disconnectMutation.mutate()}
-            className="text-muted-foreground hover:text-destructive px-2"
-            title="Verbindung trennen"
-          >
-            <Unlink size={14} />
-          </Button>
+
+          {/* Connect / Disconnect Google */}
+          {!status.googleConnected ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (authUrl?.url) window.location.href = authUrl.url;
+              }}
+              className="text-muted-foreground hover:text-primary px-2"
+              title="Google Kalender verbinden"
+            >
+              <Plus size={14} /> G
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => disconnectMutation.mutate()}
+              className="text-muted-foreground hover:text-destructive px-2"
+              title="Google trennen"
+            >
+              <Unlink size={14} /> G
+            </Button>
+          )}
+
+          {/* Connect / Disconnect Microsoft */}
+          {!status.msConnected ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (msAuthUrl?.url) window.location.href = msAuthUrl.url;
+              }}
+              className="text-muted-foreground hover:text-[#00a4ef] px-2"
+              title="Microsoft Kalender verbinden"
+            >
+              <Plus size={14} /> M
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => disconnectMsMutation.mutate()}
+              className="text-muted-foreground hover:text-destructive px-2"
+              title="Microsoft trennen"
+            >
+              <Unlink size={14} /> M
+            </Button>
+          )}
         </div>
       </div>
 

@@ -14,6 +14,7 @@ import {
 } from "../drizzle/schema";
 import {
   googleTokens,
+  microsoftTokens,
   memories,
   userProfiles,
   InsertUserProfile,
@@ -328,6 +329,49 @@ export async function deleteGoogleToken(userId: number) {
   const db = await getDb();
   if (!db) return;
   await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
+}
+
+// ─── Microsoft Token Helpers ──────────────────────────────────────────────────
+
+export async function getMicrosoftToken(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(microsoftTokens)
+    .where(eq(microsoftTokens.userId, userId))
+    .limit(1);
+  return rows[0];
+}
+
+export async function upsertMicrosoftToken(data: {
+  userId: number;
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt: number;
+  scope?: string | null;
+  email?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(microsoftTokens)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        accessToken: data.accessToken,
+        ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
+        expiresAt: data.expiresAt,
+        scope: data.scope ?? null,
+        email: data.email ?? null,
+      },
+    });
+}
+
+export async function deleteMicrosoftToken(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(microsoftTokens).where(eq(microsoftTokens.userId, userId));
 }
 
 // ─── Memory Helpers ───────────────────────────────────────────────────────────

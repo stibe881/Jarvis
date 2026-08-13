@@ -49,6 +49,8 @@ const envSchema = z.object({
   ELEVENLABS_API_KEY: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  MS_CLIENT_ID: z.string().optional(),
+  MS_CLIENT_SECRET: z.string().optional(),
   SPOTIFY_CLIENT_ID: z.string().optional(),
   SPOTIFY_CLIENT_SECRET: z.string().optional(),
   SUPABASE_URL: z.string().url().optional().or(z.literal("")),
@@ -86,6 +88,8 @@ const values = parsed.success
       ELEVENLABS_API_KEY: RAW.ELEVENLABS_API_KEY,
       GOOGLE_CLIENT_ID: RAW.GOOGLE_CLIENT_ID,
       GOOGLE_CLIENT_SECRET: RAW.GOOGLE_CLIENT_SECRET,
+      MS_CLIENT_ID: RAW.MS_CLIENT_ID,
+      MS_CLIENT_SECRET: RAW.MS_CLIENT_SECRET,
       SPOTIFY_CLIENT_ID: RAW.SPOTIFY_CLIENT_ID,
       SPOTIFY_CLIENT_SECRET: RAW.SPOTIFY_CLIENT_SECRET,
       SUPABASE_URL: RAW.SUPABASE_URL,
@@ -118,6 +122,7 @@ const REQUIRED_KEYS = ["DATABASE_URL", "JWT_SECRET"] as const;
 const OPTIONAL_GROUPS: Record<string, readonly string[]> = {
   "Sprachausgabe (ElevenLabs)": ["ELEVENLABS_API_KEY"],
   "Google Kalender": ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+  "Microsoft Kalender": ["MS_CLIENT_ID", "MS_CLIENT_SECRET"],
   Spotify: ["SPOTIFY_CLIENT_ID", "SPOTIFY_CLIENT_SECRET"],
   "ERP (Supabase)": ["SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"],
 };

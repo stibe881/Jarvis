@@ -20,6 +20,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic } from "./serveStatic";
 import { handleGoogleOAuthCallback } from "../routers/googleOAuth";
+import { handleMsOAuthCallback } from "../routers/msOAuth";
 import { handleMorningBriefing } from "../routers/morningBriefing";
 import { handleWeeklyReport } from "../routers/weeklyReport";
 import { handleJarvisWebhook } from "../routers/webhookEndpoint";
@@ -74,8 +75,9 @@ async function startServer() {
   // strenge Limit für öffentliche Endpunkte.
   app.use("/api/auth/login", publicEndpointLimiter);
   registerLocalAuthRoutes(app);
-  // Google Calendar OAuth Callback
+  // --- OAuth Callbacks ---
   app.get("/api/oauth/google/callback", handleGoogleOAuthCallback);
+  app.get("/api/oauth/ms/callback", handleMsOAuthCallback);
   // Spotify OAuth Callback
   app.get("/api/oauth/spotify/callback", handleSpotifyOAuthCallback);
   // Gestreamte Sprachausgabe: das Audio beginnt zu spielen, während es noch lädt
