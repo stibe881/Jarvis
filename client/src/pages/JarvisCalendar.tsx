@@ -20,7 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 type GCalEvent = {
@@ -107,6 +107,10 @@ export default function JarvisCalendar() {
       59
     );
     return d.toISOString();
+  }, [currentDate]);
+
+  useEffect(() => {
+    utils.calendar.listEvents.invalidate();
   }, [currentDate]);
 
   useEffect(() => {
