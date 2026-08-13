@@ -434,6 +434,7 @@ export const calendarRouter = router({
         });
         const data = (await gcalFetch(
           ctx.user.id,
+          email,
           `/calendars/${encodeURIComponent(rawCalId)}/events?${params}`
         )) as any;
         return data.items ?? [];
