@@ -1,4 +1,10 @@
 // MUSS als Erstes stehen: lädt die .env, bevor ein anderes Modul process.env liest.
+if (
+  process.env.NODE_OPTIONS?.includes("listen_systemd_fd") ||
+  process.env.LISTEN_FDS
+) {
+  process.env.NODE_ENV = "production";
+}
 import "./loadEnv";
 import express from "express";
 import { createServer } from "http";

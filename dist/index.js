@@ -8473,6 +8473,9 @@ async function handleTtsStream(req, res, userId) {
 }
 
 // server/_core/index.ts
+if (process.env.NODE_OPTIONS?.includes("listen_systemd_fd") || process.env.LISTEN_FDS) {
+  process.env.NODE_ENV = "production";
+}
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -8595,10 +8598,14 @@ startServer().catch((err) => {
   logger.error({ err }, "Server failed to start");
   const fallbackServer = createServer((req, res) => {
     res.writeHead(500, { "Content-Type": "text/plain" });
-    res.end("Server failed to start: " + (err instanceof Error ? err.stack : String(err)));
+    res.end(
+      "Server failed to start: " + (err instanceof Error ? err.stack : String(err))
+    );
   });
   const envPort = process.env.PORT || process.argv.slice(2).find((a) => /^\d{2,5}$/.test(a));
-  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes("listen_systemd_fd");
+  const hatSystemdShim = (process.env.NODE_OPTIONS ?? "").includes(
+    "listen_systemd_fd"
+  );
   const hatSocketActivation = Boolean(process.env.LISTEN_FDS);
   if (hatSystemdShim || hatSocketActivation) {
     fallbackServer.listen({ fd: 3 });
