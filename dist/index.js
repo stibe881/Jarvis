@@ -58,6 +58,7 @@ var init_env = __esm({
       BUILT_IN_FORGE_API_KEY: z.string().optional(),
       // Direkte KI-Anbindung (eigener Anthropic-Key statt Plattform-Proxy)
       ANTHROPIC_API_KEY: z.string().optional(),
+      OPENAI_API_KEY: z.string().optional(),
       // Lokaler Passwort-Login (ersetzt den Plattform-OAuth beim Self-Hosting).
       APP_PASSWORD: z.string().optional(),
       OWNER_NAME: z.string().optional(),
@@ -89,6 +90,7 @@ var init_env = __esm({
       BUILT_IN_FORGE_API_URL: RAW.BUILT_IN_FORGE_API_URL,
       BUILT_IN_FORGE_API_KEY: RAW.BUILT_IN_FORGE_API_KEY,
       ANTHROPIC_API_KEY: RAW.ANTHROPIC_API_KEY,
+      OPENAI_API_KEY: RAW.OPENAI_API_KEY,
       APP_PASSWORD: RAW.APP_PASSWORD,
       OWNER_NAME: RAW.OWNER_NAME,
       APP_URL: RAW.APP_URL,
@@ -1356,7 +1358,11 @@ var init_sdk = __esm({
           });
           const { openId, appId, name } = payload;
           if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
-            console.warn("[Auth] Session payload missing required fields");
+            console.error("[Auth] Session payload missing required fields:", {
+              openId,
+              appId,
+              name
+            });
             return null;
           }
           return {
@@ -1365,7 +1371,10 @@ var init_sdk = __esm({
             name
           };
         } catch (error) {
-          console.warn("[Auth] Session verification failed", String(error));
+          console.error(
+            "[Auth] Session verification failed (JWT invalid or expired):",
+            String(error)
+          );
           return null;
         }
       }
@@ -1399,6 +1408,10 @@ var init_sdk = __esm({
         }
         const session = await this.verifySession(sessionToken);
         if (!session) {
+          console.error(
+            "[Auth] authenticateRequest failed: session is null. Cookie was:",
+            sessionToken
+          );
           throw ForbiddenError("Invalid session cookie");
         }
         if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
@@ -1429,7 +1442,11 @@ var init_sdk = __esm({
           }
         }
         if (!user) {
-          throw ForbiddenError("User not found");
+          console.error(
+            "[Auth] authenticateRequest failed: user still not found after sync for openId:",
+            sessionUserId
+          );
+          throw ForbiddenError("User not found after sync");
         }
         await upsertUser({
           openId: user.openId,
@@ -5830,21 +5847,12 @@ init_db();
 import { parse as parseCookieHeader2 } from "cookie";
 
 // server/_core/cookies.ts
-init_env();
-function isSecureRequest(req) {
-  if (req.protocol === "https") return true;
-  const forwardedProto = req.headers["x-forwarded-proto"];
-  if (!forwardedProto) return false;
-  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
-  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
-}
 function getSessionCookieOptions(req) {
-  const eingebettet = Boolean(ENV.oAuthServerUrl);
   return {
     httpOnly: true,
     path: "/",
-    sameSite: eingebettet ? "none" : "lax",
-    secure: isSecureRequest(req)
+    sameSite: "lax",
+    secure: true
   };
 }
 
@@ -7103,13 +7111,25 @@ var elevenLabsRouter = router({
     })
   ).mutation(async ({ ctx, input }) => {
     const voiceId = input.voiceId ?? JARVIS_VOICE_ID;
-    const live = await fetchLiveQuota();
-    const used = await getTtsUsage(ctx.user.id, currentYearMonth());
-    const state = live ?? budgetState(used);
-    if (state.remaining <= 0) {
-      throw new Error(
-        "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. Jarvis wechselt auf die Browser-Stimme, die Antworten erscheinen weiterhin im Chat."
-      );
+    const openAiKey = process.env.OPENAI_API_KEY ?? "";
+    const useOpenAI = Boolean(openAiKey);
+    let state = {
+      remaining: 9999999,
+      limit: 9999999,
+      percentUsed: 0,
+      charsUsed: 0,
+      level: "green"
+    };
+    let live = null;
+    if (!useOpenAI) {
+      live = await fetchLiveQuota();
+      const used = await getTtsUsage(ctx.user.id, currentYearMonth());
+      state = live ?? budgetState(used);
+      if (state.remaining <= 0) {
+        throw new Error(
+          "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. Jarvis wechselt auf die Browser-Stimme, die Antworten erscheinen weiterhin im Chat."
+        );
+      }
     }
     const limit = Math.min(
       input.shorten ? MAX_CHARS_PER_SPEECH : 2500,
@@ -7120,42 +7140,55 @@ var elevenLabsRouter = router({
       truncated: input.text.length > limit
     };
     if (!spoken) throw new Error("Kein sprechbarer Text vorhanden.");
-    const resp = await fetchWithRetry(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
+    let resp;
+    if (useOpenAI) {
+      resp = await fetchWithRetry("https://api.openai.com/v1/audio/speech", {
         method: "POST",
         timeoutMs: 2e4,
         headers: {
-          "xi-api-key": ELEVENLABS_KEY2,
-          "Content-Type": "application/json",
-          Accept: "audio/mpeg"
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          text: spoken,
-          // Gleiches Modell und gleiche Einstellungen wie im Stream-Weg
-          // (server/routers/ttsStream.ts). Sonst klingt Jarvis je nach
-          // genutztem Weg unterschiedlich laut.
-          model_id: "eleven_flash_v2_5",
-          voice_settings: {
-            // Höhere Stabilität, kein Stil-Anteil und kein Speaker-Boost:
-            // ElevenLabs variiert damit Betonung und Lautheit weniger stark
-            stability: 0.75,
-            similarity_boost: 0.8,
-            style: 0,
-            use_speaker_boost: false
-          }
+          model: "tts-1",
+          input: spoken,
+          voice: "onyx",
+          response_format: "mp3"
         })
-      }
-    );
+      });
+    } else {
+      resp = await fetchWithRetry(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          method: "POST",
+          timeoutMs: 2e4,
+          headers: {
+            "xi-api-key": ELEVENLABS_KEY2,
+            "Content-Type": "application/json",
+            Accept: "audio/mpeg"
+          },
+          body: JSON.stringify({
+            text: spoken,
+            model_id: "eleven_flash_v2_5",
+            voice_settings: {
+              stability: 0.75,
+              similarity_boost: 0.8,
+              style: 0,
+              use_speaker_boost: false
+            }
+          })
+        }
+      );
+    }
     if (!resp.ok) {
       const err = await resp.text();
-      if (err.includes("quota_exceeded")) {
+      if (!useOpenAI && err.includes("quota_exceeded")) {
         invalidateQuotaCache();
         throw new Error(
           "QUOTA_EXHAUSTED: Das Sprachausgabe-Guthaben ist aufgebraucht. Jarvis wechselt auf die Browser-Stimme."
         );
       }
-      throw new Error(`ElevenLabs TTS Fehler: ${resp.status} \u2013 ${err}`);
+      throw new Error(`TTS Fehler: ${resp.status} \u2013 ${err}`);
     }
     const arrayBuffer = await resp.arrayBuffer();
     const base64 = Buffer.from(arrayBuffer).toString("base64");
@@ -7169,11 +7202,27 @@ var elevenLabsRouter = router({
       mimeType: "audio/mpeg",
       spokenText: spoken,
       truncated,
-      usage: budgetState(total)
+      usage: useOpenAI ? state : budgetState(total)
     };
   }),
   /** Aktueller Zeichenverbrauch des Monats */
   usage: protectedProcedure.query(async ({ ctx }) => {
+    const openAiKey = process.env.OPENAI_API_KEY ?? "";
+    if (openAiKey) {
+      return {
+        remaining: 9999999,
+        limit: 9999999,
+        percentUsed: 0,
+        charsUsed: 0,
+        level: "green",
+        yearMonth: currentYearMonth(),
+        monthlyLimit: 9999999,
+        resetAt: null,
+        tier: "openai",
+        live: true,
+        localCharsUsed: 0
+      };
+    }
     const live = await fetchLiveQuota();
     const used = await getTtsUsage(ctx.user.id, currentYearMonth());
     if (live) {
@@ -8379,16 +8428,28 @@ async function handleTtsStream(req, res, userId) {
       res.status(400).json({ error: "Kein Text \xFCbergeben" });
       return;
     }
-    const live = await fetchLiveQuota();
-    const localUsed = await getTtsUsage(userId, currentYearMonth());
-    const state = live ?? budgetState(localUsed);
-    if (state.remaining <= 0) {
-      res.status(429).json({
-        error: "Sprachausgabe-Guthaben aufgebraucht",
-        remaining: 0,
-        resetAt: live?.resetAt ?? null
-      });
-      return;
+    const openAiKey = process.env.OPENAI_API_KEY ?? "";
+    const useOpenAI = Boolean(openAiKey);
+    let state = {
+      remaining: 9999999,
+      limit: 9999999,
+      percentUsed: 0,
+      charsUsed: 0,
+      level: "green"
+    };
+    let live = null;
+    if (!useOpenAI) {
+      live = await fetchLiveQuota();
+      const localUsed = await getTtsUsage(userId, currentYearMonth());
+      state = live ?? budgetState(localUsed);
+      if (state.remaining <= 0) {
+        res.status(429).json({
+          error: "Sprachausgabe-Guthaben aufgebraucht",
+          remaining: 0,
+          resetAt: live?.resetAt ?? null
+        });
+        return;
+      }
     }
     if (body.checkOnly === true || body.checkOnly === "true") {
       res.status(200).json({
@@ -8408,38 +8469,51 @@ async function handleTtsStream(req, res, userId) {
       res.status(400).json({ error: "Kein sprechbarer Text vorhanden" });
       return;
     }
-    const voiceId = body.voiceId || JARVIS_VOICE_ID2;
-    const url = new URL(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`
-    );
-    url.searchParams.set("optimize_streaming_latency", "4");
-    url.searchParams.set("output_format", "mp3_22050_32");
-    const upstream = await fetch(url.toString(), {
-      method: "POST",
-      headers: {
-        "xi-api-key": ELEVENLABS_KEY4,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg"
-      },
-      body: JSON.stringify({
-        text: spoken,
-        model_id: "eleven_flash_v2_5",
-        // Höhere Stabilität und kein Stil-Anteil: ElevenLabs variiert damit die
-        // Betonung weniger stark, wodurch aufeinanderfolgende Antworten
-        // gleichmässiger laut klingen. `use_speaker_boost` bleibt aus, weil es
-        // die Lautheit je nach Aufnahme unterschiedlich stark anhebt.
-        voice_settings: {
-          stability: 0.75,
-          similarity_boost: 0.8,
-          style: 0,
-          use_speaker_boost: false
-        }
-      })
-    });
+    let upstream;
+    if (useOpenAI) {
+      upstream = await fetch("https://api.openai.com/v1/audio/speech", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openAiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "tts-1",
+          input: spoken,
+          voice: "onyx",
+          response_format: "mp3"
+        })
+      });
+    } else {
+      const voiceId = body.voiceId || JARVIS_VOICE_ID2;
+      const url = new URL(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`
+      );
+      url.searchParams.set("optimize_streaming_latency", "4");
+      url.searchParams.set("output_format", "mp3_22050_32");
+      upstream = await fetch(url.toString(), {
+        method: "POST",
+        headers: {
+          "xi-api-key": ELEVENLABS_KEY4,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg"
+        },
+        body: JSON.stringify({
+          text: spoken,
+          model_id: "eleven_flash_v2_5",
+          voice_settings: {
+            stability: 0.75,
+            similarity_boost: 0.8,
+            style: 0,
+            use_speaker_boost: false
+          }
+        })
+      });
+    }
     if (!upstream.ok || !upstream.body) {
       const errText = await upstream.text().catch(() => "");
       console.error("[TTS-Stream]", upstream.status, errText.slice(0, 300));
-      if (errText.includes("quota_exceeded")) {
+      if (!useOpenAI && errText.includes("quota_exceeded")) {
         invalidateQuotaCache();
         res.status(429).json({ error: "Sprachausgabe-Guthaben aufgebraucht" });
         return;
@@ -8448,7 +8522,7 @@ async function handleTtsStream(req, res, userId) {
       return;
     }
     const total = await addTtsUsage(userId, currentYearMonth(), spoken.length);
-    const usage = budgetState(total);
+    const usage = useOpenAI ? state : budgetState(total);
     res.status(200);
     res.setHeader("Content-Type", "audio/mpeg");
     res.setHeader("Cache-Control", "no-store");
