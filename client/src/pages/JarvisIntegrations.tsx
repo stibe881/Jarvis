@@ -21,8 +21,10 @@ import {
   Link2,
   Unlink,
   RefreshCw,
+  Calendar,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { Switch } from "@/components/ui/switch";
 
 export default function JarvisIntegrations() {
   const utils = trpc.useUtils();
@@ -40,6 +42,20 @@ export default function JarvisIntegrations() {
   });
   const { data: deviceCmds } = trpc.device.list.useQuery();
 
+  // Calendar
+  const { data: calStatus } = trpc.calendar.getStatus.useQuery();
+  const { data: calAuthUrl } = trpc.calendar.getAuthUrl.useQuery();
+  const { data: calMsAuthUrl } = trpc.calendar.getMsAuthUrl.useQuery();
+  const { data: calendars } = trpc.calendar.listCalendars.useQuery(undefined, {
+    enabled: !!calStatus?.connected,
+  });
+
+  const toggleCalendar = trpc.calendar.toggleCalendar.useMutation({
+    onSuccess: () => {
+      utils.calendar.listCalendars.invalidate();
+    },
+  });
+
   const control = trpc.spotify.control.useMutation({
     onSuccess: r => {
       toast.success(r.message.replace(/\*\*/g, ""));
@@ -56,6 +72,19 @@ export default function JarvisIntegrations() {
   const deleteCmd = trpc.device.delete.useMutation({
     onSuccess: () => {
       utils.device.list.invalidate();
+    },
+  });
+
+  const disconnectGoogle = trpc.calendar.disconnect.useMutation({
+    onSuccess: () => {
+      utils.calendar.getStatus.invalidate();
+      toast.success("Google Kalender getrennt");
+    },
+  });
+  const disconnectMs = trpc.calendar.disconnectMs.useMutation({
+    onSuccess: () => {
+      utils.calendar.getStatus.invalidate();
+      toast.success("Microsoft Kalender getrennt");
     },
   });
 
@@ -110,9 +139,171 @@ export default function JarvisIntegrations() {
           VERBINDUNGEN
         </h1>
         <p className="text-sm text-muted-foreground">
-          Spotify, iPhone-Kurzbefehle und externe Dienste mit Jarvis verbinden
+          Kalender, Spotify, iPhone-Kurzbefehle und externe Dienste mit Jarvis
+          verbinden
         </p>
       </div>
+
+      {/* ── Kalender ── */}
+      <Card className="p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-primary">
+            <Calendar size={16} />
+            <h2 className="text-sm font-jarvis tracking-wide">KALENDER</h2>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Verbinde deine Google- oder Microsoft-Kalender, damit Jarvis Termine
+          lesen, erstellen und bearbeiten kann.
+        </p>
+        <div className="flex flex-col gap-3">
+          {/* Google */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <h3 className="text-xs font-semibold text-primary">
+              Google Kalender
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  if (calAuthUrl?.url) window.location.href = calAuthUrl.url;
+                }}
+              >
+                <Plus size={14} /> Konto verbinden
+              </Button>
+              {calStatus?.googleAccounts?.map(acc => {
+                const accCalendars =
+                  calendars?.filter(c =>
+                    c.id.startsWith(`google:${acc.email}:`)
+                  ) || [];
+                return (
+                  <div key={acc.email} className="w-full space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-foreground font-medium">
+                        {acc.email}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          disconnectGoogle.mutate({ email: acc.email })
+                        }
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive border border-border"
+                      >
+                        <Unlink size={13} className="mr-1.5" /> Trennen
+                      </Button>
+                    </div>
+                    {accCalendars.length > 0 && (
+                      <div className="pl-2 border-l-2 border-border/50 space-y-2">
+                        {accCalendars.map(c => (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{
+                                  backgroundColor: c.backgroundColor || "#ccc",
+                                }}
+                              />
+                              {c.summary.replace(`[${acc.email}] `, "")}
+                            </span>
+                            <Switch
+                              checked={c.enabled}
+                              onCheckedChange={checked =>
+                                toggleCalendar.mutate({
+                                  calendarId: c.id,
+                                  enabled: checked,
+                                })
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Microsoft */}
+          <div className="space-y-2 border-t border-border pt-3">
+            <h3 className="text-xs font-semibold text-[#00a4ef]">
+              Microsoft Kalender
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  if (calMsAuthUrl?.url)
+                    window.location.href = calMsAuthUrl.url;
+                }}
+              >
+                <Plus size={14} /> Konto verbinden
+              </Button>
+              {calStatus?.msAccounts?.map(acc => {
+                const accCalendars =
+                  calendars?.filter(c => c.id.startsWith(`ms:${acc.email}:`)) ||
+                  [];
+                return (
+                  <div key={acc.email} className="w-full space-y-2 mt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-foreground font-medium">
+                        {acc.email}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          disconnectMs.mutate({ email: acc.email })
+                        }
+                        className="h-7 text-xs text-muted-foreground hover:text-destructive border border-border"
+                      >
+                        <Unlink size={13} className="mr-1.5" /> Trennen
+                      </Button>
+                    </div>
+                    {accCalendars.length > 0 && (
+                      <div className="pl-2 border-l-2 border-border/50 space-y-2">
+                        {accCalendars.map(c => (
+                          <div
+                            key={c.id}
+                            className="flex items-center justify-between"
+                          >
+                            <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{
+                                  backgroundColor: c.backgroundColor || "#ccc",
+                                }}
+                              />
+                              {c.summary.replace(`[${acc.email}] `, "")}
+                            </span>
+                            <Switch
+                              checked={c.enabled}
+                              onCheckedChange={checked =>
+                                toggleCalendar.mutate({
+                                  calendarId: c.id,
+                                  enabled: checked,
+                                })
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* ── Spotify ── */}
       <Card className="p-4 space-y-4">

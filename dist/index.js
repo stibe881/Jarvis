@@ -227,6 +227,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar
 } from "drizzle-orm/mysql-core";
 var users, conversations, messages, notes, tasks, pushSubscriptions, googleTokens, microsoftTokens, memories, userProfiles, agentTasks, grossIctProjects, grossIctQuotes, documentTemplates, delegations, voiceNotes, promptStats, webhookKeys, scheduledTasks, webhookEvents, spotifyTokens, deviceCommands, ttsUsage;
@@ -317,34 +318,40 @@ var init_schema = __esm({
       },
       (t2) => [index("push_subscriptions_userId_idx").on(t2.userId)]
     );
-    googleTokens = mysqlTable("google_tokens", {
-      id: int("id").autoincrement().primaryKey(),
-      userId: int("userId").notNull(),
-      accessToken: text("accessToken").notNull(),
-      refreshToken: text("refreshToken"),
-      expiresAt: int("expiresAt").notNull(),
-      // Unix timestamp in seconds
-      scope: text("scope"),
-      email: varchar("email", { length: 320 }).notNull(),
-      createdAt: timestamp("createdAt").defaultNow().notNull(),
-      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
-    }, (t2) => [
-      uniqueIndex("google_tokens_userId_email_idx").on(t2.userId, t2.email)
-    ]);
-    microsoftTokens = mysqlTable("microsoft_tokens", {
-      id: int("id").autoincrement().primaryKey(),
-      userId: int("userId").notNull(),
-      accessToken: text("accessToken").notNull(),
-      refreshToken: text("refreshToken"),
-      expiresAt: int("expiresAt").notNull(),
-      // Unix timestamp in seconds
-      scope: text("scope"),
-      email: varchar("email", { length: 320 }).notNull(),
-      createdAt: timestamp("createdAt").defaultNow().notNull(),
-      updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
-    }, (t2) => [
-      uniqueIndex("microsoft_tokens_userId_email_idx").on(t2.userId, t2.email)
-    ]);
+    googleTokens = mysqlTable(
+      "google_tokens",
+      {
+        id: int("id").autoincrement().primaryKey(),
+        userId: int("userId").notNull(),
+        accessToken: text("accessToken").notNull(),
+        refreshToken: text("refreshToken"),
+        expiresAt: int("expiresAt").notNull(),
+        // Unix timestamp in seconds
+        scope: text("scope"),
+        email: varchar("email", { length: 320 }).notNull(),
+        disabledCalendars: text("disabledCalendars").default("[]").notNull(),
+        createdAt: timestamp("createdAt").defaultNow().notNull(),
+        updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+      },
+      (t2) => [uniqueIndex("google_tokens_userId_email_idx").on(t2.userId, t2.email)]
+    );
+    microsoftTokens = mysqlTable(
+      "microsoft_tokens",
+      {
+        id: int("id").autoincrement().primaryKey(),
+        userId: int("userId").notNull(),
+        accessToken: text("accessToken").notNull(),
+        refreshToken: text("refreshToken"),
+        expiresAt: int("expiresAt").notNull(),
+        // Unix timestamp in seconds
+        scope: text("scope"),
+        email: varchar("email", { length: 320 }).notNull(),
+        disabledCalendars: text("disabledCalendars").default("[]").notNull(),
+        createdAt: timestamp("createdAt").defaultNow().notNull(),
+        updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull()
+      },
+      (t2) => [uniqueIndex("microsoft_tokens_userId_email_idx").on(t2.userId, t2.email)]
+    );
     memories = mysqlTable(
       "memories",
       {
@@ -673,6 +680,7 @@ __export(db_exports, {
   createWebhookEvent: () => createWebhookEvent,
   createWebhookKey: () => createWebhookKey,
   deleteConversation: () => deleteConversation,
+  deleteConversations: () => deleteConversations,
   deleteDelegation: () => deleteDelegation,
   deleteDeviceCommand: () => deleteDeviceCommand,
   deleteGoogleToken: () => deleteGoogleToken,
@@ -823,6 +831,12 @@ async function deleteConversation(id) {
   await db.delete(messages).where(eq(messages.conversationId, id));
   await db.delete(conversations).where(eq(conversations.id, id));
 }
+async function deleteConversations(ids) {
+  const db = await getDb();
+  if (!db || ids.length === 0) return;
+  await db.delete(messages).where(inArray(messages.conversationId, ids));
+  await db.delete(conversations).where(inArray(conversations.id, ids));
+}
 async function addMessage(data) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -898,7 +912,9 @@ async function getGoogleToken(userId, email) {
   if (!db) return void 0;
   let q = db.select().from(googleTokens).where(eq(googleTokens.userId, userId));
   if (email) {
-    q = q.where(and(eq(googleTokens.userId, userId), eq(googleTokens.email, email)));
+    q = q.where(
+      and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
+    );
   }
   const rows = await q.limit(1);
   return rows[0];
@@ -911,13 +927,19 @@ async function getGoogleTokens2(userId) {
 async function upsertGoogleToken(data) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(googleTokens).values(data).onDuplicateKeyUpdate({
+  await db.insert(googleTokens).values({
+    ...data,
+    email: data.email ?? "",
+    // ensure email is not null for insert if missing, though it's required in schema
+    disabledCalendars: data.disabledCalendars ?? "[]"
+  }).onDuplicateKeyUpdate({
     set: {
       accessToken: data.accessToken,
       ...data.refreshToken ? { refreshToken: data.refreshToken } : {},
       expiresAt: data.expiresAt,
       scope: data.scope ?? null,
-      email: data.email ?? null
+      email: data.email ?? null,
+      ...data.disabledCalendars ? { disabledCalendars: data.disabledCalendars } : {}
     }
   });
 }
@@ -925,7 +947,9 @@ async function deleteGoogleToken(userId, email) {
   const db = await getDb();
   if (!db) return;
   if (email) {
-    await db.delete(googleTokens).where(and(eq(googleTokens.userId, userId), eq(googleTokens.email, email)));
+    await db.delete(googleTokens).where(
+      and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
+    );
   } else {
     await db.delete(googleTokens).where(eq(googleTokens.userId, userId));
   }
@@ -935,7 +959,9 @@ async function getMicrosoftToken(userId, email) {
   if (!db) return void 0;
   let q = db.select().from(microsoftTokens).where(eq(microsoftTokens.userId, userId));
   if (email) {
-    q = q.where(and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email)));
+    q = q.where(
+      and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email))
+    );
   }
   const rows = await q.limit(1);
   return rows[0];
@@ -948,13 +974,18 @@ async function getMicrosoftTokens2(userId) {
 async function upsertMicrosoftToken(data) {
   const db = await getDb();
   if (!db) return;
-  await db.insert(microsoftTokens).values(data).onDuplicateKeyUpdate({
+  await db.insert(microsoftTokens).values({
+    ...data,
+    email: data.email ?? "",
+    disabledCalendars: data.disabledCalendars ?? "[]"
+  }).onDuplicateKeyUpdate({
     set: {
       accessToken: data.accessToken,
       ...data.refreshToken ? { refreshToken: data.refreshToken } : {},
       expiresAt: data.expiresAt,
       scope: data.scope ?? null,
-      email: data.email ?? null
+      email: data.email ?? null,
+      ...data.disabledCalendars ? { disabledCalendars: data.disabledCalendars } : {}
     }
   });
 }
@@ -962,7 +993,12 @@ async function deleteMicrosoftToken(userId, email) {
   const db = await getDb();
   if (!db) return;
   if (email) {
-    await db.delete(microsoftTokens).where(and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email)));
+    await db.delete(microsoftTokens).where(
+      and(
+        eq(microsoftTokens.userId, userId),
+        eq(microsoftTokens.email, email)
+      )
+    );
   } else {
     await db.delete(microsoftTokens).where(eq(microsoftTokens.userId, userId));
   }
@@ -1577,6 +1613,704 @@ var init_trpc = __esm({
         });
       })
     );
+  }
+});
+
+// server/_core/baseUrl.ts
+function getAppBaseUrl(req) {
+  const configured = process.env.APP_URL;
+  if (configured) return configured.replace(/\/+$/, "");
+  const host = req?.headers.host;
+  if (host) {
+    const forwarded = req?.headers["x-forwarded-proto"];
+    const forwardedProto = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim();
+    const isLocal = /^(localhost|127\.|\[::1\])/.test(host);
+    const proto = forwardedProto || (isLocal ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+  return "http://localhost:3000";
+}
+function getGoogleRedirectUri(req) {
+  return `${getAppBaseUrl(req)}/api/oauth/google/callback`;
+}
+function getSpotifyRedirectUri(req) {
+  return `${getAppBaseUrl(req)}/api/oauth/spotify/callback`;
+}
+function getMsRedirectUri(req) {
+  return `${getAppBaseUrl(req)}/api/oauth/ms/callback`;
+}
+var init_baseUrl = __esm({
+  "server/_core/baseUrl.ts"() {
+    "use strict";
+  }
+});
+
+// server/routers/calendar.ts
+import { z as z3 } from "zod";
+import { TRPCError as TRPCError3 } from "@trpc/server";
+async function refreshGoogleAccessToken(refreshToken) {
+  const resp = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      refresh_token: refreshToken,
+      grant_type: "refresh_token"
+    })
+  });
+  const data = await resp.json();
+  if (!resp.ok || !data.access_token)
+    throw new Error(`Google Token-Refresh fehlgeschlagen: ${data.error}`);
+  return {
+    accessToken: data.access_token,
+    expiresAt: Math.floor(Date.now() / 1e3) + (data.expires_in ?? 3600)
+  };
+}
+async function refreshMsAccessToken(refreshToken) {
+  const resp = await fetch(
+    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.MS_CLIENT_ID ?? "",
+        client_secret: process.env.MS_CLIENT_SECRET ?? "",
+        refresh_token: refreshToken,
+        grant_type: "refresh_token"
+      })
+    }
+  );
+  const data = await resp.json();
+  if (!resp.ok || !data.access_token)
+    throw new Error(`MS Token-Refresh fehlgeschlagen: ${data.error}`);
+  return {
+    accessToken: data.access_token,
+    expiresAt: Math.floor(Date.now() / 1e3) + (data.expires_in ?? 3600)
+  };
+}
+async function getValidGoogleAccessToken(userId, email) {
+  const token = await getGoogleToken(userId, email);
+  if (!token) throw new TRPCError3({ code: "UNAUTHORIZED" });
+  if (token.expiresAt > Math.floor(Date.now() / 1e3) + 60)
+    return token.accessToken;
+  if (!token.refreshToken) throw new TRPCError3({ code: "UNAUTHORIZED" });
+  const refreshed = await refreshGoogleAccessToken(token.refreshToken);
+  await upsertGoogleToken({
+    userId,
+    accessToken: refreshed.accessToken,
+    expiresAt: refreshed.expiresAt,
+    refreshToken: token.refreshToken,
+    email: token.email
+  });
+  return refreshed.accessToken;
+}
+async function getValidMsAccessToken(userId, email) {
+  const token = await getMicrosoftToken(userId, email);
+  if (!token) throw new TRPCError3({ code: "UNAUTHORIZED" });
+  if (token.expiresAt > Math.floor(Date.now() / 1e3) + 60)
+    return token.accessToken;
+  if (!token.refreshToken) throw new TRPCError3({ code: "UNAUTHORIZED" });
+  const refreshed = await refreshMsAccessToken(token.refreshToken);
+  await upsertMicrosoftToken({
+    userId,
+    accessToken: refreshed.accessToken,
+    expiresAt: refreshed.expiresAt,
+    refreshToken: token.refreshToken,
+    email: token.email
+  });
+  return refreshed.accessToken;
+}
+async function gcalFetch(userId, email, path4, options = {}) {
+  const accessToken = await getValidGoogleAccessToken(userId, email);
+  const resp = await fetch(`https://www.googleapis.com/calendar/v3${path4}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...options.headers ?? {}
+    }
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new TRPCError3({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Google Calendar Fehler: ${resp.status} ${err.slice(0, 200)}`
+    });
+  }
+  if (resp.status === 204) return {};
+  return resp.json();
+}
+async function msFetch(userId, email, path4, options = {}) {
+  const accessToken = await getValidMsAccessToken(userId, email);
+  const resp = await fetch(`https://graph.microsoft.com/v1.0${path4}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Prefer: 'outlook.timezone="Europe/Zurich"',
+      ...options.headers ?? {}
+    }
+  });
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new TRPCError3({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `MS Graph Fehler: ${resp.status} ${err.slice(0, 200)}`
+    });
+  }
+  if (resp.status === 204) return {};
+  return resp.json();
+}
+var GOOGLE_SCOPES, MS_SCOPES, calendarRouter;
+var init_calendar = __esm({
+  "server/routers/calendar.ts"() {
+    "use strict";
+    init_trpc();
+    init_db();
+    init_baseUrl();
+    GOOGLE_SCOPES = [
+      "https://www.googleapis.com/auth/calendar",
+      "https://www.googleapis.com/auth/calendar.events",
+      "email",
+      "profile"
+    ].join(" ");
+    MS_SCOPES = ["Calendars.ReadWrite", "offline_access", "User.Read"].join(
+      " "
+    );
+    calendarRouter = router({
+      // Verbindungsstatus prüfen
+      getStatus: protectedProcedure.query(async ({ ctx }) => {
+        const gTokens = await getGoogleTokens(ctx.user.id);
+        const msTokens = await getMicrosoftTokens(ctx.user.id);
+        return {
+          connected: gTokens.length > 0 || msTokens.length > 0,
+          googleAccounts: gTokens.map((t2) => ({
+            email: t2.email,
+            provider: "google"
+          })),
+          msAccounts: msTokens.map((t2) => ({ email: t2.email, provider: "ms" })),
+          // Fallbacks for old UI if any
+          googleConnected: gTokens.length > 0,
+          googleEmail: gTokens[0]?.email ?? null,
+          msConnected: msTokens.length > 0,
+          msEmail: msTokens[0]?.email ?? null
+        };
+      }),
+      // OAuth-Login-URL generieren
+      getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
+        const params = new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID ?? "",
+          redirect_uri: getGoogleRedirectUri(ctx.req),
+          response_type: "code",
+          scope: GOOGLE_SCOPES,
+          access_type: "offline",
+          prompt: "consent",
+          state: JSON.stringify({ userId: ctx.user.id })
+        });
+        const stateB64 = Buffer.from(params.get("state")).toString("base64");
+        params.set("state", stateB64);
+        return { url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
+      }),
+      getMsAuthUrl: protectedProcedure.query(async ({ ctx }) => {
+        const params = new URLSearchParams({
+          client_id: process.env.MS_CLIENT_ID ?? "",
+          redirect_uri: getMsRedirectUri(ctx.req),
+          response_type: "code",
+          scope: MS_SCOPES,
+          state: JSON.stringify({ userId: ctx.user.id })
+        });
+        const stateB64 = Buffer.from(params.get("state")).toString("base64");
+        params.set("state", stateB64);
+        return {
+          url: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`
+        };
+      }),
+      // Verbindung trennen
+      disconnect: protectedProcedure.input(z3.object({ email: z3.string().optional() }).optional()).mutation(async ({ ctx, input }) => {
+        await deleteGoogleToken(ctx.user.id, input?.email);
+        return { success: true };
+      }),
+      disconnectMs: protectedProcedure.input(z3.object({ email: z3.string().optional() }).optional()).mutation(async ({ ctx, input }) => {
+        await deleteMicrosoftToken(ctx.user.id, input?.email);
+        return { success: true };
+      }),
+      // Kalender-Liste
+      listCalendars: protectedProcedure.query(async ({ ctx }) => {
+        const gTokens = await getGoogleTokens(ctx.user.id);
+        const msTokens = await getMicrosoftTokens(ctx.user.id);
+        const calendars = [];
+        for (const gToken of gTokens) {
+          if (!gToken.email) continue;
+          const gData = await gcalFetch(
+            ctx.user.id,
+            gToken.email,
+            "/users/me/calendarList"
+          );
+          let disabledList = [];
+          try {
+            disabledList = JSON.parse(gToken.disabledCalendars || "[]");
+          } catch (e) {
+            disabledList = [];
+          }
+          if (gData.items) {
+            calendars.push(
+              ...gData.items.map((c) => ({
+                id: `google:${gToken.email}:${c.id}`,
+                summary: `[${gToken.email}] ${c.summary}`,
+                primary: c.primary,
+                backgroundColor: c.backgroundColor,
+                enabled: !disabledList.includes(c.id)
+              }))
+            );
+          }
+        }
+        for (const msToken of msTokens) {
+          if (!msToken.email) continue;
+          const msData = await msFetch(
+            ctx.user.id,
+            msToken.email,
+            "/me/calendars"
+          );
+          let disabledList = [];
+          try {
+            disabledList = JSON.parse(msToken.disabledCalendars || "[]");
+          } catch (e) {
+            disabledList = [];
+          }
+          if (msData.value) {
+            calendars.push(
+              ...msData.value.map((c) => ({
+                id: `ms:${msToken.email}:${c.id}`,
+                summary: `[${msToken.email}] ${c.name}`,
+                primary: c.isDefaultCalendar,
+                backgroundColor: c.hexColor,
+                enabled: !disabledList.includes(c.id)
+              }))
+            );
+          }
+        }
+        return calendars;
+      }),
+      // Kalender aktivieren/deaktivieren
+      toggleCalendar: protectedProcedure.input(z3.object({ calendarId: z3.string(), enabled: z3.boolean() })).mutation(async ({ ctx, input }) => {
+        const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+        const rawCalId = rawIdParts.join(":");
+        if (provider === "google") {
+          const token = await getGoogleToken(ctx.user.id, email);
+          if (!token) throw new TRPCError3({ code: "NOT_FOUND" });
+          let disabledList = [];
+          try {
+            disabledList = JSON.parse(token.disabledCalendars || "[]");
+          } catch (e) {
+          }
+          if (input.enabled) {
+            disabledList = disabledList.filter((id) => id !== rawCalId);
+          } else {
+            if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
+          }
+          await upsertGoogleToken({ ...token, disabledCalendars: JSON.stringify(disabledList) });
+        } else if (provider === "ms") {
+          const token = await getMicrosoftToken(ctx.user.id, email);
+          if (!token) throw new TRPCError3({ code: "NOT_FOUND" });
+          let disabledList = [];
+          try {
+            disabledList = JSON.parse(token.disabledCalendars || "[]");
+          } catch (e) {
+          }
+          if (input.enabled) {
+            disabledList = disabledList.filter((id) => id !== rawCalId);
+          } else {
+            if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
+          }
+          await upsertMicrosoftToken({ ...token, disabledCalendars: JSON.stringify(disabledList) });
+        }
+        return { success: true };
+      }),
+      // Termine abrufen
+      listEvents: protectedProcedure.input(
+        z3.object({
+          calendarId: z3.string().default("google:primary"),
+          timeMin: z3.string().optional(),
+          // ISO 8601
+          timeMax: z3.string().optional(),
+          maxResults: z3.number().default(50)
+        })
+      ).query(async ({ ctx, input }) => {
+        const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+        const rawCalId = rawIdParts.join(":");
+        const isMs = provider === "ms";
+        if (isMs) {
+          const query = [
+            `$top=${input.maxResults}`,
+            `$orderby=start/dateTime`
+          ];
+          if (input.timeMin || input.timeMax) {
+            const filters = [];
+            if (input.timeMin)
+              filters.push(`start/dateTime ge '${input.timeMin}'`);
+            if (input.timeMax) filters.push(`end/dateTime le '${input.timeMax}'`);
+            query.push(`$filter=${filters.join(" and ")}`);
+          }
+          const data = await msFetch(
+            ctx.user.id,
+            email,
+            `/me/calendars/${encodeURIComponent(rawCalId)}/events?${query.join("&")}`
+          );
+          return (data.value ?? []).map((e) => ({
+            id: e.id,
+            summary: e.subject,
+            description: e.bodyPreview,
+            start: {
+              dateTime: e.start?.dateTime ? e.start.dateTime + "Z" : void 0
+            },
+            end: { dateTime: e.end?.dateTime ? e.end.dateTime + "Z" : void 0 },
+            location: e.location?.displayName,
+            htmlLink: e.webLink
+          }));
+        } else {
+          const params = new URLSearchParams({
+            singleEvents: "true",
+            orderBy: "startTime",
+            maxResults: String(input.maxResults),
+            ...input.timeMin ? { timeMin: input.timeMin } : {},
+            ...input.timeMax ? { timeMax: input.timeMax } : {}
+          });
+          const data = await gcalFetch(
+            ctx.user.id,
+            `/calendars/${encodeURIComponent(rawCalId)}/events?${params}`
+          );
+          return data.items ?? [];
+        }
+      }),
+      // Termin erstellen
+      createEvent: protectedProcedure.input(
+        z3.object({
+          calendarId: z3.string().default("google:primary"),
+          summary: z3.string(),
+          description: z3.string().optional(),
+          location: z3.string().optional(),
+          startDateTime: z3.string(),
+          // ISO 8601
+          endDateTime: z3.string(),
+          timeZone: z3.string().default("Europe/Zurich"),
+          allDay: z3.boolean().default(false)
+        })
+      ).mutation(async ({ ctx, input }) => {
+        const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+        const rawCalId = rawIdParts.join(":");
+        const isMs = provider === "ms";
+        if (isMs) {
+          const msEvent = {
+            subject: input.summary,
+            body: { contentType: "text", content: input.description ?? "" },
+            location: { displayName: input.location ?? "" },
+            start: { dateTime: input.startDateTime, timeZone: input.timeZone },
+            end: { dateTime: input.endDateTime, timeZone: input.timeZone },
+            isAllDay: input.allDay
+          };
+          const data = await msFetch(
+            ctx.user.id,
+            email,
+            `/me/calendars/${encodeURIComponent(rawCalId)}/events`,
+            { method: "POST", body: JSON.stringify(msEvent) }
+          );
+          return { id: data.id, summary: data.subject, htmlLink: data.webLink };
+        } else {
+          const gEvent = {
+            summary: input.summary,
+            description: input.description,
+            location: input.location,
+            start: input.allDay ? { date: input.startDateTime.split("T")[0] } : { dateTime: input.startDateTime, timeZone: input.timeZone },
+            end: input.allDay ? { date: input.endDateTime.split("T")[0] } : { dateTime: input.endDateTime, timeZone: input.timeZone }
+          };
+          const data = await gcalFetch(
+            ctx.user.id,
+            email,
+            `/calendars/${encodeURIComponent(rawCalId)}/events`,
+            { method: "POST", body: JSON.stringify(gEvent) }
+          );
+          return { id: data.id, summary: data.summary, htmlLink: data.htmlLink };
+        }
+      }),
+      // Termin bearbeiten
+      updateEvent: protectedProcedure.input(
+        z3.object({
+          calendarId: z3.string().default("google:primary"),
+          eventId: z3.string(),
+          summary: z3.string().optional(),
+          description: z3.string().optional(),
+          location: z3.string().optional(),
+          startDateTime: z3.string().optional(),
+          endDateTime: z3.string().optional(),
+          timeZone: z3.string().default("Europe/Zurich")
+        })
+      ).mutation(async ({ ctx, input }) => {
+        const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+        const rawCalId = rawIdParts.join(":");
+        const isMs = provider === "ms";
+        if (isMs) {
+          const patch = {};
+          if (input.summary) patch.subject = input.summary;
+          if (input.description !== void 0)
+            patch.body = { contentType: "text", content: input.description };
+          if (input.location !== void 0)
+            patch.location = { displayName: input.location };
+          if (input.startDateTime)
+            patch.start = {
+              dateTime: input.startDateTime,
+              timeZone: input.timeZone
+            };
+          if (input.endDateTime)
+            patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
+          return msFetch(
+            ctx.user.id,
+            email,
+            `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
+            { method: "PATCH", body: JSON.stringify(patch) }
+          );
+        } else {
+          const current = await gcalFetch(
+            ctx.user.id,
+            email,
+            `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`
+          );
+          const patch = { ...current };
+          if (input.summary) patch.summary = input.summary;
+          if (input.description !== void 0)
+            patch.description = input.description;
+          if (input.location !== void 0) patch.location = input.location;
+          if (input.startDateTime)
+            patch.start = {
+              dateTime: input.startDateTime,
+              timeZone: input.timeZone
+            };
+          if (input.endDateTime)
+            patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
+          return gcalFetch(
+            ctx.user.id,
+            email,
+            `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
+            { method: "PUT", body: JSON.stringify(patch) }
+          );
+        }
+      }),
+      // Termin löschen
+      deleteEvent: protectedProcedure.input(
+        z3.object({
+          calendarId: z3.string().default("google:primary"),
+          eventId: z3.string()
+        })
+      ).mutation(async ({ ctx, input }) => {
+        const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+        const rawCalId = rawIdParts.join(":");
+        const isMs = provider === "ms";
+        if (isMs) {
+          await msFetch(
+            ctx.user.id,
+            email,
+            `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
+            { method: "DELETE" }
+          );
+        } else {
+          await gcalFetch(
+            ctx.user.id,
+            email,
+            `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
+            { method: "DELETE" }
+          );
+        }
+        return { success: true };
+      })
+    });
+  }
+});
+
+// server/_core/calendarAI.ts
+async function executeCalendarAction(userId, action, params) {
+  const gTokens = await getGoogleTokens2(userId);
+  const msTokens = await getMicrosoftTokens2(userId);
+  if (gTokens.length === 0 && msTokens.length === 0) {
+    return "Kein Kalender ist verbunden.";
+  }
+  const getEnabledCalendars = async () => {
+    const enabled = [];
+    for (const gToken of gTokens) {
+      if (!gToken.email) continue;
+      let disabledList = [];
+      try {
+        disabledList = JSON.parse(gToken.disabledCalendars || "[]");
+      } catch (e) {
+      }
+      const gData = await gcalFetch(userId, gToken.email, "/users/me/calendarList").catch(() => null);
+      if (gData?.items) {
+        for (const c of gData.items) {
+          if (!disabledList.includes(c.id)) {
+            enabled.push({ provider: "google", email: gToken.email, rawId: c.id, name: c.summary });
+          }
+        }
+      }
+    }
+    for (const msToken of msTokens) {
+      if (!msToken.email) continue;
+      let disabledList = [];
+      try {
+        disabledList = JSON.parse(msToken.disabledCalendars || "[]");
+      } catch (e) {
+      }
+      const msData = await msFetch(userId, msToken.email, "/me/calendars").catch(() => null);
+      if (msData?.value) {
+        for (const c of msData.value) {
+          if (!disabledList.includes(c.id)) {
+            enabled.push({ provider: "ms", email: msToken.email, rawId: c.id, name: c.name });
+          }
+        }
+      }
+    }
+    return enabled;
+  };
+  const enabledCalendars = await getEnabledCalendars();
+  if (enabledCalendars.length === 0) {
+    return "Es sind keine Kalender aktiviert.";
+  }
+  const calIdParam = params.calendarId;
+  if (action === "list_events") {
+    const now = /* @__PURE__ */ new Date();
+    const tMin = params.timeMin ?? now.toISOString();
+    const tMax = params.timeMax ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1e3).toISOString();
+    const allEvents = [];
+    const tz = "Europe/Zurich";
+    for (const cal of enabledCalendars) {
+      if (cal.provider === "google") {
+        const data = await gcalFetch(
+          userId,
+          cal.email,
+          `/calendars/${encodeURIComponent(cal.rawId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`
+        ).catch(() => null);
+        if (data?.items) {
+          for (const ev of data.items) {
+            const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
+            const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
+            const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganzt\xE4gig";
+            let inviteInfo = "";
+            if (ev.organizer && !ev.organizer.self) {
+              const organizerName = ev.organizer.displayName || ev.organizer.email?.split("@")[0] || "jemanden";
+              inviteInfo = ` [Einladung von ${organizerName}]`;
+            }
+            allEvents.push({
+              start: d.getTime(),
+              text: `\u2022 [${cal.name}] ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`
+            });
+          }
+        }
+      } else {
+        const data = await msFetch(
+          userId,
+          cal.email,
+          `/me/calendars/${encodeURIComponent(cal.rawId)}/events?$filter=start/dateTime ge '${tMin}' and start/dateTime le '${tMax}'&$orderby=start/dateTime&$top=20`
+        ).catch(() => null);
+        if (data?.value) {
+          for (const ev of data.value) {
+            const d = /* @__PURE__ */ new Date(ev.start?.dateTime ? ev.start.dateTime + "Z" : "");
+            const dateStr = d.toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: tz });
+            const timeStr = !ev.isAllDay ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", timeZone: tz }) : "Ganzt\xE4gig";
+            let inviteInfo = "";
+            if (ev.organizer?.emailAddress?.name) {
+              inviteInfo = ` [Einladung von ${ev.organizer.emailAddress.name}]`;
+            }
+            allEvents.push({
+              start: d.getTime(),
+              text: `\u2022 [${cal.name}] ${dateStr} ${timeStr}: ${ev.subject ?? "Termin"}${ev.location?.displayName ? ` (${ev.location.displayName})` : ""}${inviteInfo}`
+            });
+          }
+        }
+      }
+    }
+    allEvents.sort((a, b) => a.start - b.start);
+    if (allEvents.length === 0) return "Keine Termine in diesem Zeitraum.";
+    return allEvents.map((e) => e.text).join("\n");
+  }
+  let targetCal = enabledCalendars[0];
+  if (calIdParam && calIdParam !== "primary") {
+    const [provider, email, ...rawIdParts] = calIdParam.split(":");
+    const rawId = rawIdParts.join(":");
+    const found = enabledCalendars.find((c) => c.provider === provider && c.email === email && c.rawId === rawId);
+    if (found) targetCal = found;
+  }
+  if (action === "create_event") {
+    if (targetCal.provider === "google") {
+      const event = {
+        summary: params.summary,
+        description: params.description,
+        location: params.location,
+        start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
+        end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" }
+      };
+      const data = await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events`, {
+        method: "POST",
+        body: JSON.stringify(event)
+      });
+      return `Termin "${data.summary}" wurde in [${targetCal.name}] erstellt.`;
+    } else {
+      const event = {
+        subject: params.summary,
+        body: { contentType: "text", content: params.description ?? "" },
+        location: { displayName: params.location ?? "" },
+        start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
+        end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" }
+      };
+      const data = await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events`, {
+        method: "POST",
+        body: JSON.stringify(event)
+      });
+      return `Termin "${data.subject}" wurde in [${targetCal.name}] erstellt.`;
+    }
+  }
+  if (action === "update_event") {
+    if (!params.eventId) return "Event ID fehlt.";
+    if (targetCal.provider === "google") {
+      const event = {};
+      if (params.summary) event.summary = params.summary;
+      if (params.description) event.description = params.description;
+      if (params.location) event.location = params.location;
+      if (params.startDateTime) event.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
+      if (params.endDateTime) event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
+      await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, {
+        method: "PATCH",
+        body: JSON.stringify(event)
+      });
+      return `Termin wurde in [${targetCal.name}] aktualisiert.`;
+    } else {
+      const event = {};
+      if (params.summary) event.subject = params.summary;
+      if (params.description) event.body = { contentType: "text", content: params.description };
+      if (params.location) event.location = { displayName: params.location };
+      if (params.startDateTime) event.start = { dateTime: params.startDateTime, timeZone: "Europe/Zurich" };
+      if (params.endDateTime) event.end = { dateTime: params.endDateTime, timeZone: "Europe/Zurich" };
+      await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, {
+        method: "PATCH",
+        body: JSON.stringify(event)
+      });
+      return `Termin wurde in [${targetCal.name}] aktualisiert.`;
+    }
+  }
+  if (action === "delete_event") {
+    if (!params.eventId) return "Event ID fehlt.";
+    if (targetCal.provider === "google") {
+      await gcalFetch(userId, targetCal.email, `/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, { method: "DELETE" });
+      return `Termin in [${targetCal.name}] gel\xF6scht.`;
+    } else {
+      await msFetch(userId, targetCal.email, `/me/calendars/${encodeURIComponent(targetCal.rawId)}/events/${params.eventId}`, { method: "DELETE" });
+      return `Termin in [${targetCal.name}] gel\xF6scht.`;
+    }
+  }
+  return "Unbekannte Kalender-Aktion.";
+}
+var init_calendarAI = __esm({
+  "server/_core/calendarAI.ts"() {
+    "use strict";
+    init_db();
+    init_calendar();
   }
 });
 
@@ -3194,38 +3928,9 @@ var init_appIntegration = __esm({
   }
 });
 
-// server/_core/baseUrl.ts
-function getAppBaseUrl(req) {
-  const configured = process.env.APP_URL;
-  if (configured) return configured.replace(/\/+$/, "");
-  const host = req?.headers.host;
-  if (host) {
-    const forwarded = req?.headers["x-forwarded-proto"];
-    const forwardedProto = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(",")[0]?.trim();
-    const isLocal = /^(localhost|127\.|\[::1\])/.test(host);
-    const proto = forwardedProto || (isLocal ? "http" : "https");
-    return `${proto}://${host}`;
-  }
-  return "http://localhost:3000";
-}
-function getGoogleRedirectUri(req) {
-  return `${getAppBaseUrl(req)}/api/oauth/google/callback`;
-}
-function getSpotifyRedirectUri(req) {
-  return `${getAppBaseUrl(req)}/api/oauth/spotify/callback`;
-}
-function getMsRedirectUri(req) {
-  return `${getAppBaseUrl(req)}/api/oauth/ms/callback`;
-}
-var init_baseUrl = __esm({
-  "server/_core/baseUrl.ts"() {
-    "use strict";
-  }
-});
-
 // server/routers/spotify.ts
-import { z as z3 } from "zod";
-import { TRPCError as TRPCError3 } from "@trpc/server";
+import { z as z4 } from "zod";
+import { TRPCError as TRPCError4 } from "@trpc/server";
 function basicAuth() {
   return "Basic " + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString("base64");
 }
@@ -3518,7 +4223,7 @@ var init_spotify = __esm({
       /** Autorisierungs-URL für den OAuth-Flow. */
       getAuthUrl: protectedProcedure.query(({ ctx }) => {
         if (!CLIENT_ID) {
-          throw new TRPCError3({
+          throw new TRPCError4({
             code: "PRECONDITION_FAILED",
             message: "Spotify ist nicht konfiguriert."
           });
@@ -3558,8 +4263,8 @@ var init_spotify = __esm({
       }),
       /** Steuerbefehl aus der UI. */
       control: protectedProcedure.input(
-        z3.object({
-          action: z3.enum([
+        z4.object({
+          action: z4.enum([
             "play",
             "pause",
             "next",
@@ -3571,10 +4276,10 @@ var init_spotify = __esm({
             "playlists",
             "devices"
           ]),
-          query: z3.string().optional(),
-          type: z3.enum(["track", "album", "playlist", "artist"]).optional(),
-          level: z3.number().min(0).max(100).optional(),
-          enabled: z3.boolean().optional()
+          query: z4.string().optional(),
+          type: z4.enum(["track", "album", "playlist", "artist"]).optional(),
+          level: z4.number().min(0).max(100).optional(),
+          enabled: z4.boolean().optional()
         })
       ).mutation(async ({ ctx, input }) => {
         const { action, ...params } = input;
@@ -3586,7 +4291,7 @@ var init_spotify = __esm({
 });
 
 // server/routers/deviceCommands.ts
-import { z as z4 } from "zod";
+import { z as z5 } from "zod";
 function describeDeviceCommand(type, params) {
   const s = (k) => typeof params[k] === "string" ? params[k] : "";
   switch (type) {
@@ -3645,14 +4350,14 @@ var init_deviceCommands = __esm({
         }));
       }),
       create: protectedProcedure.input(
-        z4.object({
-          type: z4.enum(["whatsapp", "alarm", "timer", "reminder", "speak"]),
-          recipient: z4.string().optional(),
-          message: z4.string().optional(),
-          time: z4.string().optional(),
-          minutes: z4.number().optional(),
-          label: z4.string().optional(),
-          text: z4.string().optional()
+        z5.object({
+          type: z5.enum(["whatsapp", "alarm", "timer", "reminder", "speak"]),
+          recipient: z5.string().optional(),
+          message: z5.string().optional(),
+          time: z5.string().optional(),
+          minutes: z5.number().optional(),
+          label: z5.string().optional(),
+          text: z5.string().optional()
         })
       ).mutation(async ({ ctx, input }) => {
         const { type, ...params } = input;
@@ -3662,11 +4367,11 @@ var init_deviceCommands = __esm({
         const message = await queueDeviceCommand(ctx.user.id, type, clean);
         return { message };
       }),
-      markDone: protectedProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ ctx, input }) => {
+      markDone: protectedProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ ctx, input }) => {
         await markDeviceCommandDone(input.id, ctx.user.id);
         return { success: true };
       }),
-      delete: protectedProcedure.input(z4.object({ id: z4.number() })).mutation(async ({ ctx, input }) => {
+      delete: protectedProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ ctx, input }) => {
         await deleteDeviceCommand(input.id, ctx.user.id);
         return { success: true };
       })
@@ -4420,172 +5125,14 @@ var init_pendingApproval = __esm({
 });
 
 // server/routers/chat.ts
-import { TRPCError as TRPCError4 } from "@trpc/server";
-import { z as z5 } from "zod";
+import { TRPCError as TRPCError5 } from "@trpc/server";
+import { z as z6 } from "zod";
 function detectIntent(message) {
   for (const rule of INTENT_RULES) {
     if (rule.test.test(message))
       return { intent: rule.intent, label: rule.label };
   }
   return null;
-}
-async function executeCalendarAction(userId, action, params) {
-  try {
-    const token = await getGoogleToken(userId);
-    if (!token) return "Google Kalender ist nicht verbunden.";
-    let accessToken = token.accessToken;
-    if (token.expiresAt <= Math.floor(Date.now() / 1e3) + 60 && token.refreshToken) {
-      const rr = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          refresh_token: token.refreshToken,
-          grant_type: "refresh_token"
-        })
-      });
-      const rd = await rr.json();
-      if (rd.access_token) {
-        accessToken = rd.access_token;
-        await upsertGoogleToken({
-          userId,
-          accessToken,
-          expiresAt: Math.floor(Date.now() / 1e3) + (rd.expires_in ?? 3600),
-          refreshToken: token.refreshToken,
-          email: token.email
-        });
-      }
-    }
-    const headers2 = {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json"
-    };
-    const calId = params.calendarId ?? "primary";
-    if (action === "list_events") {
-      const now = /* @__PURE__ */ new Date();
-      const tMin = params.timeMin ?? now.toISOString();
-      const tMax = params.timeMax ?? new Date(now.getTime() + 7 * 24 * 60 * 60 * 1e3).toISOString();
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
-        { headers: headers2 }
-      );
-      const data = await resp.json();
-      if (!data.items || data.items.length === 0)
-        return "Keine Termine in diesem Zeitraum.";
-      const tz = "Europe/Zurich";
-      return data.items.map((ev) => {
-        const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
-        const dateStr = d.toLocaleDateString("de-DE", {
-          weekday: "short",
-          day: "2-digit",
-          month: "2-digit",
-          timeZone: tz
-        });
-        const timeStr = ev.start?.dateTime ? d.toLocaleTimeString("de-DE", {
-          hour: "2-digit",
-          minute: "2-digit",
-          timeZone: tz
-        }) : "Ganzt\xE4gig";
-        let inviteInfo = "";
-        if (ev.organizer && !ev.organizer.self) {
-          const organizerName = ev.organizer.displayName || ev.organizer.email?.split("@")[0] || "jemanden";
-          inviteInfo = ` [Einladung von ${organizerName}]`;
-        }
-        return `\u2022 ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`;
-      }).join("\n");
-    }
-    if (action === "create_event") {
-      const event = {
-        summary: params.summary,
-        description: params.description,
-        location: params.location,
-        start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
-        end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" }
-      };
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
-        { method: "POST", headers: headers2, body: JSON.stringify(event) }
-      );
-      const data = await resp.json();
-      return `Termin "${data.summary}" wurde erstellt.`;
-    }
-    if (action === "delete_event") {
-      await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-        { method: "DELETE", headers: headers2 }
-      );
-      return "Termin wurde gel\xF6scht.";
-    }
-    if (action === "update_event" || action === "invite_attendee") {
-      const getResp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-        { headers: headers2 }
-      );
-      if (!getResp.ok) return `Termin nicht gefunden (ID: ${params.eventId}).`;
-      const current = await getResp.json();
-      if (action === "invite_attendee") {
-        const existingAttendees = current.attendees ?? [];
-        const newEmail = params.email;
-        if (!newEmail) return "Bitte eine E-Mail-Adresse angeben.";
-        if (existingAttendees.some((a) => a.email === newEmail))
-          return `${newEmail} ist bereits eingeladen.`;
-        const updatedEvent = {
-          ...current,
-          attendees: [...existingAttendees, { email: newEmail }]
-        };
-        const putResp = await fetchWithTimeout(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-          { method: "PUT", headers: headers2, body: JSON.stringify(updatedEvent) }
-        );
-        const putData = await putResp.json();
-        return `${newEmail} wurde zum Termin "${putData.summary}" eingeladen.`;
-      }
-      if (action === "update_event") {
-        const patch = { ...current };
-        if (params.summary) patch.summary = params.summary;
-        if (params.description !== void 0)
-          patch.description = params.description;
-        if (params.location !== void 0) patch.location = params.location;
-        if (params.startDateTime)
-          patch.start = {
-            dateTime: params.startDateTime,
-            timeZone: "Europe/Zurich"
-          };
-        if (params.endDateTime)
-          patch.end = {
-            dateTime: params.endDateTime,
-            timeZone: "Europe/Zurich"
-          };
-        const putResp = await fetchWithTimeout(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-          { method: "PUT", headers: headers2, body: JSON.stringify(patch) }
-        );
-        const putData = await putResp.json();
-        return `Termin "${putData.summary}" wurde aktualisiert.`;
-      }
-    }
-    if (action === "get_event") {
-      const tMin = params.timeMin ?? (/* @__PURE__ */ new Date()).toISOString();
-      const tMax = params.timeMax ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1e3).toISOString();
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=50&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
-        { headers: headers2 }
-      );
-      const data = await resp.json();
-      const keyword = (params.keyword ?? "").toLowerCase();
-      const found = data.items?.find(
-        (ev) => (ev.summary ?? "").toLowerCase().includes(keyword)
-      );
-      if (!found) return `Kein Termin mit "${params.keyword}" gefunden.`;
-      const attendees = found.attendees?.map((a) => a.displayName ?? a.email).join(", ") ?? "keine";
-      return `Termin gefunden: "${found.summary}" (ID: ${found.id})
-Teilnehmer: ${attendees}`;
-    }
-    return `Unbekannte Aktion: "${action}". Verf\xFCgbar: list_events, create_event, update_event, delete_event, invite_attendee, get_event.`;
-  } catch (err) {
-    return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`;
-  }
 }
 async function buildChatSystemPrompt(userId, query) {
   const profile = await getUserProfile(userId);
@@ -4619,7 +5166,8 @@ Deine Interessen: ${profile.interests}` : "";
     const intelligenceContext = `
 ARBEITSWEISE (sehr wichtig):
 1. NACHFRAGEN BEI UNKLARHEIT: Wenn eine Anfrage nicht genug Informationen enth\xE4lt, um sie korrekt auszuf\xFChren, stelle GEZIELTE R\xFCckfragen anstatt zu raten oder eine leere Antwort zu geben.
-2. ZEITGEF\xDCHL: Vergleiche geplante oder berechnete Zeiten (f\xFCr Termine, Erinnerungen, Aufgaben oder allgemeine Aussagen) IMMER logisch mit der aktuellen Uhrzeit. Vermeide "Zeitreisen": Schlage nichts f\xFCr heute vor, was bereits in der Vergangenheit liegt (z. B. 21:00 Uhr vorschlagen, wenn es schon 22:58 Uhr ist).`;
+2. ZEITGEF\xDCHL: Vergleiche geplante oder berechnete Zeiten (f\xFCr Termine, Erinnerungen, Aufgaben oder allgemeine Aussagen) IMMER logisch mit der aktuellen Uhrzeit. Vermeide "Zeitreisen": Schlage nichts f\xFCr heute vor, was bereits in der Vergangenheit liegt (z. B. 21:00 Uhr vorschlagen, wenn es schon 22:58 Uhr ist).
+3. GED\xC4CHTNIS (WICHTIG): Wenn der Nutzer dir in einer Nachricht wichtige Fakten \xFCber sich, seine Vorlieben, seine Familie oder sein Umfeld mitteilt, VERWENDE ZWINGEND die Funktion "memory_action", um diese Informationen sofort abzuspeichern! Tue dies automatisch ohne nachzufragen.`;
     const grossIctContext = `
 GROSS ICT ASSISTENT: Stefan betreibt im Nebenerwerb die Firma Gross ICT (gross-ict.ch) in Zell, Luzern.
 Leistungen: Webseiten (ab CHF 1'500), Web-Apps (ab CHF 15'000), Mobile Apps (ab CHF 20'000), IT-Support, Netzwerk, Security, Server \u2013 f\xFCr KMU in der Zentralschweiz.
@@ -4725,13 +5273,13 @@ var INTENT_RULES, chatRouter;
 var init_chat = __esm({
   "server/routers/chat.ts"() {
     "use strict";
+    init_calendarAI();
     init_db();
     init_trpc();
     init_storage();
     init_voiceTranscription();
     init_llm();
     init_env();
-    init_db();
     init_tools();
     init_db();
     init_cleanResponse();
@@ -4823,30 +5371,30 @@ var init_chat = __esm({
         }
         return mapped.slice(0, 4);
       }),
-      createConversation: protectedProcedure.input(z5.object({ title: z5.string().optional() })).mutation(async ({ ctx, input }) => {
+      createConversation: protectedProcedure.input(z6.object({ title: z6.string().optional() })).mutation(async ({ ctx, input }) => {
         return createConversation({
           userId: ctx.user.id,
           title: input.title ?? "Neues Gespr\xE4ch"
         });
       }),
-      deleteConversation: protectedProcedure.input(z5.object({ id: z5.number() })).mutation(async ({ ctx, input }) => {
+      deleteConversation: protectedProcedure.input(z6.object({ id: z6.number() })).mutation(async ({ ctx, input }) => {
         const conv = await getConversationById(input.id);
         if (!conv || conv.userId !== ctx.user.id)
-          throw new TRPCError4({ code: "FORBIDDEN" });
+          throw new TRPCError5({ code: "FORBIDDEN" });
         await deleteConversation(input.id);
         return { success: true };
       }),
-      getMessages: protectedProcedure.input(z5.object({ conversationId: z5.number() })).query(async ({ ctx, input }) => {
+      getMessages: protectedProcedure.input(z6.object({ conversationId: z6.number() })).query(async ({ ctx, input }) => {
         const conv = await getConversationById(input.conversationId);
         if (!conv || conv.userId !== ctx.user.id)
-          throw new TRPCError4({ code: "FORBIDDEN" });
+          throw new TRPCError5({ code: "FORBIDDEN" });
         return getMessagesByConversation(input.conversationId);
       }),
       uploadFile: protectedProcedure.input(
-        z5.object({
-          fileName: z5.string(),
-          fileBase64: z5.string(),
-          mimeType: z5.string()
+        z6.object({
+          fileName: z6.string(),
+          fileBase64: z6.string(),
+          mimeType: z6.string()
         })
       ).mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.fileBase64, "base64");
@@ -4855,7 +5403,7 @@ var init_chat = __esm({
         return { url, key, fileName: input.fileName, mimeType: input.mimeType };
       }),
       transcribeAudio: protectedProcedure.input(
-        z5.object({ audioBase64: z5.string(), mimeType: z5.string().optional() })
+        z6.object({ audioBase64: z6.string(), mimeType: z6.string().optional() })
       ).mutation(async ({ ctx, input }) => {
         const buffer = Buffer.from(input.audioBase64, "base64");
         const key = `jarvis/${ctx.user.id}/audio/${Date.now()}.webm`;
@@ -4871,13 +5419,13 @@ var init_chat = __esm({
           language: "de"
         });
         if ("error" in result)
-          throw new TRPCError4({
+          throw new TRPCError5({
             code: "INTERNAL_SERVER_ERROR",
             message: result.error
           });
         return { text: result.text };
       }),
-      webSearch: protectedProcedure.input(z5.object({ query: z5.string() })).mutation(async ({ input }) => {
+      webSearch: protectedProcedure.input(z6.object({ query: z6.string() })).mutation(async ({ input }) => {
         try {
           const response = await fetchWithTimeout(
             `https://api.duckduckgo.com/?q=${encodeURIComponent(input.query)}&format=json&no_html=1&skip_disambig=1`
@@ -4909,21 +5457,21 @@ var init_chat = __esm({
       }),
       // ─── tRPC-basierte Chat-Mutation (kein SSE, funktioniert in Produktion) ──────
       sendMessage: protectedProcedure.input(
-        z5.object({
-          conversationId: z5.number(),
-          message: z5.string(),
-          fileUrl: z5.string().optional(),
-          fileName: z5.string().optional(),
-          searchResults: z5.array(
-            z5.object({
-              title: z5.string(),
-              snippet: z5.string(),
-              url: z5.string()
+        z6.object({
+          conversationId: z6.number(),
+          message: z6.string(),
+          fileUrl: z6.string().optional(),
+          fileName: z6.string().optional(),
+          searchResults: z6.array(
+            z6.object({
+              title: z6.string(),
+              snippet: z6.string(),
+              url: z6.string()
             })
           ).optional(),
-          context: z5.object({
-            location: z5.object({ lat: z5.number(), lng: z5.number() }).optional(),
-            battery: z5.string().optional()
+          context: z6.object({
+            location: z6.object({ lat: z6.number(), lng: z6.number() }).optional(),
+            battery: z6.string().optional()
           }).optional()
         })
       ).mutation(async ({ ctx, input }) => {
@@ -4938,7 +5486,7 @@ var init_chat = __esm({
         const userId = ctx.user.id;
         const conv = await getConversationById(conversationId);
         if (!conv || conv.userId !== userId)
-          throw new TRPCError4({ code: "FORBIDDEN" });
+          throw new TRPCError5({ code: "FORBIDDEN" });
         const history = await getMessagesByConversation(conversationId);
         await addMessage({
           conversationId,
@@ -5626,6 +6174,7 @@ var init_streamEndpoint = __esm({
     init_db();
     init_agent();
     init_tools();
+    init_calendarAI();
     init_chat();
     init_http();
     init_pendingApproval();
@@ -6209,36 +6758,36 @@ init_chat();
 // server/routers/notes.ts
 init_db();
 init_trpc();
-import { TRPCError as TRPCError5 } from "@trpc/server";
-import { z as z6 } from "zod";
+import { TRPCError as TRPCError6 } from "@trpc/server";
+import { z as z7 } from "zod";
 var notesRouter = router({
-  list: protectedProcedure.input(z6.object({ search: z6.string().optional() })).query(async ({ ctx, input }) => {
+  list: protectedProcedure.input(z7.object({ search: z7.string().optional() })).query(async ({ ctx, input }) => {
     return getNotesByUser(ctx.user.id, input.search);
   }),
   create: protectedProcedure.input(
-    z6.object({
-      title: z6.string().min(1),
-      content: z6.string(),
-      tags: z6.string().optional()
+    z7.object({
+      title: z7.string().min(1),
+      content: z7.string(),
+      tags: z7.string().optional()
     })
   ).mutation(async ({ ctx, input }) => {
     return createNote({ userId: ctx.user.id, ...input });
   }),
   update: protectedProcedure.input(
-    z6.object({
-      id: z6.number(),
-      title: z6.string().optional(),
-      content: z6.string().optional(),
-      tags: z6.string().optional()
+    z7.object({
+      id: z7.number(),
+      title: z7.string().optional(),
+      content: z7.string().optional(),
+      tags: z7.string().optional()
     })
   ).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
     const note = await getNoteById(id, ctx.user.id);
-    if (!note) throw new TRPCError5({ code: "NOT_FOUND" });
+    if (!note) throw new TRPCError6({ code: "NOT_FOUND" });
     await updateNote(id, ctx.user.id, data);
     return { success: true };
   }),
-  delete: protectedProcedure.input(z6.object({ id: z6.number() })).mutation(async ({ ctx, input }) => {
+  delete: protectedProcedure.input(z7.object({ id: z7.number() })).mutation(async ({ ctx, input }) => {
     await deleteNote(input.id, ctx.user.id);
     return { success: true };
   })
@@ -6247,29 +6796,29 @@ var notesRouter = router({
 // server/routers/tasks.ts
 init_db();
 init_trpc();
-import { z as z7 } from "zod";
+import { z as z8 } from "zod";
 var tasksRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
     return getTasksByUser(ctx.user.id);
   }),
   create: protectedProcedure.input(
-    z7.object({
-      title: z7.string().min(1),
-      description: z7.string().optional(),
-      priority: z7.enum(["low", "medium", "high"]).optional(),
-      dueDate: z7.number().optional()
+    z8.object({
+      title: z8.string().min(1),
+      description: z8.string().optional(),
+      priority: z8.enum(["low", "medium", "high"]).optional(),
+      dueDate: z8.number().optional()
     })
   ).mutation(async ({ ctx, input }) => {
     return createTask({ userId: ctx.user.id, ...input });
   }),
   update: protectedProcedure.input(
-    z7.object({
-      id: z7.number(),
-      title: z7.string().optional(),
-      description: z7.string().optional(),
-      completed: z7.boolean().optional(),
-      priority: z7.enum(["low", "medium", "high"]).optional(),
-      dueDate: z7.number().nullable().optional()
+    z8.object({
+      id: z8.number(),
+      title: z8.string().optional(),
+      description: z8.string().optional(),
+      completed: z8.boolean().optional(),
+      priority: z8.enum(["low", "medium", "high"]).optional(),
+      dueDate: z8.number().nullable().optional()
     })
   ).mutation(async ({ ctx, input }) => {
     const { id, ...data } = input;
@@ -6280,11 +6829,11 @@ var tasksRouter = router({
     );
     return { success: true };
   }),
-  delete: protectedProcedure.input(z7.object({ id: z7.number() })).mutation(async ({ ctx, input }) => {
+  delete: protectedProcedure.input(z8.object({ id: z8.number() })).mutation(async ({ ctx, input }) => {
     await deleteTask(input.id, ctx.user.id);
     return { success: true };
   }),
-  toggleComplete: protectedProcedure.input(z7.object({ id: z7.number(), completed: z7.boolean() })).mutation(async ({ ctx, input }) => {
+  toggleComplete: protectedProcedure.input(z8.object({ id: z8.number(), completed: z8.boolean() })).mutation(async ({ ctx, input }) => {
     await updateTask(input.id, ctx.user.id, { completed: input.completed });
     return { success: true };
   })
@@ -6292,11 +6841,11 @@ var tasksRouter = router({
 
 // server/routers/notifications.ts
 init_trpc();
-import { z as z8 } from "zod";
+import { z as z9 } from "zod";
 init_db();
 var notificationsRouter = router({
   // Teste Benachrichtigung senden
-  testNotification: protectedProcedure.input(z8.object({ title: z8.string(), content: z8.string() })).mutation(async ({ input }) => {
+  testNotification: protectedProcedure.input(z9.object({ title: z9.string(), content: z9.string() })).mutation(async ({ input }) => {
     const ok = await notifyOwner({
       title: input.title,
       content: input.content
@@ -6343,428 +6892,8 @@ var notificationsRouter = router({
   })
 });
 
-// server/routers/calendar.ts
-init_trpc();
-init_db();
-init_baseUrl();
-import { z as z9 } from "zod";
-import { TRPCError as TRPCError6 } from "@trpc/server";
-var GOOGLE_SCOPES = [
-  "https://www.googleapis.com/auth/calendar",
-  "https://www.googleapis.com/auth/calendar.events",
-  "email",
-  "profile"
-].join(" ");
-var MS_SCOPES = ["Calendars.ReadWrite", "offline_access", "User.Read"].join(
-  " "
-);
-async function refreshGoogleAccessToken(refreshToken) {
-  const resp = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      client_secret: process.env.GOOGLE_CLIENT_SECRET ?? "",
-      refresh_token: refreshToken,
-      grant_type: "refresh_token"
-    })
-  });
-  const data = await resp.json();
-  if (!resp.ok || !data.access_token)
-    throw new Error(`Google Token-Refresh fehlgeschlagen: ${data.error}`);
-  return {
-    accessToken: data.access_token,
-    expiresAt: Math.floor(Date.now() / 1e3) + (data.expires_in ?? 3600)
-  };
-}
-async function refreshMsAccessToken(refreshToken) {
-  const resp = await fetch(
-    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.MS_CLIENT_ID ?? "",
-        client_secret: process.env.MS_CLIENT_SECRET ?? "",
-        refresh_token: refreshToken,
-        grant_type: "refresh_token"
-      })
-    }
-  );
-  const data = await resp.json();
-  if (!resp.ok || !data.access_token)
-    throw new Error(`MS Token-Refresh fehlgeschlagen: ${data.error}`);
-  return {
-    accessToken: data.access_token,
-    expiresAt: Math.floor(Date.now() / 1e3) + (data.expires_in ?? 3600)
-  };
-}
-async function getValidGoogleAccessToken(userId, email) {
-  const token = await getGoogleToken(userId, email);
-  if (!token) throw new TRPCError6({ code: "UNAUTHORIZED" });
-  if (token.expiresAt > Math.floor(Date.now() / 1e3) + 60)
-    return token.accessToken;
-  if (!token.refreshToken) throw new TRPCError6({ code: "UNAUTHORIZED" });
-  const refreshed = await refreshGoogleAccessToken(token.refreshToken);
-  await upsertGoogleToken({
-    userId,
-    accessToken: refreshed.accessToken,
-    expiresAt: refreshed.expiresAt,
-    refreshToken: token.refreshToken,
-    email: token.email
-  });
-  return refreshed.accessToken;
-}
-async function getValidMsAccessToken(userId, email) {
-  const token = await getMicrosoftToken(userId, email);
-  if (!token) throw new TRPCError6({ code: "UNAUTHORIZED" });
-  if (token.expiresAt > Math.floor(Date.now() / 1e3) + 60)
-    return token.accessToken;
-  if (!token.refreshToken) throw new TRPCError6({ code: "UNAUTHORIZED" });
-  const refreshed = await refreshMsAccessToken(token.refreshToken);
-  await upsertMicrosoftToken({
-    userId,
-    accessToken: refreshed.accessToken,
-    expiresAt: refreshed.expiresAt,
-    refreshToken: token.refreshToken,
-    email: token.email
-  });
-  return refreshed.accessToken;
-}
-async function gcalFetch(userId, email, path4, options = {}) {
-  const accessToken = await getValidGoogleAccessToken(userId, email);
-  const resp = await fetch(`https://www.googleapis.com/calendar/v3${path4}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      ...options.headers ?? {}
-    }
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new TRPCError6({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `Google Calendar Fehler: ${resp.status} ${err.slice(0, 200)}`
-    });
-  }
-  if (resp.status === 204) return {};
-  return resp.json();
-}
-async function msFetch(userId, email, path4, options = {}) {
-  const accessToken = await getValidMsAccessToken(userId, email);
-  const resp = await fetch(`https://graph.microsoft.com/v1.0${path4}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      Prefer: 'outlook.timezone="Europe/Zurich"',
-      ...options.headers ?? {}
-    }
-  });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new TRPCError6({
-      code: "INTERNAL_SERVER_ERROR",
-      message: `MS Graph Fehler: ${resp.status} ${err.slice(0, 200)}`
-    });
-  }
-  if (resp.status === 204) return {};
-  return resp.json();
-}
-var calendarRouter = router({
-  // Verbindungsstatus prüfen
-  getStatus: protectedProcedure.query(async ({ ctx }) => {
-    const gTokens = await getGoogleTokens(ctx.user.id);
-    const msTokens = await getMicrosoftTokens(ctx.user.id);
-    return {
-      connected: gTokens.length > 0 || msTokens.length > 0,
-      googleAccounts: gTokens.map((t2) => ({ email: t2.email, provider: "google" })),
-      msAccounts: msTokens.map((t2) => ({ email: t2.email, provider: "ms" })),
-      // Fallbacks for old UI if any
-      googleConnected: gTokens.length > 0,
-      googleEmail: gTokens[0]?.email ?? null,
-      msConnected: msTokens.length > 0,
-      msEmail: msTokens[0]?.email ?? null
-    };
-  }),
-  // OAuth-Login-URL generieren
-  getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
-    const params = new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID ?? "",
-      redirect_uri: getGoogleRedirectUri(ctx.req),
-      response_type: "code",
-      scope: GOOGLE_SCOPES,
-      access_type: "offline",
-      prompt: "consent",
-      state: JSON.stringify({ userId: ctx.user.id })
-    });
-    const stateB64 = Buffer.from(params.get("state")).toString("base64");
-    params.set("state", stateB64);
-    return { url: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
-  }),
-  getMsAuthUrl: protectedProcedure.query(async ({ ctx }) => {
-    const params = new URLSearchParams({
-      client_id: process.env.MS_CLIENT_ID ?? "",
-      redirect_uri: getMsRedirectUri(ctx.req),
-      response_type: "code",
-      scope: MS_SCOPES,
-      state: JSON.stringify({ userId: ctx.user.id })
-    });
-    const stateB64 = Buffer.from(params.get("state")).toString("base64");
-    params.set("state", stateB64);
-    return {
-      url: `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?${params}`
-    };
-  }),
-  // Verbindung trennen
-  disconnect: protectedProcedure.input(z9.object({ email: z9.string().optional() }).optional()).mutation(async ({ ctx, input }) => {
-    await deleteGoogleToken(ctx.user.id, input?.email);
-    return { success: true };
-  }),
-  disconnectMs: protectedProcedure.input(z9.object({ email: z9.string().optional() }).optional()).mutation(async ({ ctx, input }) => {
-    await deleteMicrosoftToken(ctx.user.id, input?.email);
-    return { success: true };
-  }),
-  // Kalender-Liste
-  listCalendars: protectedProcedure.query(async ({ ctx }) => {
-    const gTokens = await getGoogleTokens(ctx.user.id);
-    const msTokens = await getMicrosoftTokens(ctx.user.id);
-    const calendars = [];
-    for (const gToken of gTokens) {
-      if (!gToken.email) continue;
-      const gData = await gcalFetch(
-        ctx.user.id,
-        gToken.email,
-        "/users/me/calendarList"
-      );
-      if (gData.items) {
-        calendars.push(
-          ...gData.items.map((c) => ({
-            id: `google:${gToken.email}:${c.id}`,
-            summary: `[${gToken.email}] ${c.summary}`,
-            primary: c.primary,
-            backgroundColor: c.backgroundColor
-          }))
-        );
-      }
-    }
-    for (const msToken of msTokens) {
-      if (!msToken.email) continue;
-      const msData = await msFetch(
-        ctx.user.id,
-        msToken.email,
-        "/me/calendars"
-      );
-      if (msData.value) {
-        calendars.push(
-          ...msData.value.map((c) => ({
-            id: `ms:${msToken.email}:${c.id}`,
-            summary: `[${msToken.email}] ${c.name}`,
-            primary: c.isDefaultCalendar,
-            backgroundColor: c.hexColor
-          }))
-        );
-      }
-    }
-    return calendars;
-  }),
-  // Termine abrufen
-  listEvents: protectedProcedure.input(
-    z9.object({
-      calendarId: z9.string().default("google:primary"),
-      timeMin: z9.string().optional(),
-      // ISO 8601
-      timeMax: z9.string().optional(),
-      maxResults: z9.number().default(50)
-    })
-  ).query(async ({ ctx, input }) => {
-    const [provider, email, ...rawIdParts] = input.calendarId.split(":");
-    const rawCalId = rawIdParts.join(":");
-    const isMs = provider === "ms";
-    if (isMs) {
-      const query = [
-        `$top=${input.maxResults}`,
-        `$orderby=start/dateTime`
-      ];
-      if (input.timeMin || input.timeMax) {
-        const filters = [];
-        if (input.timeMin)
-          filters.push(`start/dateTime ge '${input.timeMin}'`);
-        if (input.timeMax) filters.push(`end/dateTime le '${input.timeMax}'`);
-        query.push(`$filter=${filters.join(" and ")}`);
-      }
-      const data = await msFetch(
-        ctx.user.id,
-        email,
-        `/me/calendars/${encodeURIComponent(rawCalId)}/events?${query.join("&")}`
-      );
-      return (data.value ?? []).map((e) => ({
-        id: e.id,
-        summary: e.subject,
-        description: e.bodyPreview,
-        start: {
-          dateTime: e.start?.dateTime ? e.start.dateTime + "Z" : void 0
-        },
-        end: { dateTime: e.end?.dateTime ? e.end.dateTime + "Z" : void 0 },
-        location: e.location?.displayName,
-        htmlLink: e.webLink
-      }));
-    } else {
-      const params = new URLSearchParams({
-        singleEvents: "true",
-        orderBy: "startTime",
-        maxResults: String(input.maxResults),
-        ...input.timeMin ? { timeMin: input.timeMin } : {},
-        ...input.timeMax ? { timeMax: input.timeMax } : {}
-      });
-      const data = await gcalFetch(
-        ctx.user.id,
-        `/calendars/${encodeURIComponent(rawCalId)}/events?${params}`
-      );
-      return data.items ?? [];
-    }
-  }),
-  // Termin erstellen
-  createEvent: protectedProcedure.input(
-    z9.object({
-      calendarId: z9.string().default("google:primary"),
-      summary: z9.string(),
-      description: z9.string().optional(),
-      location: z9.string().optional(),
-      startDateTime: z9.string(),
-      // ISO 8601
-      endDateTime: z9.string(),
-      timeZone: z9.string().default("Europe/Zurich"),
-      allDay: z9.boolean().default(false)
-    })
-  ).mutation(async ({ ctx, input }) => {
-    const [provider, email, ...rawIdParts] = input.calendarId.split(":");
-    const rawCalId = rawIdParts.join(":");
-    const isMs = provider === "ms";
-    if (isMs) {
-      const msEvent = {
-        subject: input.summary,
-        body: { contentType: "text", content: input.description ?? "" },
-        location: { displayName: input.location ?? "" },
-        start: { dateTime: input.startDateTime, timeZone: input.timeZone },
-        end: { dateTime: input.endDateTime, timeZone: input.timeZone },
-        isAllDay: input.allDay
-      };
-      const data = await msFetch(
-        ctx.user.id,
-        email,
-        `/me/calendars/${encodeURIComponent(rawCalId)}/events`,
-        { method: "POST", body: JSON.stringify(msEvent) }
-      );
-      return { id: data.id, summary: data.subject, htmlLink: data.webLink };
-    } else {
-      const gEvent = {
-        summary: input.summary,
-        description: input.description,
-        location: input.location,
-        start: input.allDay ? { date: input.startDateTime.split("T")[0] } : { dateTime: input.startDateTime, timeZone: input.timeZone },
-        end: input.allDay ? { date: input.endDateTime.split("T")[0] } : { dateTime: input.endDateTime, timeZone: input.timeZone }
-      };
-      const data = await gcalFetch(
-        ctx.user.id,
-        email,
-        `/calendars/${encodeURIComponent(rawCalId)}/events`,
-        { method: "POST", body: JSON.stringify(gEvent) }
-      );
-      return { id: data.id, summary: data.summary, htmlLink: data.htmlLink };
-    }
-  }),
-  // Termin bearbeiten
-  updateEvent: protectedProcedure.input(
-    z9.object({
-      calendarId: z9.string().default("google:primary"),
-      eventId: z9.string(),
-      summary: z9.string().optional(),
-      description: z9.string().optional(),
-      location: z9.string().optional(),
-      startDateTime: z9.string().optional(),
-      endDateTime: z9.string().optional(),
-      timeZone: z9.string().default("Europe/Zurich")
-    })
-  ).mutation(async ({ ctx, input }) => {
-    const [provider, email, ...rawIdParts] = input.calendarId.split(":");
-    const rawCalId = rawIdParts.join(":");
-    const isMs = provider === "ms";
-    if (isMs) {
-      const patch = {};
-      if (input.summary) patch.subject = input.summary;
-      if (input.description !== void 0)
-        patch.body = { contentType: "text", content: input.description };
-      if (input.location !== void 0)
-        patch.location = { displayName: input.location };
-      if (input.startDateTime)
-        patch.start = {
-          dateTime: input.startDateTime,
-          timeZone: input.timeZone
-        };
-      if (input.endDateTime)
-        patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
-      return msFetch(
-        ctx.user.id,
-        email,
-        `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
-        { method: "PATCH", body: JSON.stringify(patch) }
-      );
-    } else {
-      const current = await gcalFetch(
-        ctx.user.id,
-        email,
-        `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`
-      );
-      const patch = { ...current };
-      if (input.summary) patch.summary = input.summary;
-      if (input.description !== void 0)
-        patch.description = input.description;
-      if (input.location !== void 0) patch.location = input.location;
-      if (input.startDateTime)
-        patch.start = {
-          dateTime: input.startDateTime,
-          timeZone: input.timeZone
-        };
-      if (input.endDateTime)
-        patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
-      return gcalFetch(
-        ctx.user.id,
-        email,
-        `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
-        { method: "PUT", body: JSON.stringify(patch) }
-      );
-    }
-  }),
-  // Termin löschen
-  deleteEvent: protectedProcedure.input(
-    z9.object({
-      calendarId: z9.string().default("google:primary"),
-      eventId: z9.string()
-    })
-  ).mutation(async ({ ctx, input }) => {
-    const [provider, email, ...rawIdParts] = input.calendarId.split(":");
-    const rawCalId = rawIdParts.join(":");
-    const isMs = provider === "ms";
-    if (isMs) {
-      await msFetch(
-        ctx.user.id,
-        email,
-        `/me/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
-        { method: "DELETE" }
-      );
-    } else {
-      await gcalFetch(
-        ctx.user.id,
-        email,
-        `/calendars/${encodeURIComponent(rawCalId)}/events/${input.eventId}`,
-        { method: "DELETE" }
-      );
-    }
-    return { success: true };
-  })
-});
+// server/routers.ts
+init_calendar();
 
 // server/routers/memory.ts
 init_trpc();

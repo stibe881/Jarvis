@@ -16,11 +16,15 @@ import {
   Edit2,
   ExternalLink,
   RefreshCw,
-  Unlink,
+  Edit2,
+  ExternalLink,
+  RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Settings,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
+import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
 type GCalEvent = {
@@ -82,8 +86,6 @@ export default function JarvisCalendar() {
 
   const utils = trpc.useUtils();
   const { data: status } = trpc.calendar.getStatus.useQuery();
-  const { data: authUrl } = trpc.calendar.getAuthUrl.useQuery();
-  const { data: msAuthUrl } = trpc.calendar.getMsAuthUrl.useQuery();
   const { data: calendars } = trpc.calendar.listCalendars.useQuery(undefined, {
     enabled: !!status?.connected,
   });
@@ -116,7 +118,6 @@ export default function JarvisCalendar() {
 
     if (error) {
       toast.error(`Verbindungsfehler: ${error}`);
-      // Remove query param from URL without reloading
       window.history.replaceState({}, document.title, window.location.pathname);
     }
     if (success) {
@@ -130,23 +131,14 @@ export default function JarvisCalendar() {
     isLoading: eventsLoading,
     refetch,
   } = trpc.calendar.listEvents.useQuery(
-    { calendarId: selectedCalendar, timeMin, timeMax, maxResults: 100 },
-    { enabled: !!status?.connected }
+    {
+      calendarId: selectedCalendar || "primary",
+      timeMin,
+      timeMax,
+      maxResults: 100,
+    },
+    { enabled: !!status?.connected && !!selectedCalendar }
   );
-
-  const disconnectMutation = trpc.calendar.disconnect.useMutation({
-    onSuccess: () => {
-      utils.calendar.getStatus.invalidate();
-      toast.success("Google Kalender getrennt");
-    },
-  });
-
-  const disconnectMsMutation = trpc.calendar.disconnectMs.useMutation({
-    onSuccess: () => {
-      utils.calendar.getStatus.invalidate();
-      toast.success("Microsoft Kalender getrennt");
-    },
-  });
 
   const createMutation = trpc.calendar.createEvent.useMutation({
     onSuccess: () => {
@@ -240,14 +232,12 @@ export default function JarvisCalendar() {
     }
   };
 
-  // Monatsansicht: Tage des Monats
   const monthDays = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const days: Array<{ date: Date | null; events: GCalEvent[] }> = [];
-    // Leere Felder vor dem 1.
     for (let i = 0; i < (firstDay === 0 ? 6 : firstDay - 1); i++)
       days.push({ date: null, events: [] });
     for (let d = 1; d <= daysInMonth; d++) {
@@ -271,7 +261,6 @@ export default function JarvisCalendar() {
   });
   const today = new Date();
 
-  // ── Nicht verbunden ──────────────────────────────────────────────────────────
   if (!status?.connected) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-6 p-8">
@@ -287,24 +276,12 @@ export default function JarvisCalendar() {
             bearbeiten kann.
           </p>
           <div className="flex flex-col gap-2 w-full mt-2">
-            {authUrl?.url && (
-              <Button
-                onClick={() => (window.location.href = authUrl.url)}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-wider gap-2"
-              >
-                <ExternalLink size={16} />
-                GOOGLE KALENDER
+            <Link to="/integrations" className="w-full">
+              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-jarvis tracking-wider gap-2">
+                <Settings size={16} />
+                ZU DEN VERBINDUNGEN
               </Button>
-            )}
-            {msAuthUrl?.url && (
-              <Button
-                onClick={() => (window.location.href = msAuthUrl.url)}
-                className="w-full bg-[#00a4ef] text-white hover:bg-[#00a4ef]/90 font-jarvis tracking-wider gap-2"
-              >
-                <ExternalLink size={16} />
-                MICROSOFT KALENDER
-              </Button>
-            )}
+            </Link>
           </div>
         </div>
       </div>
@@ -313,17 +290,11 @@ export default function JarvisCalendar() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
       <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-border flex-shrink-0">
         <Calendar className="text-primary flex-shrink-0" size={18} />
         <h1 className="font-jarvis text-base font-bold text-primary">
           KALENDER
         </h1>
-        {(status.googleEmail || status.msEmail) && (
-          <span className="text-xs text-muted-foreground hidden sm:inline truncate max-w-[180px]">
-            {status.googleEmail || status.msEmail}
-          </span>
-        )}
         <div className="ml-auto flex items-center gap-1">
           <Button
             variant="ghost"
@@ -341,84 +312,37 @@ export default function JarvisCalendar() {
           >
             <Plus size={14} /> <span className="hidden sm:inline">TERMIN</span>
           </Button>
-
-          {/* Connect Google */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (authUrl?.url) window.location.href = authUrl.url;
-            }}
-            className="text-muted-foreground hover:text-primary px-2"
-            title="Weiteres Google Konto verbinden"
-          >
-            <Plus size={14} /> G
-          </Button>
-
-          {/* Disconnect Google Accounts */}
-          {status.googleAccounts?.map(acc => (
+          <Link to="/integrations">
             <Button
-              key={acc.email}
               variant="ghost"
               size="sm"
-              onClick={() => disconnectMutation.mutate({ email: acc.email })}
-              className="text-muted-foreground hover:text-destructive px-2"
-              title={`Google trennen (${acc.email})`}
+              className="text-muted-foreground hover:text-primary px-2"
+              title="Kalender-Verbindungen verwalten"
             >
-              <Unlink size={14} /> G
+              <Settings size={14} />
             </Button>
-          ))}
-
-          {/* Connect Microsoft */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (msAuthUrl?.url) window.location.href = msAuthUrl.url;
-            }}
-            className="text-muted-foreground hover:text-[#00a4ef] px-2"
-            title="Weiteres Microsoft Konto verbinden"
-          >
-            <Plus size={14} /> M
-          </Button>
-
-          {/* Disconnect Microsoft Accounts */}
-          {status.msAccounts?.map(acc => (
-            <Button
-              key={acc.email}
-              variant="ghost"
-              size="sm"
-              onClick={() => disconnectMsMutation.mutate({ email: acc.email })}
-              className="text-muted-foreground hover:text-destructive px-2"
-              title={`Microsoft trennen (${acc.email})`}
-            >
-              <Unlink size={14} /> M
-            </Button>
-          ))}
+          </Link>
         </div>
       </div>
 
-      {/* Kalender-Auswahl */}
-      {calendars && calendars.length > 1 && (
+      {calendars && (
         <div className="flex gap-2 px-3 md:px-6 py-2 border-b border-border overflow-x-auto flex-shrink-0">
-          {calendars.map(cal => (
-            <button
-              key={cal.id}
-              onClick={() => setSelectedCalendar(cal.id)}
-              className={cn(
-                "text-xs px-3 py-1 rounded-full border transition-all whitespace-nowrap",
-                selectedCalendar === cal.id
-                  ? "bg-primary/20 text-primary border-primary/40"
-                  : "text-muted-foreground border-border hover:text-foreground"
-              )}
-            >
-              {cal.summary}
-            </button>
-          ))}
+          <select
+            value={selectedCalendar}
+            onChange={e => setSelectedCalendar(e.target.value)}
+            className="bg-transparent border-none text-sm font-medium focus:ring-0 appearance-none pr-8 cursor-pointer text-foreground max-w-[200px] truncate"
+          >
+            {calendars
+              ?.filter((c: any) => c.enabled)
+              .map((c: any) => (
+                <option key={c.id} value={c.id}>
+                  {c.summary}
+                </option>
+              ))}
+          </select>
         </div>
       )}
 
-      {/* Monat-Navigation + View-Toggle */}
       <div className="flex items-center gap-2 px-3 md:px-6 py-2 border-b border-border flex-shrink-0">
         <button
           onClick={() =>
@@ -461,10 +385,8 @@ export default function JarvisCalendar() {
         </div>
       </div>
 
-      {/* Monatsansicht */}
       {viewMode === "month" && (
         <div className="flex-1 overflow-auto p-2 md:p-4">
-          {/* Wochentage */}
           <div className="grid grid-cols-7 mb-1">
             {["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"].map(d => (
               <div
@@ -530,7 +452,6 @@ export default function JarvisCalendar() {
         </div>
       )}
 
-      {/* Listenansicht */}
       {viewMode === "list" && (
         <ScrollArea className="flex-1">
           <div className="p-3 md:p-6 space-y-2">
@@ -605,7 +526,6 @@ export default function JarvisCalendar() {
         </ScrollArea>
       )}
 
-      {/* Termin-Modal */}
       <Dialog
         open={showEventModal}
         onOpenChange={o => {

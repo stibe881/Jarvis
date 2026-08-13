@@ -167,6 +167,13 @@ export async function deleteConversation(id: number) {
   await db.delete(conversations).where(eq(conversations.id, id));
 }
 
+export async function deleteConversations(ids: number[]) {
+  const db = await getDb();
+  if (!db || ids.length === 0) return;
+  await db.delete(messages).where(inArray(messages.conversationId, ids));
+  await db.delete(conversations).where(inArray(conversations.id, ids));
+}
+
 // ─── Messages ────────────────────────────────────────────────────────────────
 
 export async function addMessage(data: InsertMessage) {
@@ -321,12 +328,17 @@ export async function upsertGoogleToken(data: {
   expiresAt: number;
   scope?: string | null;
   email?: string | null;
+  disabledCalendars?: string;
 }) {
   const db = await getDb();
   if (!db) return;
   await db
     .insert(googleTokens)
-    .values(data)
+    .values({
+      ...data,
+      email: data.email ?? "", // ensure email is not null for insert if missing, though it's required in schema
+      disabledCalendars: data.disabledCalendars ?? "[]",
+    })
     .onDuplicateKeyUpdate({
       set: {
         accessToken: data.accessToken,
@@ -334,6 +346,9 @@ export async function upsertGoogleToken(data: {
         expiresAt: data.expiresAt,
         scope: data.scope ?? null,
         email: data.email ?? null,
+        ...(data.disabledCalendars
+          ? { disabledCalendars: data.disabledCalendars }
+          : {}),
       },
     });
 }
@@ -388,12 +403,17 @@ export async function upsertMicrosoftToken(data: {
   expiresAt: number;
   scope?: string | null;
   email?: string | null;
+  disabledCalendars?: string;
 }) {
   const db = await getDb();
   if (!db) return;
   await db
     .insert(microsoftTokens)
-    .values(data)
+    .values({
+      ...data,
+      email: data.email ?? "",
+      disabledCalendars: data.disabledCalendars ?? "[]",
+    })
     .onDuplicateKeyUpdate({
       set: {
         accessToken: data.accessToken,
@@ -401,6 +421,9 @@ export async function upsertMicrosoftToken(data: {
         expiresAt: data.expiresAt,
         scope: data.scope ?? null,
         email: data.email ?? null,
+        ...(data.disabledCalendars
+          ? { disabledCalendars: data.disabledCalendars }
+          : {}),
       },
     });
 }

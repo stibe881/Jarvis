@@ -1,9 +1,11 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { executeCalendarAction } from "../_core/calendarAI";
 import {
   addMessage,
   createConversation,
   deleteConversation,
+  deleteConversations,
   getConversationById,
   getConversationsByUser,
   getMessagesByConversation,
@@ -107,220 +109,6 @@ function detectIntent(
   return null;
 }
 
-// Kalender-Aktionen direkt ausführen (für Chat-Integration)
-async function executeCalendarAction(
-  userId: number,
-  action: string,
-  params: Record<string, unknown>
-): Promise<string> {
-  try {
-    const token = await getGoogleToken(userId);
-    if (!token) return "Google Kalender ist nicht verbunden.";
-    let accessToken = token.accessToken;
-    if (
-      token.expiresAt <= Math.floor(Date.now() / 1000) + 60 &&
-      token.refreshToken
-    ) {
-      const rr = await fetchWithTimeout("https://oauth2.googleapis.com/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: process.env.GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-          refresh_token: token.refreshToken,
-          grant_type: "refresh_token",
-        }),
-      });
-      const rd = (await rr.json()) as {
-        access_token?: string;
-        expires_in?: number;
-      };
-      if (rd.access_token) {
-        accessToken = rd.access_token;
-        await upsertGoogleToken({
-          userId,
-          accessToken,
-          expiresAt: Math.floor(Date.now() / 1000) + (rd.expires_in ?? 3600),
-          refreshToken: token.refreshToken,
-          email: token.email,
-        });
-      }
-    }
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    };
-    const calId = (params.calendarId as string) ?? "primary";
-    if (action === "list_events") {
-      const now = new Date();
-      const tMin = (params.timeMin as string) ?? now.toISOString();
-      const tMax =
-        (params.timeMax as string) ??
-        new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=20&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
-        { headers }
-      );
-      const data = (await resp.json()) as {
-        items?: Array<{
-          id: string;
-          summary?: string;
-          start?: { dateTime?: string; date?: string };
-          location?: string;
-          organizer?: { email?: string; displayName?: string; self?: boolean };
-          attendees?: Array<{
-            email?: string;
-            displayName?: string;
-            self?: boolean;
-            organizer?: boolean;
-            responseStatus?: string;
-          }>;
-        }>;
-      };
-      if (!data.items || data.items.length === 0)
-        return "Keine Termine in diesem Zeitraum.";
-      const tz = "Europe/Zurich";
-      return data.items
-        .map(ev => {
-          const d = new Date(ev.start?.dateTime ?? ev.start?.date ?? "");
-          const dateStr = d.toLocaleDateString("de-DE", {
-            weekday: "short",
-            day: "2-digit",
-            month: "2-digit",
-            timeZone: tz,
-          });
-          const timeStr = ev.start?.dateTime
-            ? d.toLocaleTimeString("de-DE", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: tz,
-              })
-            : "Ganztägig";
-          // Einladung erkennen: organizer ist nicht der Nutzer selbst
-          let inviteInfo = "";
-          if (ev.organizer && !ev.organizer.self) {
-            const organizerName =
-              ev.organizer.displayName ||
-              ev.organizer.email?.split("@")[0] ||
-              "jemanden";
-            inviteInfo = ` [Einladung von ${organizerName}]`;
-          }
-          return `• ${dateStr} ${timeStr}: ${ev.summary ?? "Termin"}${ev.location ? ` (${ev.location})` : ""}${inviteInfo}`;
-        })
-        .join("\n");
-    }
-    if (action === "create_event") {
-      const event = {
-        summary: params.summary,
-        description: params.description,
-        location: params.location,
-        start: { dateTime: params.startDateTime, timeZone: "Europe/Zurich" },
-        end: { dateTime: params.endDateTime, timeZone: "Europe/Zurich" },
-      };
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events`,
-        { method: "POST", headers, body: JSON.stringify(event) }
-      );
-      const data = (await resp.json()) as {
-        summary?: string;
-        htmlLink?: string;
-      };
-      return `Termin "${data.summary}" wurde erstellt.`;
-    }
-    if (action === "delete_event") {
-      await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-        { method: "DELETE", headers }
-      );
-      return "Termin wurde gelöscht.";
-    }
-    if (action === "update_event" || action === "invite_attendee") {
-      // Aktuellen Termin laden
-      const getResp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-        { headers }
-      );
-      if (!getResp.ok) return `Termin nicht gefunden (ID: ${params.eventId}).`;
-      const current = (await getResp.json()) as Record<string, unknown>;
-
-      if (action === "invite_attendee") {
-        // Gast hinzufügen
-        const existingAttendees =
-          (current.attendees as Array<{ email: string }> | undefined) ?? [];
-        const newEmail = params.email as string;
-        if (!newEmail) return "Bitte eine E-Mail-Adresse angeben.";
-        if (existingAttendees.some(a => a.email === newEmail))
-          return `${newEmail} ist bereits eingeladen.`;
-        const updatedEvent = {
-          ...current,
-          attendees: [...existingAttendees, { email: newEmail }],
-        };
-        const putResp = await fetchWithTimeout(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-          { method: "PUT", headers, body: JSON.stringify(updatedEvent) }
-        );
-        const putData = (await putResp.json()) as { summary?: string };
-        return `${newEmail} wurde zum Termin "${putData.summary}" eingeladen.`;
-      }
-
-      if (action === "update_event") {
-        const patch: Record<string, unknown> = { ...current };
-        if (params.summary) patch.summary = params.summary;
-        if (params.description !== undefined)
-          patch.description = params.description;
-        if (params.location !== undefined) patch.location = params.location;
-        if (params.startDateTime)
-          patch.start = {
-            dateTime: params.startDateTime,
-            timeZone: "Europe/Zurich",
-          };
-        if (params.endDateTime)
-          patch.end = {
-            dateTime: params.endDateTime,
-            timeZone: "Europe/Zurich",
-          };
-        const putResp = await fetchWithTimeout(
-          `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${params.eventId}`,
-          { method: "PUT", headers, body: JSON.stringify(patch) }
-        );
-        const putData = (await putResp.json()) as { summary?: string };
-        return `Termin "${putData.summary}" wurde aktualisiert.`;
-      }
-    }
-    if (action === "get_event") {
-      // Termin-ID aus Kontext suchen (letzter Termin aus list_events)
-      const tMin = (params.timeMin as string) ?? new Date().toISOString();
-      const tMax =
-        (params.timeMax as string) ??
-        new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      const resp = await fetchWithTimeout(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=50&timeMin=${encodeURIComponent(tMin)}&timeMax=${encodeURIComponent(tMax)}`,
-        { headers }
-      );
-      const data = (await resp.json()) as {
-        items?: Array<{
-          id: string;
-          summary?: string;
-          start?: { dateTime?: string; date?: string };
-          attendees?: Array<{ email: string; displayName?: string }>;
-        }>;
-      };
-      const keyword = ((params.keyword as string) ?? "").toLowerCase();
-      const found = data.items?.find(ev =>
-        (ev.summary ?? "").toLowerCase().includes(keyword)
-      );
-      if (!found) return `Kein Termin mit "${params.keyword}" gefunden.`;
-      const attendees =
-        found.attendees?.map(a => a.displayName ?? a.email).join(", ") ??
-        "keine";
-      return `Termin gefunden: "${found.summary}" (ID: ${found.id})\nTeilnehmer: ${attendees}`;
-    }
-    return `Unbekannte Aktion: "${action}". Verfügbar: list_events, create_event, update_event, delete_event, invite_attendee, get_event.`;
-  } catch (err) {
-    return `Kalender-Fehler: ${err instanceof Error ? err.message : String(err)}`;
-  }
-}
-
 export const chatRouter = router({
   listConversations: protectedProcedure.query(async ({ ctx }) => {
     return getConversationsByUser(ctx.user.id);
@@ -374,6 +162,20 @@ export const chatRouter = router({
       if (!conv || conv.userId !== ctx.user.id)
         throw new TRPCError({ code: "FORBIDDEN" });
       await deleteConversation(input.id);
+      return { success: true };
+    }),
+
+  deleteConversations: protectedProcedure
+    .input(z.object({ ids: z.array(z.number()) }))
+    .mutation(async ({ ctx, input }) => {
+      // Validate all IDs belong to the user
+      for (const id of input.ids) {
+        const conv = await getConversationById(id);
+        if (conv && conv.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+      }
+      await deleteConversations(input.ids);
       return { success: true };
     }),
 

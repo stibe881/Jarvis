@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Wrench,
   ChevronDown,
+  CheckSquare,
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { detectWakeWord } from "@shared/wakeWord";
@@ -806,6 +807,9 @@ function JarvisChatInner() {
     ttsEnabledRef.current = aktiv;
   }, [profile?.speechMode]);
 
+  const [manageMode, setManageMode] = useState(false);
+  const [selectedConvs, setSelectedConvs] = useState<number[]>([]);
+
   const utils = trpc.useUtils();
   const { data: conversations } = trpc.chat.listConversations.useQuery();
   const { data: suggestions } = trpc.chat.suggestions.useQuery();
@@ -818,6 +822,19 @@ function JarvisChatInner() {
   const deleteConvMutation = trpc.chat.deleteConversation.useMutation({
     onSuccess: () => utils.chat.listConversations.invalidate(),
   });
+
+  const deleteConvsMutation = trpc.chat.deleteConversations.useMutation({
+    onSuccess: () => {
+      utils.chat.listConversations.invalidate();
+      if (activeConvId && selectedConvs.includes(activeConvId)) {
+        setActiveConvId(null);
+        setMessages([]);
+      }
+      setSelectedConvs([]);
+      setManageMode(false);
+    },
+  });
+
   const uploadMutation = trpc.chat.uploadFile.useMutation();
   const searchMutation = trpc.chat.webSearch.useMutation();
   const sendMessageMutation = trpc.chat.sendMessage.useMutation();
@@ -1492,26 +1509,51 @@ function JarvisChatInner() {
           isWidget && "hidden"
         )}
       >
-        <div className="p-3 border-b border-border flex items-center gap-2">
-          <Button
-            onClick={() => {
-              setActiveConvId(null);
-              setMessages([]);
-              createConvMutation.mutate({});
-              setShowConvSidebar(false);
-            }}
-            size="sm"
-            className="flex-1 gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
-          >
-            <Plus size={14} /> NEUES GESPRÄCH
-          </Button>
-          <button
-            className="md:hidden text-muted-foreground hover:text-primary p-1"
-            onClick={() => setShowConvSidebar(false)}
-            aria-label="Seitenleiste schließen"
-          >
-            <ChevronLeft size={18} />
-          </button>
+        <div className="p-3 border-b border-border flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => {
+                setActiveConvId(null);
+                setMessages([]);
+                createConvMutation.mutate({});
+                setShowConvSidebar(false);
+              }}
+              size="sm"
+              className="flex-1 gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
+            >
+              <Plus size={14} /> NEUES GESPRÄCH
+            </Button>
+            <button
+              className="md:hidden text-muted-foreground hover:text-primary p-1"
+              onClick={() => setShowConvSidebar(false)}
+              aria-label="Seitenleiste schließen"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          {conversations && conversations.length > 0 && (
+            <div className="flex justify-between items-center px-1">
+              <button
+                onClick={() => {
+                  setManageMode(!manageMode);
+                  setSelectedConvs([]);
+                }}
+                className="text-[10px] text-muted-foreground hover:text-primary uppercase tracking-wider font-semibold"
+              >
+                {manageMode ? "Fertig" : "Verwalten"}
+              </button>
+              {manageMode && selectedConvs.length > 0 && (
+                <button
+                  onClick={() =>
+                    deleteConvsMutation.mutate({ ids: selectedConvs })
+                  }
+                  className="text-[10px] text-destructive hover:text-red-400 uppercase tracking-wider font-semibold flex items-center gap-1"
+                >
+                  <Trash2 size={10} /> {selectedConvs.length} Löschen
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
@@ -1520,29 +1562,56 @@ function JarvisChatInner() {
                 key={conv.id}
                 className={cn(
                   "group flex items-center gap-2 px-2 py-2 rounded text-xs cursor-pointer transition-all",
-                  activeConvId === conv.id
+                  activeConvId === conv.id && !manageMode
                     ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                  manageMode &&
+                    selectedConvs.includes(conv.id) &&
+                    "bg-accent text-foreground"
                 )}
                 onClick={() => {
-                  setActiveConvId(conv.id);
-                  setShowConvSidebar(false);
+                  if (manageMode) {
+                    setSelectedConvs(prev =>
+                      prev.includes(conv.id)
+                        ? prev.filter(id => id !== conv.id)
+                        : [...prev, conv.id]
+                    );
+                  } else {
+                    setActiveConvId(conv.id);
+                    setShowConvSidebar(false);
+                  }
                 }}
               >
+                {manageMode && (
+                  <div
+                    className={cn(
+                      "w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0 transition-colors",
+                      selectedConvs.includes(conv.id)
+                        ? "bg-primary border-primary text-primary-foreground"
+                        : "border-muted-foreground"
+                    )}
+                  >
+                    {selectedConvs.includes(conv.id) && (
+                      <CheckSquare size={10} />
+                    )}
+                  </div>
+                )}
                 <span className="flex-1 truncate">{conv.title}</span>
-                <button
-                  onClick={e => {
-                    e.stopPropagation();
-                    deleteConvMutation.mutate({ id: conv.id });
-                    if (activeConvId === conv.id) {
-                      setActiveConvId(null);
-                      setMessages([]);
-                    }
-                  }}
-                  className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                >
-                  <Trash2 size={12} />
-                </button>
+                {!manageMode && (
+                  <button
+                    onClick={e => {
+                      e.stopPropagation();
+                      deleteConvMutation.mutate({ id: conv.id });
+                      if (activeConvId === conv.id) {
+                        setActiveConvId(null);
+                        setMessages([]);
+                      }
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>

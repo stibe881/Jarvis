@@ -8,6 +8,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -144,6 +145,7 @@ export const googleTokens = mysqlTable(
     expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
     scope: text("scope"),
     email: varchar("email", { length: 320 }).notNull(),
+    disabledCalendars: text("disabledCalendars").default("[]").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -164,6 +166,7 @@ export const microsoftTokens = mysqlTable(
     expiresAt: int("expiresAt").notNull(), // Unix timestamp in seconds
     scope: text("scope"),
     email: varchar("email", { length: 320 }).notNull(),
+    disabledCalendars: text("disabledCalendars").default("[]").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },

@@ -113,7 +113,7 @@ async function getValidMsAccessToken(
 }
 
 // ─── API-Aufruf Helpers ───────────────────────────────────────────────────────
-async function gcalFetch(
+export async function gcalFetch(
   userId: number,
   email: string,
   path: string,
@@ -140,7 +140,7 @@ async function gcalFetch(
   return resp.json();
 }
 
-async function msFetch(
+export async function msFetch(
   userId: number,
   email: string,
   path: string,
@@ -245,6 +245,7 @@ export const calendarRouter = router({
       summary: string;
       primary?: boolean;
       backgroundColor?: string;
+      enabled: boolean;
     }> = [];
 
     for (const gToken of gTokens) {
@@ -254,6 +255,13 @@ export const calendarRouter = router({
         gToken.email,
         "/users/me/calendarList"
       )) as any;
+      let disabledList: string[] = [];
+      try {
+        disabledList = JSON.parse(gToken.disabledCalendars || "[]");
+      } catch (e) {
+        disabledList = [];
+      }
+
       if (gData.items) {
         calendars.push(
           ...gData.items.map((c: any) => ({
@@ -261,6 +269,7 @@ export const calendarRouter = router({
             summary: `[${gToken.email}] ${c.summary}`,
             primary: c.primary,
             backgroundColor: c.backgroundColor,
+            enabled: !disabledList.includes(c.id),
           }))
         );
       }
@@ -273,6 +282,13 @@ export const calendarRouter = router({
         msToken.email,
         "/me/calendars"
       )) as any;
+      let disabledList: string[] = [];
+      try {
+        disabledList = JSON.parse(msToken.disabledCalendars || "[]");
+      } catch (e) {
+        disabledList = [];
+      }
+
       if (msData.value) {
         calendars.push(
           ...msData.value.map((c: any) => ({
@@ -280,6 +296,7 @@ export const calendarRouter = router({
             summary: `[${msToken.email}] ${c.name}`,
             primary: c.isDefaultCalendar,
             backgroundColor: c.hexColor,
+            enabled: !disabledList.includes(c.id),
           }))
         );
       }
@@ -287,6 +304,51 @@ export const calendarRouter = router({
 
     return calendars;
   }),
+
+  // Kalender aktivieren/deaktivieren
+  toggleCalendar: protectedProcedure
+    .input(z.object({ calendarId: z.string(), enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const [provider, email, ...rawIdParts] = input.calendarId.split(":");
+      const rawCalId = rawIdParts.join(":");
+
+      if (provider === "google") {
+        const token = await getGoogleToken(ctx.user.id, email);
+        if (!token) throw new TRPCError({ code: "NOT_FOUND" });
+        let disabledList: string[] = [];
+        try {
+          disabledList = JSON.parse(token.disabledCalendars || "[]");
+        } catch (e) {}
+
+        if (input.enabled) {
+          disabledList = disabledList.filter(id => id !== rawCalId);
+        } else {
+          if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
+        }
+        await upsertGoogleToken({
+          ...token,
+          disabledCalendars: JSON.stringify(disabledList),
+        });
+      } else if (provider === "ms") {
+        const token = await getMicrosoftToken(ctx.user.id, email);
+        if (!token) throw new TRPCError({ code: "NOT_FOUND" });
+        let disabledList: string[] = [];
+        try {
+          disabledList = JSON.parse(token.disabledCalendars || "[]");
+        } catch (e) {}
+
+        if (input.enabled) {
+          disabledList = disabledList.filter(id => id !== rawCalId);
+        } else {
+          if (!disabledList.includes(rawCalId)) disabledList.push(rawCalId);
+        }
+        await upsertMicrosoftToken({
+          ...token,
+          disabledCalendars: JSON.stringify(disabledList),
+        });
+      }
+      return { success: true };
+    }),
 
   // Termine abrufen
   listEvents: protectedProcedure

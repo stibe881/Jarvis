@@ -12,7 +12,8 @@ import {
 import { runAgentLoop, formatStepLog, executeAction } from "../agent";
 import type { LoopMessage } from "../agent";
 import { jarvisTools } from "../_core/tools";
-import { buildChatSystemPrompt, executeCalendarAction } from "./chat";
+import { executeCalendarAction } from "../_core/calendarAI";
+import { buildChatSystemPrompt } from "./chat";
 import { fetchWithTimeout } from "../_core/http";
 import { rememberPending } from "../pendingApproval";
 import { removeInternalTags } from "../cleanResponse";

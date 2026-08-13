@@ -120,6 +120,13 @@
       "when": 1786660508445,
       "tag": "0016_lucky_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1786661215274,
+      "tag": "0017_next_polaris",
+      "breakpoints": true
     }
   ]
 }
