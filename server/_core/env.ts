@@ -34,6 +34,7 @@ const envSchema = z.object({
 
   // Direkte KI-Anbindung (eigener Anthropic-Key statt Plattform-Proxy)
   ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
 
   // Lokaler Passwort-Login (ersetzt den Plattform-OAuth beim Self-Hosting).
   APP_PASSWORD: z.string().optional(),
@@ -78,6 +79,7 @@ const values = parsed.success
       BUILT_IN_FORGE_API_URL: RAW.BUILT_IN_FORGE_API_URL,
       BUILT_IN_FORGE_API_KEY: RAW.BUILT_IN_FORGE_API_KEY,
       ANTHROPIC_API_KEY: RAW.ANTHROPIC_API_KEY,
+      OPENAI_API_KEY: RAW.OPENAI_API_KEY,
       APP_PASSWORD: RAW.APP_PASSWORD,
       OWNER_NAME: RAW.OWNER_NAME,
       APP_URL: RAW.APP_URL,
