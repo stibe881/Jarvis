@@ -255,7 +255,7 @@ export const calendarRouter = router({
       const gData = (await gcalFetch(
         ctx.user.id,
         gToken.email,
-        "/users/me/calendarList"
+        "/users/me/calendarList?showHidden=true"
       )) as any;
       let disabledList: string[] = [];
       try {
