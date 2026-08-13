@@ -6497,7 +6497,10 @@ var calendarRouter = router({
     const msToken = await getMicrosoftToken(ctx.user.id);
     const calendars = [];
     if (gToken) {
-      const gData = await gcalFetch(ctx.user.id, "/users/me/calendarList");
+      const gData = await gcalFetch(
+        ctx.user.id,
+        "/users/me/calendarList"
+      );
       if (gData.items) {
         calendars.push(
           ...gData.items.map((c) => ({
@@ -6537,10 +6540,14 @@ var calendarRouter = router({
     const isMs = input.calendarId.startsWith("ms:");
     const rawCalId = input.calendarId.replace(/^(google:|ms:)/, "");
     if (isMs) {
-      const query = [`$top=${input.maxResults}`, `$orderby=start/dateTime`];
+      const query = [
+        `$top=${input.maxResults}`,
+        `$orderby=start/dateTime`
+      ];
       if (input.timeMin || input.timeMax) {
         const filters = [];
-        if (input.timeMin) filters.push(`start/dateTime ge '${input.timeMin}'`);
+        if (input.timeMin)
+          filters.push(`start/dateTime ge '${input.timeMin}'`);
         if (input.timeMax) filters.push(`end/dateTime le '${input.timeMax}'`);
         query.push(`$filter=${filters.join(" and ")}`);
       }
@@ -6552,7 +6559,9 @@ var calendarRouter = router({
         id: e.id,
         summary: e.subject,
         description: e.bodyPreview,
-        start: { dateTime: e.start?.dateTime ? e.start.dateTime + "Z" : void 0 },
+        start: {
+          dateTime: e.start?.dateTime ? e.start.dateTime + "Z" : void 0
+        },
         end: { dateTime: e.end?.dateTime ? e.end.dateTime + "Z" : void 0 },
         location: e.location?.displayName,
         htmlLink: e.webLink
@@ -6642,7 +6651,10 @@ var calendarRouter = router({
       if (input.location !== void 0)
         patch.location = { displayName: input.location };
       if (input.startDateTime)
-        patch.start = { dateTime: input.startDateTime, timeZone: input.timeZone };
+        patch.start = {
+          dateTime: input.startDateTime,
+          timeZone: input.timeZone
+        };
       if (input.endDateTime)
         patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
       return msFetch(
@@ -6657,10 +6669,14 @@ var calendarRouter = router({
       );
       const patch = { ...current };
       if (input.summary) patch.summary = input.summary;
-      if (input.description !== void 0) patch.description = input.description;
+      if (input.description !== void 0)
+        patch.description = input.description;
       if (input.location !== void 0) patch.location = input.location;
       if (input.startDateTime)
-        patch.start = { dateTime: input.startDateTime, timeZone: input.timeZone };
+        patch.start = {
+          dateTime: input.startDateTime,
+          timeZone: input.timeZone
+        };
       if (input.endDateTime)
         patch.end = { dateTime: input.endDateTime, timeZone: input.timeZone };
       return gcalFetch(
@@ -8280,17 +8296,20 @@ async function handleMsOAuthCallback(req, res) {
     if (!userId) {
       return res.redirect("/calendar?error=invalid_state");
     }
-    const tokenResp = await fetch("https://login.microsoftonline.com/common/oauth2/v2.0/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.MS_CLIENT_ID ?? "",
-        client_secret: process.env.MS_CLIENT_SECRET ?? "",
-        code,
-        grant_type: "authorization_code",
-        redirect_uri: getMsRedirectUri(req)
-      })
-    });
+    const tokenResp = await fetch(
+      "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.MS_CLIENT_ID ?? "",
+          client_secret: process.env.MS_CLIENT_SECRET ?? "",
+          code,
+          grant_type: "authorization_code",
+          redirect_uri: getMsRedirectUri(req)
+        })
+      }
+    );
     if (!tokenResp.ok) {
       const err = await tokenResp.text();
       console.error("[MS OAuth] Token error:", err);

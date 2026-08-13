@@ -109,6 +109,22 @@ export default function JarvisCalendar() {
     return d.toISOString();
   }, [currentDate]);
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const error = searchParams.get("error");
+    const success = searchParams.get("success");
+    
+    if (error) {
+      toast.error(`Verbindungsfehler: ${error}`);
+      // Remove query param from URL without reloading
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+    if (success) {
+      toast.success("Kalender erfolgreich verbunden!");
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   const {
     data: events,
     isLoading: eventsLoading,
