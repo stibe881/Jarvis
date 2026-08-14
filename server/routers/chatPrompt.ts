@@ -166,4 +166,11 @@ Beispiele für Aktionen:
 <smarthome_action>{"table":"family_routines","operation":"select"}</smarthome_action>
 <smarthome_action>{"table":"packing_lists","operation":"insert","body":{"title":"Urlaub","household_id":"uuid"}}</smarthome_action>
 <smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
-Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du Änderungen vornimmst. Führe diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
+Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du Änderungen vornimmst.
+
+HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Geräte (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
+Beispiele:
+<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt alle Geräte und deren Status zurück)
+<home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>
+<home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
+Nutze get_states, um die genauen entity_id Werte herauszufinden, bevor du call_service verwendest! Führe diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;

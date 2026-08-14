@@ -26,6 +26,7 @@ import {
 } from "./db";
 import { msFetch } from "./routers/calendar";
 import { executeSmarthomeAction, SmarthomeActionParams } from "./_core/smarthome";
+import { executeHomeAssistantAction, HomeAssistantActionParams } from "./_core/homeassistant";
 import { ToolCall } from "./_core/llm";
 
 async function executeGithubAction(
@@ -198,6 +199,7 @@ export const ACTION_TAGS = [
   "web_search",
   "maps_action",
   "smarthome_action",
+  "home_assistant_action",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];
@@ -524,6 +526,12 @@ export async function executeAction(
         const smarthomeResult = await executeSmarthomeAction(payload as any);
         result = JSON.stringify(smarthomeResult, null, 2);
         label = `Smarthome DB: ${payload.operation} auf ${payload.table}`;
+        break;
+      }
+      case "home_assistant_action": {
+        const haResult = await executeHomeAssistantAction(payload as any);
+        result = JSON.stringify(haResult, null, 2);
+        label = `Home Assistant: ${payload.action}`;
         break;
       }
       default:

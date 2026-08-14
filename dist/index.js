@@ -4394,6 +4394,55 @@ var init_smarthome = __esm({
   }
 });
 
+// server/_core/homeassistant.ts
+async function executeHomeAssistantAction(params) {
+  const baseUrl = process.env.HA_BASE_URL;
+  const token = process.env.HA_ACCESS_TOKEN;
+  if (!baseUrl || !token) {
+    return "Fehler: Home Assistant Zugangsdaten (HA_BASE_URL, HA_ACCESS_TOKEN) sind nicht in der .env hinterlegt.";
+  }
+  const headers2 = {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  };
+  try {
+    if (params.action === "get_states") {
+      const res = await fetch(`${baseUrl}/api/states`, { headers: headers2 });
+      if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
+      const states = await res.json();
+      if (params.entityId) {
+        const entity = states.find((s) => s.entity_id === params.entityId);
+        return entity || `Entit\xE4t ${params.entityId} nicht gefunden.`;
+      }
+      return states.map((s) => ({
+        entity_id: s.entity_id,
+        state: s.state,
+        friendly_name: s.attributes?.friendly_name
+      }));
+    }
+    if (params.action === "call_service") {
+      if (!params.domain || !params.service) {
+        return "Fehler: F\xFCr call_service m\xFCssen 'domain' und 'service' angegeben werden.";
+      }
+      const res = await fetch(`${baseUrl}/api/services/${params.domain}/${params.service}`, {
+        method: "POST",
+        headers: headers2,
+        body: JSON.stringify(params.serviceData || {})
+      });
+      if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
+      return await res.json();
+    }
+    return "Fehler: Unbekannte Aktion.";
+  } catch (error) {
+    return `Netzwerkfehler bei Home Assistant API: ${error.message}`;
+  }
+}
+var init_homeassistant = __esm({
+  "server/_core/homeassistant.ts"() {
+    "use strict";
+  }
+});
+
 // server/agent.ts
 var agent_exports = {};
 __export(agent_exports, {
@@ -4718,6 +4767,12 @@ async function executeAction(ctx, parsed2) {
         label = `Smarthome DB: ${payload.operation} auf ${payload.table}`;
         break;
       }
+      case "home_assistant_action": {
+        const haResult = await executeHomeAssistantAction(payload);
+        result = JSON.stringify(haResult, null, 2);
+        label = `Home Assistant: ${payload.action}`;
+        break;
+      }
       default:
         result = `Unbekanntes Werkzeug: ${tag}`;
     }
@@ -4882,6 +4937,7 @@ var init_agent = __esm({
     init_db();
     init_calendar();
     init_smarthome();
+    init_homeassistant();
     WRITING_ACTIONS = [
       "create_customer",
       "create_ticket",
@@ -4930,7 +4986,8 @@ var init_agent = __esm({
       "email_action",
       "web_search",
       "maps_action",
-      "smarthome_action"
+      "smarthome_action",
+      "home_assistant_action"
     ];
     STEP_LOG_MARKER = "\u27E6schritte\u27E7 ";
     MAX_AGENT_ROUNDS = 5;
@@ -5131,7 +5188,14 @@ Beispiele f\xFCr Aktionen:
 <smarthome_action>{"table":"family_routines","operation":"select"}</smarthome_action>
 <smarthome_action>{"table":"packing_lists","operation":"insert","body":{"title":"Urlaub","household_id":"uuid"}}</smarthome_action>
 <smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
-Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du \xC4nderungen vornimmst. F\xFChre diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
+Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du \xC4nderungen vornimmst.
+
+HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Ger\xE4te (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
+Beispiele:
+<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt alle Ger\xE4te und deren Status zur\xFCck)
+<home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>
+<home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
+Nutze get_states, um die genauen entity_id Werte herauszufinden, bevor du call_service verwendest! F\xFChre diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
   }
 });
 

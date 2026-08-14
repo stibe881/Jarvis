@@ -265,4 +265,22 @@ export const jarvisTools: Tool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "home_assistant_action",
+      description: "Interaktion mit Home Assistant (Geräte steuern, Lichter schalten, Status auslesen)",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["get_states", "call_service"], description: "Die auszuführende Aktion. get_states liest Sensoren/Lichter, call_service steuert sie." },
+          domain: { type: "string", description: "Nur für call_service: Die Domain (z.B. 'light', 'switch', 'climate', 'script')" },
+          service: { type: "string", description: "Nur für call_service: Der Service (z.B. 'turn_on', 'turn_off', 'set_temperature')" },
+          serviceData: { type: "object", description: "Nur für call_service: Zusätzliche Daten (meistens {'entity_id': 'light.wohnzimmer'}, oder {'entity_id': '...', 'brightness': 255})" },
+          entityId: { type: "string", description: "Nur für get_states: Spezifische entity_id (z.B. 'light.wohnzimmer'), falls nur ein Gerät gelesen werden soll." }
+        },
+        required: ["action"],
+      },
+    },
+  },
 ];
