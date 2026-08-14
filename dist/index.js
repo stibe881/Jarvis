@@ -4414,7 +4414,12 @@ async function executeHomeAssistantAction(params) {
         const entity = states.find((s) => s.entity_id === params.entityId);
         return entity || `Entit\xE4t ${params.entityId} nicht gefunden.`;
       }
-      return states.map((s) => ({
+      const ACTIONABLE_DOMAINS = ["light", "switch", "climate", "cover", "scene", "script", "media_player", "automation"];
+      const filtered = states.filter((s) => {
+        const domain = s.entity_id.split(".")[0];
+        return ACTIONABLE_DOMAINS.includes(domain);
+      });
+      return filtered.map((s) => ({
         entity_id: s.entity_id,
         state: s.state,
         friendly_name: s.attributes?.friendly_name
@@ -4440,6 +4445,56 @@ async function executeHomeAssistantAction(params) {
 var init_homeassistant = __esm({
   "server/_core/homeassistant.ts"() {
     "use strict";
+  }
+});
+
+// server/routers/news.ts
+var news_exports = {};
+__export(news_exports, {
+  fetchLatestNews: () => fetchLatestNews,
+  newsRouter: () => newsRouter
+});
+async function fetchLatestNews() {
+  const feeds = [
+    { name: "SRF", url: "https://www.srf.ch/news/bnf/rss/1646" },
+    { name: "Blick", url: "https://www.blick.ch/news/rss.xml" },
+    { name: "20 Minuten", url: "https://www.20min.ch/rss/rss.xml" }
+  ];
+  const results = await Promise.allSettled(
+    feeds.map(async (f) => {
+      const res = await fetch(f.url);
+      if (!res.ok) throw new Error("Fetch failed");
+      const xml = await res.text();
+      const items = [];
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+      let match;
+      while ((match = itemRegex.exec(xml)) !== null && items.length < 5) {
+        const itemContent = match[1];
+        const titleMatch = itemContent.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>|<title>(.*?)<\/title>/);
+        const descMatch = itemContent.match(/<description><!\[CDATA\[(.*?)\]\]><\/description>|<description>(.*?)<\/description>/);
+        const title = titleMatch ? titleMatch[1] || titleMatch[2] : "Ohne Titel";
+        const desc4 = descMatch ? descMatch[1] || descMatch[2] : "";
+        items.push({
+          title: title.trim(),
+          description: desc4.replace(/<[^>]*>?/gm, "").trim().substring(0, 150) + "...",
+          source: f.name
+        });
+      }
+      return items;
+    })
+  );
+  return results.filter((r) => r.status === "fulfilled").map((r) => r.value).flat();
+}
+var newsRouter;
+var init_news = __esm({
+  "server/routers/news.ts"() {
+    "use strict";
+    init_trpc();
+    newsRouter = router({
+      getLatest: protectedProcedure.query(async () => {
+        return await fetchLatestNews();
+      })
+    });
   }
 });
 
@@ -4550,7 +4605,9 @@ function parseActions(response) {
       } catch {
       }
     }
-    text2 = text2.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "g"), "");
+    if (tag !== "maps_action") {
+      text2 = text2.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "g"), "");
+    }
   }
   return { text: text2.replace(/\n{3,}/g, "\n\n").trim(), actions };
 }
@@ -4759,6 +4816,22 @@ async function executeAction(ctx, parsed2) {
       }
       case "maps_action": {
         result = `Google Maps Ansicht f\xFCr ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
+        break;
+      }
+      case "news_action": {
+        try {
+          const { fetchLatestNews: fetchLatestNews2 } = await Promise.resolve().then(() => (init_news(), news_exports));
+          const allNews = await fetchLatestNews2();
+          let filteredNews = allNews;
+          const sourceFilter = typeof payload.source === "string" ? payload.source.toLowerCase() : null;
+          if (sourceFilter && sourceFilter !== "alle") {
+            filteredNews = allNews.filter((n) => n.source.toLowerCase().includes(sourceFilter));
+            if (filteredNews.length === 0) filteredNews = allNews;
+          }
+          result = JSON.stringify(filteredNews.slice(0, 5));
+        } catch (e) {
+          result = `Fehler beim Abrufen der News: ${e.message}`;
+        }
         break;
       }
       case "smarthome_action": {
@@ -4986,6 +5059,7 @@ var init_agent = __esm({
       "email_action",
       "web_search",
       "maps_action",
+      "news_action",
       "smarthome_action",
       "home_assistant_action"
     ];
@@ -5193,10 +5267,13 @@ Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit ope
 HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Ger\xE4te (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
 WICHTIG: Wenn Stefan dich bittet, ein Licht, Schalter oder Ger\xE4t ein- oder auszuschalten, MUSST du \`home_assistant_action\` nutzen! Erstelle daf\xFCr NIEMALS eine Aufgabe (tasks_action) oder ein Ticket!
 Beispiele:
-<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt alle Ger\xE4te und deren Status zur\xFCck)
+<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Ger\xE4te zur\xFCck)
 <home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
-Nutze get_states, um die genauen entity_id Werte herauszufinden, bevor du call_service verwendest! F\xFChre diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
+Nutze get_states immer kurz im Hintergrund, um die exakte entity_id herauszufinden, bevor du call_service verwendest! Sag dem Nutzer einfach "Wird erledigt" und mach es im Hintergrund.
+
+KARTEN & GPS:
+Wenn du eine Karte \xFCber \`<maps_action>\` anzeigst, LIES NIEMALS DIE L\xC4NGEN- ODER BREITENGRADE VOR! Beschreibe den Ort nur kurz ("Die Karte zu [Ort] wurde eingeblendet").`;
   }
 });
 
@@ -8599,46 +8676,7 @@ var webhooksRouter = router({
 // server/routers.ts
 init_spotify();
 init_deviceCommands();
-
-// server/routers/news.ts
-init_trpc();
-var newsRouter = router({
-  getLatest: protectedProcedure.query(async () => {
-    const feeds = [
-      { name: "SRF", url: "https://www.srf.ch/news/bnf/rss/1646" },
-      { name: "Blick", url: "https://www.blick.ch/news/rss.xml" },
-      { name: "20 Minuten", url: "https://www.20min.ch/rss/rss.xml" }
-    ];
-    const results = await Promise.allSettled(
-      feeds.map(async (f) => {
-        const res = await fetch(f.url);
-        if (!res.ok) throw new Error("Fetch failed");
-        const xml = await res.text();
-        const items = [];
-        const itemRegex = /<item>([\s\S]*?)<\/item>/g;
-        let match;
-        while ((match = itemRegex.exec(xml)) !== null && items.length < 5) {
-          const itemXml = match[1];
-          const titleMatch = /<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/.exec(itemXml);
-          const linkMatch = /<link>([\s\S]*?)<\/link>/.exec(itemXml);
-          const pubDateMatch = /<pubDate>([\s\S]*?)<\/pubDate>/.exec(itemXml);
-          items.push({
-            title: titleMatch ? titleMatch[1] || titleMatch[2] : "Kein Titel",
-            link: linkMatch ? linkMatch[1] : "",
-            pubDate: pubDateMatch ? pubDateMatch[1] : ""
-          });
-        }
-        return {
-          source: f.name,
-          items
-        };
-      })
-    );
-    return results.filter((r) => r.status === "fulfilled").map((r) => r.value);
-  })
-});
-
-// server/routers.ts
+init_news();
 var appRouter = router({
   system: systemRouter,
   news: newsRouter,

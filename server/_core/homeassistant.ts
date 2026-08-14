@@ -32,8 +32,14 @@ export async function executeHomeAssistantAction(params: HomeAssistantActionPara
         return entity || `Entität ${params.entityId} nicht gefunden.`;
       }
       
+      const ACTIONABLE_DOMAINS = ["light", "switch", "climate", "cover", "scene", "script", "media_player", "automation"];
+      const filtered = states.filter((s: any) => {
+        const domain = s.entity_id.split(".")[0];
+        return ACTIONABLE_DOMAINS.includes(domain);
+      });
+
       // To prevent massive payloads, we might want to map to a summary if there are many entities
-      return states.map((s: any) => ({
+      return filtered.map((s: any) => ({
         entity_id: s.entity_id,
         state: s.state,
         friendly_name: s.attributes?.friendly_name

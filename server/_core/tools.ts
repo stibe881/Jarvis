@@ -234,6 +234,20 @@ export const jarvisTools: Tool[] = [
   {
     type: "function",
     function: {
+      name: "news_action",
+      description: "Die neuesten Nachrichten (News) von SRF, Blick und 20 Minuten abrufen.",
+      parameters: {
+        type: "object",
+        properties: {
+          source: { type: "string", description: "Optional: 'SRF', 'Blick' oder '20 Minuten'" }
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "maps_action",
       description: "Google Maps Karte für den Nutzer einblenden (als Antwort-Widget)",
       parameters: {

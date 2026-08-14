@@ -198,6 +198,7 @@ export const ACTION_TAGS = [
   "email_action",
   "web_search",
   "maps_action",
+  "news_action",
   "smarthome_action",
   "home_assistant_action",
 ] as const;
@@ -233,7 +234,9 @@ export function parseActions(response: string): {
         // damit der Nutzer keinen technischen Müll sieht.
       }
     }
-    text = text.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "g"), "");
+    if (tag !== "maps_action") {
+      text = text.replace(new RegExp(`<${tag}>[\\s\\S]*?</${tag}>`, "g"), "");
+    }
   }
 
   return { text: text.replace(/\n{3,}/g, "\n\n").trim(), actions };
@@ -520,6 +523,25 @@ export async function executeAction(
       }
       case "maps_action": {
         result = `Google Maps Ansicht für ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
+        break;
+      }
+      case "news_action": {
+        try {
+          const { fetchLatestNews } = await import("./routers/news");
+          const allNews = await fetchLatestNews();
+          
+          let filteredNews = allNews;
+          const sourceFilter = typeof payload.source === "string" ? payload.source.toLowerCase() : null;
+          
+          if (sourceFilter && sourceFilter !== "alle") {
+            filteredNews = allNews.filter(n => n.source.toLowerCase().includes(sourceFilter));
+            if (filteredNews.length === 0) filteredNews = allNews; // Fallback
+          }
+          
+          result = JSON.stringify(filteredNews.slice(0, 5));
+        } catch (e: any) {
+          result = `Fehler beim Abrufen der News: ${e.message}`;
+        }
         break;
       }
       case "smarthome_action": {

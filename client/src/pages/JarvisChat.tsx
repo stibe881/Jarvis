@@ -65,6 +65,9 @@ function AssistantMessage({ content }: { content: string }) {
   // aus dem Gedächtnis-Kontext und gehören nicht in die Antwort.
   const roh = idx >= 0 ? content.slice(0, idx).trim() : content;
   
+  // Bereinige den Text für die Anzeige (entferne den rohen XML-Block, da wir die Karte separiert rendern)
+  const displayText = roh.replace(/<maps_action>[\s\S]*?<\/maps_action>/gi, "").trim();
+    
   // Extrahiere Map-Location, falls vorhanden
   let mapLocation: string | null = null;
   const mapsMatch = roh.match(/<maps_action>([\s\S]*?)<\/maps_action>/i);
@@ -75,7 +78,7 @@ function AssistantMessage({ content }: { content: string }) {
     } catch(e) {}
   }
 
-  const text = removeInternalTags(roh);
+  const text = removeInternalTags(displayText);
   const steps =
     idx >= 0
       ? content
@@ -87,7 +90,7 @@ function AssistantMessage({ content }: { content: string }) {
 
   return (
     <>
-      <Streamdown className="prose prose-invert prose-sm max-w-none">
+      <Streamdown className="prose prose-sm md:prose-base dark:prose-invert max-w-none text-foreground/90 whitespace-pre-wrap leading-relaxed marker:text-foreground/70">
         {text}
       </Streamdown>
       {mapLocation && (
@@ -566,6 +569,7 @@ function JarvisChatInner() {
       const clean = text
         // Schritt-Protokoll und interne Kategorie-Markierungen nie mitsprechen
         .replace(/⟦schritte⟧[\s\S]*$/g, " ")
+        .replace(/<maps_action>[\s\S]*?<\/maps_action>/gi, " ")
         .replace(
           /\s*\[(?:person|contact|preference|project|fact|context|memory|profil|profile|kalender|calendar)\]/gi,
           ""
@@ -1002,8 +1006,9 @@ function JarvisChatInner() {
             const getPos = () =>
               new Promise<GeolocationPosition>((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
-                  timeout: 2000,
-                  maximumAge: 60000,
+                  timeout: 5000,
+                  maximumAge: 0,
+                  enableHighAccuracy: true,
                 });
               });
             try {
