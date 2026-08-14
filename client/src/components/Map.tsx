@@ -127,6 +127,8 @@ const loadMapScript = () => {
 interface MapViewProps {
   className?: string;
   address?: string;
+  origin?: string;
+  destination?: string;
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
@@ -137,6 +139,8 @@ export function MapView({
   initialCenter = { lat: 37.7749, lng: -122.4194 }, // fallback
   initialZoom = 12,
   address,
+  origin,
+  destination,
   onMapReady,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -157,6 +161,31 @@ export function MapView({
       streetViewControl: true,
       mapId: "DEMO_MAP_ID",
     });
+
+    if (origin && destination) {
+      const directionsService = new window.google.maps.DirectionsService();
+      const directionsRenderer = new window.google.maps.DirectionsRenderer();
+      directionsRenderer.setMap(map.current);
+
+      directionsService.route(
+        {
+          origin: origin,
+          destination: destination,
+          travelMode: window.google.maps.TravelMode.DRIVING,
+        },
+        (response, status) => {
+          if (status === "OK") {
+            directionsRenderer.setDirections(response);
+          } else {
+            console.error("Directions request failed due to " + status);
+          }
+        }
+      );
+      if (onMapReady) {
+        onMapReady(map.current);
+      }
+      return;
+    }
 
     if (address) {
       // Simple regex to check if address is lat,lng coordinates

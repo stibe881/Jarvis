@@ -9,11 +9,44 @@ export interface HomeAssistantActionParams {
 export async function executeHomeAssistantAction(
   params: HomeAssistantActionParams
 ): Promise<any> {
-  const baseUrl = process.env.HA_BASE_URL;
-  const token = process.env.HA_ACCESS_TOKEN;
+  const sbUrl = process.env.SMARTHOME_SUPABASE_URL;
+  const sbKey = process.env.SMARTHOME_SERVICE_ROLE_KEY;
+
+  if (!sbUrl || !sbKey) {
+    return "Fehler: Supabase Zugangsdaten für Smarthome Pro sind nicht in der .env hinterlegt.";
+  }
+
+  // Fetch the first user_settings row to get ha_url and ha_token
+  const settingsRes = await fetch(
+    `${sbUrl}/rest/v1/user_settings?select=ha_url,ha_token&limit=1`,
+    {
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`,
+      },
+    }
+  );
+
+  if (!settingsRes.ok) {
+    return `Fehler beim Abrufen der HA-Zugangsdaten: ${settingsRes.statusText}`;
+  }
+
+  const settingsData = await settingsRes.json();
+  if (!settingsData || settingsData.length === 0) {
+    return "Fehler: Keine Home Assistant Zugangsdaten in der Smarthome Pro Datenbank (user_settings) gefunden.";
+  }
+
+  let baseUrl = settingsData[0].ha_url;
+  const token = settingsData[0].ha_token;
 
   if (!baseUrl || !token) {
-    return "Fehler: Home Assistant Zugangsdaten (HA_BASE_URL, HA_ACCESS_TOKEN) sind nicht in der .env hinterlegt.";
+    return "Fehler: ha_url oder ha_token in der Smarthome Pro Datenbank leer.";
+  }
+
+  // Clean baseUrl
+  baseUrl = baseUrl.trim().replace(/\/$/, "");
+  if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+    baseUrl = "http://" + baseUrl;
   }
 
   const headers = {

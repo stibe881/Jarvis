@@ -70,13 +70,16 @@ function AssistantMessage({ content }: { content: string }) {
     .replace(/<maps_action>[\s\S]*?<\/maps_action>/gi, "")
     .trim();
 
-  // Extrahiere Map-Location, falls vorhanden
   let mapLocation: string | null = null;
+  let mapOrigin: string | null = null;
+  let mapDestination: string | null = null;
   const mapsMatch = roh.match(/<maps_action>([\s\S]*?)<\/maps_action>/i);
   if (mapsMatch) {
     try {
       const payload = JSON.parse(mapsMatch[1]);
-      mapLocation = payload.location;
+      mapLocation = payload.location || null;
+      mapOrigin = payload.origin || null;
+      mapDestination = payload.destination || null;
     } catch (e) {}
   }
 
@@ -95,9 +98,14 @@ function AssistantMessage({ content }: { content: string }) {
       <Streamdown className="prose prose-sm md:prose-base dark:prose-invert max-w-none text-foreground/90 whitespace-pre-wrap leading-relaxed marker:text-foreground/70">
         {text}
       </Streamdown>
-      {mapLocation && (
+      {(mapLocation || (mapOrigin && mapDestination)) && (
         <div className="mt-3 rounded-xl overflow-hidden border border-border">
-          <MapView address={mapLocation} className="h-64" />
+          <MapView
+            address={mapLocation || undefined}
+            origin={mapOrigin || undefined}
+            destination={mapDestination || undefined}
+            className="h-64"
+          />
         </div>
       )}
       {steps.length > 0 && (
