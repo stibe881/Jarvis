@@ -247,4 +247,22 @@ export const jarvisTools: Tool[] = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "smarthome_action",
+      description: "Interaktion mit der Smarthome Pro App (Lese- und Schreibzugriff auf alle Tabellen der Supabase-Datenbank)",
+      parameters: {
+        type: "object",
+        properties: {
+          table: { type: "string", description: "Name der Tabelle (z.B. family_routines, packing_lists, household_cameras)" },
+          operation: { type: "string", enum: ["select", "insert", "update", "delete"], description: "Die auszuführende Datenbank-Operation" },
+          match: { type: "object", description: "Optional: Filter für SELECT, UPDATE, DELETE (z.B. {'id': '123'} oder {'household_id': '456'})" },
+          body: { type: "object", description: "Optional: Die Datenstruktur, die für INSERT oder UPDATE geschrieben werden soll" },
+          select: { type: "string", description: "Optional: Spaltenauswahl für SELECT (z.B. 'id, name, status'), standardmäßig '*'" }
+        },
+        required: ["table", "operation"],
+      },
+    },
+  },
 ];

@@ -4341,6 +4341,59 @@ var init_deviceCommands = __esm({
   }
 });
 
+// server/_core/smarthome.ts
+async function executeSmarthomeAction(params) {
+  const { table, operation, match, body, select } = params;
+  const baseUrl = process.env.SMARTHOME_SUPABASE_URL;
+  const key = process.env.SMARTHOME_SERVICE_ROLE_KEY;
+  if (!baseUrl || !key) {
+    return "Fehler: Supabase Zugangsdaten f\xFCr Smarthome Pro sind nicht in der .env hinterlegt.";
+  }
+  const url = new URL(`${baseUrl}/rest/v1/${table}`);
+  if (select) {
+    url.searchParams.append("select", select);
+  } else if (operation === "select" || operation === "insert" || operation === "update") {
+    url.searchParams.append("select", "*");
+  }
+  if (match) {
+    for (const [k, v] of Object.entries(match)) {
+      url.searchParams.append(k, `eq.${v}`);
+    }
+  }
+  const headers2 = {
+    "apikey": key,
+    "Authorization": `Bearer ${key}`,
+    "Content-Type": "application/json"
+  };
+  if (operation === "insert" || operation === "update") {
+    headers2["Prefer"] = "return=representation";
+  }
+  const method = operation === "select" ? "GET" : operation === "insert" ? "POST" : operation === "update" ? "PATCH" : "DELETE";
+  try {
+    const res = await fetch(url.toString(), {
+      method,
+      headers: headers2,
+      body: body ? JSON.stringify(body) : void 0
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      return `Fehler bei der Datenbankabfrage (${res.status}): ${err}`;
+    }
+    if (res.status === 204 || operation === "delete") {
+      return "Aktion erfolgreich ausgef\xFChrt (Keine Daten zur\xFCckgegeben).";
+    }
+    const data = await res.json();
+    return data;
+  } catch (error) {
+    return `Netzwerkfehler bei Smarthome API: ${error.message}`;
+  }
+}
+var init_smarthome = __esm({
+  "server/_core/smarthome.ts"() {
+    "use strict";
+  }
+});
+
 // server/agent.ts
 var agent_exports = {};
 __export(agent_exports, {
@@ -4552,7 +4605,7 @@ async function executeScheduleTask(userId, params) {
 async function executeAction(ctx, parsed2) {
   const { tag, payload } = parsed2;
   const action = typeof payload.action === "string" ? payload.action : typeof payload.type === "string" ? payload.type : "";
-  const label = describe(tag, action, payload);
+  let label = describe(tag, action, payload);
   try {
     let result;
     switch (tag) {
@@ -4657,6 +4710,12 @@ async function executeAction(ctx, parsed2) {
       }
       case "maps_action": {
         result = `Google Maps Ansicht f\xFCr ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
+        break;
+      }
+      case "smarthome_action": {
+        const smarthomeResult = await executeSmarthomeAction(payload);
+        result = JSON.stringify(smarthomeResult, null, 2);
+        label = `Smarthome DB: ${payload.operation} auf ${payload.table}`;
         break;
       }
       default:
@@ -4822,6 +4881,7 @@ var init_agent = __esm({
     init_deviceCommands();
     init_db();
     init_calendar();
+    init_smarthome();
     WRITING_ACTIONS = [
       "create_customer",
       "create_ticket",
@@ -4869,7 +4929,8 @@ var init_agent = __esm({
       "github_action",
       "email_action",
       "web_search",
-      "maps_action"
+      "maps_action",
+      "smarthome_action"
     ];
     STEP_LOG_MARKER = "\u27E6schritte\u27E7 ";
     MAX_AGENT_ROUNDS = 5;
@@ -5063,7 +5124,14 @@ STATUS-WERTE in der App:
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
-dann die zur\xFCckgegebene ID in der n\xE4chsten Runde verwenden. Frage Stefan nicht nach technischen IDs.`;
+dann die zur\xFCckgegebene ID in der n\xE4chsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
+
+SMARTHOME PRO: Stefan hat die "Smarthome Pro" Supabase Datenbank angebunden. Du kannst darauf via smarthome_action zugreifen.
+Beispiele f\xFCr Aktionen:
+<smarthome_action>{"table":"family_routines","operation":"select"}</smarthome_action>
+<smarthome_action>{"table":"packing_lists","operation":"insert","body":{"title":"Urlaub","household_id":"uuid"}}</smarthome_action>
+<smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
+Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du \xC4nderungen vornimmst. F\xFChre diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
   }
 });
 

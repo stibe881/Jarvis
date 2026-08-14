@@ -25,6 +25,7 @@ import {
   getMicrosoftTokens
 } from "./db";
 import { msFetch } from "./routers/calendar";
+import { executeSmarthomeAction, SmarthomeActionParams } from "./_core/smarthome";
 import { ToolCall } from "./_core/llm";
 
 async function executeGithubAction(
@@ -196,6 +197,7 @@ export const ACTION_TAGS = [
   "email_action",
   "web_search",
   "maps_action",
+  "smarthome_action",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];
@@ -408,7 +410,7 @@ export async function executeAction(
       : typeof payload.type === "string"
         ? payload.type
         : "";
-  const label = describe(tag, action, payload);
+  let label = describe(tag, action, payload);
 
   try {
     let result: string;
@@ -516,6 +518,12 @@ export async function executeAction(
       }
       case "maps_action": {
         result = `Google Maps Ansicht für ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
+        break;
+      }
+      case "smarthome_action": {
+        const smarthomeResult = await executeSmarthomeAction(payload as any);
+        result = JSON.stringify(smarthomeResult, null, 2);
+        label = `Smarthome DB: ${payload.operation} auf ${payload.table}`;
         break;
       }
       default:

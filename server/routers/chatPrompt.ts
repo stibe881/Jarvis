@@ -159,4 +159,11 @@ STATUS-WERTE in der App:
 - Projekte: active, completed, on_hold, cancelled
 - Leads: new, contacted, qualified, proposal, won, lost
 Wenn du eine ID brauchst, hole sie SELBST: erst list_customers / list_tickets / list_projects aufrufen,
-dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.`;
+dann die zurückgegebene ID in der nächsten Runde verwenden. Frage Stefan nicht nach technischen IDs.
+
+SMARTHOME PRO: Stefan hat die "Smarthome Pro" Supabase Datenbank angebunden. Du kannst darauf via smarthome_action zugreifen.
+Beispiele für Aktionen:
+<smarthome_action>{"table":"family_routines","operation":"select"}</smarthome_action>
+<smarthome_action>{"table":"packing_lists","operation":"insert","body":{"title":"Urlaub","household_id":"uuid"}}</smarthome_action>
+<smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
+Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du Änderungen vornimmst. Führe diese Aktionen im Hintergrund aus und beantworte Stefans Fragen basierend auf den Ergebnissen.`;
