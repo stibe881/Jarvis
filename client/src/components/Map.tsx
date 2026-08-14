@@ -111,6 +111,7 @@ function loadMapScript() {
 
 interface MapViewProps {
   className?: string;
+  address?: string;
   initialCenter?: google.maps.LatLngLiteral;
   initialZoom?: number;
   onMapReady?: (map: google.maps.Map) => void;
@@ -118,8 +119,9 @@ interface MapViewProps {
 
 export function MapView({
   className,
-  initialCenter = { lat: 37.7749, lng: -122.4194 },
+  initialCenter = { lat: 37.7749, lng: -122.4194 }, // fallback
   initialZoom = 12,
+  address,
   onMapReady,
 }: MapViewProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -140,6 +142,22 @@ export function MapView({
       streetViewControl: true,
       mapId: "DEMO_MAP_ID",
     });
+
+    if (address) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address }, (results, status) => {
+        if (status === "OK" && results && results[0] && map.current) {
+          map.current.setCenter(results[0].geometry.location);
+          map.current.setZoom(14);
+          new window.google.maps.marker.AdvancedMarkerElement({
+            map: map.current,
+            position: results[0].geometry.location,
+            title: address
+          });
+        }
+      });
+    }
+
     if (onMapReady) {
       onMapReady(map.current);
     }

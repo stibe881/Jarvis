@@ -1,4 +1,5 @@
 import { trpc } from "@/lib/trpc";
+import { MapView } from "@/components/Map";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +64,17 @@ function AssistantMessage({ content }: { content: string }) {
   // Interne Kategorie-Markierungen ausblenden – sie sind technische Hinweise
   // aus dem Gedächtnis-Kontext und gehören nicht in die Antwort.
   const roh = idx >= 0 ? content.slice(0, idx).trim() : content;
+  
+  // Extrahiere Map-Location, falls vorhanden
+  let mapLocation: string | null = null;
+  const mapsMatch = roh.match(/<maps_action>([\s\S]*?)<\/maps_action>/i);
+  if (mapsMatch) {
+    try {
+      const payload = JSON.parse(mapsMatch[1]);
+      mapLocation = payload.location;
+    } catch(e) {}
+  }
+
   const text = removeInternalTags(roh);
   const steps =
     idx >= 0
@@ -78,6 +90,11 @@ function AssistantMessage({ content }: { content: string }) {
       <Streamdown className="prose prose-invert prose-sm max-w-none">
         {text}
       </Streamdown>
+      {mapLocation && (
+        <div className="mt-3 rounded-xl overflow-hidden border border-border">
+          <MapView address={mapLocation} className="h-64" />
+        </div>
+      )}
       {steps.length > 0 && (
         <div className="mt-3 border-t border-border/60 pt-2">
           <button

@@ -146,9 +146,18 @@ export async function handleTtsStream(
         res.status(429).json({ error: "Sprachausgabe-Guthaben aufgebraucht" });
         return;
       }
+      let errorMessage = `Sprachausgabe fehlgeschlagen (${upstream.status})`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error && parsed.error.message) {
+          errorMessage = `OpenAI API Fehler: ${parsed.error.message}`;
+        }
+      } catch (e) {
+        // Fallback wenn es kein JSON ist
+      }
       res
         .status(502)
-        .json({ error: `Sprachausgabe fehlgeschlagen (${upstream.status})` });
+        .json({ error: errorMessage, details: errText.slice(0, 500) });
       return;
     }
 

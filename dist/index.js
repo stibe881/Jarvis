@@ -58,6 +58,7 @@ var init_env = __esm({
       BUILT_IN_FORGE_API_KEY: z.string().optional(),
       // Direkte KI-Anbindung (eigener Anthropic-Key statt Plattform-Proxy)
       ANTHROPIC_API_KEY: z.string().optional(),
+      ANTHROPIC_MODEL: z.string().optional(),
       OPENAI_API_KEY: z.string().optional(),
       // Lokaler Passwort-Login (ersetzt den Plattform-OAuth beim Self-Hosting).
       APP_PASSWORD: z.string().optional(),
@@ -92,6 +93,7 @@ var init_env = __esm({
       BUILT_IN_FORGE_API_URL: RAW.BUILT_IN_FORGE_API_URL,
       BUILT_IN_FORGE_API_KEY: RAW.BUILT_IN_FORGE_API_KEY,
       ANTHROPIC_API_KEY: RAW.ANTHROPIC_API_KEY,
+      ANTHROPIC_MODEL: RAW.ANTHROPIC_MODEL,
       OPENAI_API_KEY: RAW.OPENAI_API_KEY,
       APP_PASSWORD: RAW.APP_PASSWORD,
       OWNER_NAME: RAW.OWNER_NAME,
@@ -1790,7 +1792,7 @@ async function msFetch(userId, email, path4, options = {}) {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      Prefer: 'outlook.timezone="Europe/Zurich"',
+      Prefer: 'outlook.timezone="UTC"',
       ...options.headers ?? {}
     }
   });
@@ -2551,10 +2553,17 @@ function toContent(content) {
   return blocks.length > 0 ? blocks : "";
 }
 async function invokeViaAnthropic(params) {
-  let model = params.model ?? "claude-sonnet-4-5";
-  if (model.includes("sonnet")) model = "claude-3-5-sonnet-20240620";
-  else if (model.includes("haiku")) model = "claude-3-haiku-20240307";
-  else if (model.includes("opus")) model = "claude-3-opus-20240229";
+  let model = process.env.ANTHROPIC_MODEL || params.model || "claude-sonnet-5";
+  if (model === "claude-sonnet-4-5") {
+    model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+  }
+  if (model.includes("sonnet") && !model.includes("claude-sonnet-5")) {
+    model = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+  } else if (model.includes("haiku") || model.includes("fable")) {
+    model = process.env.ANTHROPIC_MODEL || "claude-fable-5";
+  } else if (model.includes("opus") && !model.includes("claude-opus-5")) {
+    model = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+  }
   const maxTokens = params.max_tokens ?? params.maxTokens ?? 4096;
   const systemParts = [];
   const messages2 = [];
@@ -2823,7 +2832,7 @@ var init_llm = __esm({
     resolveApiUrl = () => ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0 ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions` : "https://forge.manus.im/v1/chat/completions";
     assertApiKey = () => {
       if (!ENV.forgeApiKey) {
-        throw new Error("OPENAI_API_KEY is not configured");
+        throw new Error("Weder ANTHROPIC_API_KEY noch BUILT_IN_FORGE_API_KEY ist in der .env-Datei hinterlegt!");
       }
     };
     normalizeResponseFormat = ({
@@ -4647,7 +4656,7 @@ async function executeAction(ctx, parsed2) {
         break;
       }
       case "maps_action": {
-        result = `Google Maps Ansicht f\xFCr ${payload.location || "den Ort"} wurde auf dem Dashboard aktualisiert (Der Nutzer sieht dies als eingebettete Karte in der App).`;
+        result = `Google Maps Ansicht f\xFCr ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
         break;
       }
       default:
@@ -5000,7 +5009,7 @@ WEB-SUCHE & KONKURRENZ: Du kannst das Internet durchsuchen, um z.B. Konkurrenz-M
 
 MAPS: Du kannst Google Maps Karten direkt f\xFCr den Nutzer einblenden:
 <maps_action>{"location":"Zell LU","mode":"place"}</maps_action>
-Nutze dies, wenn der Nutzer nach Standorten, Verkehr oder Routen fragt. Die Karte erscheint dann in der App.
+Nutze dies, wenn der Nutzer nach Standorten, Verkehr oder Routen fragt. Die Karte erscheint dann direkt hier im Chat als interaktives Widget.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Vertr\xE4gen, Ausgaben und Produkten.
 Wenn Stefan etwas aus seiner App m\xF6chte, nutze app_action-Bl\xF6cke. Du darfst mehrere pro Runde einsetzen,
@@ -9157,7 +9166,15 @@ async function handleTtsStream(req, res, userId) {
         res.status(429).json({ error: "Sprachausgabe-Guthaben aufgebraucht" });
         return;
       }
-      res.status(502).json({ error: `Sprachausgabe fehlgeschlagen (${upstream.status})` });
+      let errorMessage = `Sprachausgabe fehlgeschlagen (${upstream.status})`;
+      try {
+        const parsed2 = JSON.parse(errText);
+        if (parsed2.error && parsed2.error.message) {
+          errorMessage = `OpenAI API Fehler: ${parsed2.error.message}`;
+        }
+      } catch (e) {
+      }
+      res.status(502).json({ error: errorMessage, details: errText.slice(0, 500) });
       return;
     }
     const total = await addTtsUsage(userId, currentYearMonth(), spoken.length);

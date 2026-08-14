@@ -515,7 +515,7 @@ export async function executeAction(
         break;
       }
       case "maps_action": {
-        result = `Google Maps Ansicht für ${payload.location || "den Ort"} wurde auf dem Dashboard aktualisiert (Der Nutzer sieht dies als eingebettete Karte in der App).`;
+        result = `Google Maps Ansicht für ${payload.location || "den Ort"} wurde direkt im Chat-Verlauf eingeblendet.`;
         break;
       }
       default:

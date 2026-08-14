@@ -154,7 +154,7 @@ export async function msFetch(
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
-      Prefer: 'outlook.timezone="Europe/Zurich"',
+      Prefer: 'outlook.timezone="UTC"',
       ...(options.headers ?? {}),
     },
   });
