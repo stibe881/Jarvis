@@ -3048,7 +3048,7 @@ var init_voiceTranscription = __esm({
 // shared/cleanText.ts
 function removeInternalTags(text2) {
   if (!text2) return text2;
-  return text2.replace(/<[a-z_]+_action>[\s\S]*?(?:<\/[a-z_]+_action>|$)/gi, "").replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ");
+  return text2.replace(/<(?!maps_action>)[a-z_]+_action>[\s\S]*?(?:<\/(?!maps_action>)[a-z_]+_action>|$)/gi, "").replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ");
 }
 function splitSentences(text2) {
   return text2.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
@@ -4402,7 +4402,7 @@ async function executeHomeAssistantAction(params) {
     return "Fehler: Home Assistant Zugangsdaten (HA_BASE_URL, HA_ACCESS_TOKEN) sind nicht in der .env hinterlegt.";
   }
   const headers2 = {
-    "Authorization": `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json"
   };
   try {
@@ -4414,7 +4414,16 @@ async function executeHomeAssistantAction(params) {
         const entity = states.find((s) => s.entity_id === params.entityId);
         return entity || `Entit\xE4t ${params.entityId} nicht gefunden.`;
       }
-      const ACTIONABLE_DOMAINS = ["light", "switch", "climate", "cover", "scene", "script", "media_player", "automation"];
+      const ACTIONABLE_DOMAINS = [
+        "light",
+        "switch",
+        "climate",
+        "cover",
+        "scene",
+        "script",
+        "media_player",
+        "automation"
+      ];
       const filtered = states.filter((s) => {
         const domain = s.entity_id.split(".")[0];
         return ACTIONABLE_DOMAINS.includes(domain);
@@ -4433,11 +4442,14 @@ async function executeHomeAssistantAction(params) {
       if (params.service === "turn_off" && serviceData.brightness !== void 0) {
         delete serviceData.brightness;
       }
-      const res = await fetch(`${baseUrl}/api/services/${params.domain}/${params.service}`, {
-        method: "POST",
-        headers: headers2,
-        body: JSON.stringify(serviceData)
-      });
+      const res = await fetch(
+        `${baseUrl}/api/services/${params.domain}/${params.service}`,
+        {
+          method: "POST",
+          headers: headers2,
+          body: JSON.stringify(serviceData)
+        }
+      );
       if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
       return await res.json();
     }
@@ -5307,6 +5319,7 @@ Unterst\xFCtzte Domains und Aktionen:
 - **Spotify via Cast** (spotcast): \`start\` mit \`{"uri":"spotify:playlist:...", "device_name":"Lina Speaker"}\`.
 Beispiele:
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Ger\xE4te zur\xFCck)
+<home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"cover","service":"set_cover_position","serviceData":{"entity_id":"cover.wohnzimmer","position":50}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"button","service":"press","serviceData":{"entity_id":"button.evb_sofa_my_position"}}</home_assistant_action>
 Nutze get_states immer kurz im Hintergrund, um die exakte entity_id herauszufinden, bevor du call_service verwendest! Sag dem Nutzer einfach "Wird erledigt" und mach es im Hintergrund.

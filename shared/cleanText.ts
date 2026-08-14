@@ -18,7 +18,11 @@ export function removeInternalTags(text: string): string {
       // Entferne alle Werkzeug-XML-Blöcke (z.B. <app_action>...</app_action>)
       // Das (?:<\/[a-z_]+_action>|$) stellt sicher, dass es auch während dem Streamen
       // ausgeblendet wird, wenn das schließende Tag noch fehlt.
-      .replace(/<[a-z_]+_action>[\s\S]*?(?:<\/[a-z_]+_action>|$)/gi, "")
+      // WICHTIG: <maps_action> NICHT entfernen, da das Frontend diese braucht!
+      .replace(
+        /<(?!maps_action>)[a-z_]+_action>[\s\S]*?(?:<\/(?!maps_action>)[a-z_]+_action>|$)/gi,
+        ""
+      )
       .replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "")
       .replace(/\s+([.,;:!?])/g, "$1")
       .replace(/[ \t]{2,}/g, " ")
