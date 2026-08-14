@@ -61,7 +61,14 @@ export const jarvisTools: Tool[] = [
         properties: {
           category: {
             type: "string",
-            enum: ["person", "contact", "preference", "project", "fact"],
+            enum: [
+              "person",
+              "contact",
+              "preference",
+              "project",
+              "fact",
+              "address",
+            ],
           },
           key: { type: "string" },
           value: { type: "string" },
@@ -235,11 +242,15 @@ export const jarvisTools: Tool[] = [
     type: "function",
     function: {
       name: "news_action",
-      description: "Die neuesten Nachrichten (News) von SRF, Blick und 20 Minuten abrufen.",
+      description:
+        "Die neuesten Nachrichten (News) von SRF, Blick und 20 Minuten abrufen.",
       parameters: {
         type: "object",
         properties: {
-          source: { type: "string", description: "Optional: 'SRF', 'Blick' oder '20 Minuten'" }
+          source: {
+            type: "string",
+            description: "Optional: 'SRF', 'Blick' oder '20 Minuten'",
+          },
         },
         required: [],
       },
@@ -249,7 +260,8 @@ export const jarvisTools: Tool[] = [
     type: "function",
     function: {
       name: "maps_action",
-      description: "Google Maps Karte für den Nutzer einblenden (als Antwort-Widget)",
+      description:
+        "Google Maps Karte für den Nutzer einblenden (als Antwort-Widget)",
       parameters: {
         type: "object",
         properties: {
@@ -265,15 +277,36 @@ export const jarvisTools: Tool[] = [
     type: "function",
     function: {
       name: "smarthome_action",
-      description: "Interaktion mit der Smarthome Pro App (Lese- und Schreibzugriff auf alle Tabellen der Supabase-Datenbank)",
+      description:
+        "Interaktion mit der Smarthome Pro App (Lese- und Schreibzugriff auf alle Tabellen der Supabase-Datenbank)",
       parameters: {
         type: "object",
         properties: {
-          table: { type: "string", description: "Name der Tabelle (z.B. family_routines, packing_lists, household_cameras)" },
-          operation: { type: "string", enum: ["select", "insert", "update", "delete"], description: "Die auszuführende Datenbank-Operation" },
-          match: { type: "object", description: "Optional: Filter für SELECT, UPDATE, DELETE (z.B. {'id': '123'} oder {'household_id': '456'})" },
-          body: { type: "object", description: "Optional: Die Datenstruktur, die für INSERT oder UPDATE geschrieben werden soll" },
-          select: { type: "string", description: "Optional: Spaltenauswahl für SELECT (z.B. 'id, name, status'), standardmäßig '*'" }
+          table: {
+            type: "string",
+            description:
+              "Name der Tabelle (z.B. family_routines, packing_lists, household_cameras)",
+          },
+          operation: {
+            type: "string",
+            enum: ["select", "insert", "update", "delete"],
+            description: "Die auszuführende Datenbank-Operation",
+          },
+          match: {
+            type: "object",
+            description:
+              "Optional: Filter für SELECT, UPDATE, DELETE (z.B. {'id': '123'} oder {'household_id': '456'})",
+          },
+          body: {
+            type: "object",
+            description:
+              "Optional: Die Datenstruktur, die für INSERT oder UPDATE geschrieben werden soll",
+          },
+          select: {
+            type: "string",
+            description:
+              "Optional: Spaltenauswahl für SELECT (z.B. 'id, name, status'), standardmäßig '*'",
+          },
         },
         required: ["table", "operation"],
       },
@@ -283,15 +316,37 @@ export const jarvisTools: Tool[] = [
     type: "function",
     function: {
       name: "home_assistant_action",
-      description: "Interaktion mit Home Assistant (Geräte steuern, Lichter schalten, Status auslesen)",
+      description:
+        "Interaktion mit Home Assistant (Geräte steuern, Lichter schalten, Status auslesen)",
       parameters: {
         type: "object",
         properties: {
-          action: { type: "string", enum: ["get_states", "call_service"], description: "Die auszuführende Aktion. get_states liest Sensoren/Lichter, call_service steuert sie." },
-          domain: { type: "string", description: "Nur für call_service: Die Domain (z.B. 'light', 'switch', 'climate', 'script')" },
-          service: { type: "string", description: "Nur für call_service: Der Service (z.B. 'turn_on', 'turn_off', 'set_temperature')" },
-          serviceData: { type: "object", description: "Nur für call_service: Zusätzliche Daten (meistens {'entity_id': 'light.wohnzimmer'}, oder {'entity_id': '...', 'brightness': 255})" },
-          entityId: { type: "string", description: "Nur für get_states: Spezifische entity_id (z.B. 'light.wohnzimmer'), falls nur ein Gerät gelesen werden soll." }
+          action: {
+            type: "string",
+            enum: ["get_states", "call_service"],
+            description:
+              "Die auszuführende Aktion. get_states liest Sensoren/Lichter, call_service steuert sie.",
+          },
+          domain: {
+            type: "string",
+            description:
+              "Nur für call_service: Die Domain (z.B. 'light', 'switch', 'climate', 'script')",
+          },
+          service: {
+            type: "string",
+            description:
+              "Nur für call_service: Der Service (z.B. 'turn_on', 'turn_off', 'set_temperature')",
+          },
+          serviceData: {
+            type: "object",
+            description:
+              "Nur für call_service: Zusätzliche Daten (meistens {'entity_id': 'light.wohnzimmer'}, oder {'entity_id': '...', 'brightness': 255})",
+          },
+          entityId: {
+            type: "string",
+            description:
+              "Nur für get_states: Spezifische entity_id (z.B. 'light.wohnzimmer'), falls nur ein Gerät gelesen werden soll.",
+          },
         },
         required: ["action"],
       },

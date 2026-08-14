@@ -385,7 +385,7 @@ export const chatRouter = router({
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     let calendarContext = "";
     try {
       const upcoming = await executeCalendarAction(ctx.user.id, "list_events", {
@@ -424,7 +424,7 @@ Antworte auf Deutsch.`;
 
     const llmMessages = [
       { role: "system", content: systemPrompt },
-      { role: "user", content: `${calendarContext}\n\n${tasksContext}` }
+      { role: "user", content: `${calendarContext}\n\n${tasksContext}` },
     ];
 
     try {
@@ -433,7 +433,11 @@ Antworte auf Deutsch.`;
         max_tokens: 500,
         messages: llmMessages as any,
       });
-      return { briefing: llmResp.choices[0]?.message?.content || "Konnte kein Briefing generieren." };
+      return {
+        briefing:
+          llmResp.choices[0]?.message?.content ||
+          "Konnte kein Briefing generieren.",
+      };
     } catch (e) {
       console.error("Error generating morning briefing:", e);
       return { briefing: "Fehler beim Generieren der Tagesplanung." };
@@ -658,6 +662,7 @@ Antworte auf Deutsch.`;
             preference: "Vorlieben",
             project: "Projekte",
             fact: "Fakten",
+            address: "Adressen",
             context: "Kontext",
           };
           const lines = Object.entries(grouped)
@@ -877,7 +882,6 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: llmMessages2 as any,
-            
           });
           const msgContent2 = llmResp2.choices[0]?.message;
           const fullResponse2 = {
@@ -904,7 +908,6 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
                 model: "claude-sonnet-4-5",
                 max_tokens: 4096,
                 messages: msgs as any,
-                
               });
               const msg = next.choices[0]?.message;
               return {
@@ -1057,7 +1060,6 @@ ${calendarContext}${memoryContext}${approvalContext}`;
         model: "claude-sonnet-4-5",
         max_tokens: 4096,
         messages: llmMessages as any,
-        
       });
       const msgContent = llmResp.choices[0]?.message;
       const fullResponse = {
@@ -1077,7 +1079,6 @@ ${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: msgs as any,
-            
           });
           const msg = next.choices[0]?.message;
           return {

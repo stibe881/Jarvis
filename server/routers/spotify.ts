@@ -241,7 +241,7 @@ export async function executeSpotifyAction(
         if (r.status === 404) return noDevice;
         if (r.status === 403)
           return "⚠️ Für die Wiedergabesteuerung wird Spotify Premium benötigt.";
-        return `▶️ Spiele **${formatTrack(track)}**`;
+        return `▶️ Spiele **${formatTrack(track)}**. (Hinweis: Falls nichts zu hören ist, öffne kurz die Spotify App auf dem Handy, um das Gerät aufzuwecken.)`;
       }
       const ctx = items[0] as { uri: string; name: string };
       const r = await spotifyFetch(token, "/me/player/play", {
@@ -257,7 +257,7 @@ export async function executeSpotifyAction(
           : type === "album"
             ? "Album"
             : "Künstler";
-      return `▶️ Spiele ${label} **${ctx.name}**`;
+      return `▶️ Spiele ${label} **${ctx.name}**. (Hinweis: Falls nichts zu hören ist, öffne kurz die Spotify App auf dem Handy, um das Gerät aufzuwecken.)`;
     }
 
     case "pause": {

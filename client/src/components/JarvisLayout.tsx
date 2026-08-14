@@ -52,24 +52,42 @@ const primaryNav = [
   { href: "/app", label: "Meine App", icon: LayoutDashboard },
 ];
 
-// Alle Nav-Items (für Desktop-Sidebar und Mehr-Menü)
-const navItems = [
-  { href: "/", label: "Chat", icon: MessageSquare },
-  { href: "/notes", label: "Notizen", icon: StickyNote },
-  { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
-  { href: "/calendar", label: "Kalender", icon: CalendarDays },
-  { href: "/voice-notes", label: "Sprachnotizen", icon: Mic },
-  { href: "/templates", label: "Vorlagen", icon: FileText },
-  { href: "/delegation", label: "Delegation", icon: UserPlus },
-  { href: "/memory", label: "Gedächtnis", icon: Brain },
-  { href: "/gross-ict", label: "Gross ICT", icon: Briefcase },
-  { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
-  { href: "/app", label: "Meine App", icon: LayoutDashboard },
-  { href: "/customer", label: "Kunden-Dossier", icon: IdCard },
-  { href: "/integrations", label: "Verbindungen", icon: Plug },
-  { href: "/shortcuts", label: "iPhone-Setup", icon: Smartphone },
-  { href: "/profile", label: "Profil", icon: Settings },
+// Gruppen für die Desktop-Sidebar
+const navGroups = [
+  {
+    title: "ASSISTENT",
+    items: [
+      { href: "/", label: "Chat", icon: MessageSquare },
+      { href: "/notes", label: "Notizen", icon: StickyNote },
+      { href: "/voice-notes", label: "Sprachnotizen", icon: Mic },
+      { href: "/tasks", label: "Aufgaben", icon: CheckSquare },
+      { href: "/calendar", label: "Kalender", icon: CalendarDays },
+    ],
+  },
+  {
+    title: "SYSTEME & KUNDEN",
+    items: [
+      { href: "/app", label: "Meine App", icon: LayoutDashboard },
+      { href: "/customer", label: "Kunden-Dossier", icon: IdCard },
+      { href: "/gross-ict", label: "Gross ICT", icon: Briefcase },
+      { href: "/sonnenberg", label: "Sonnenberg", icon: Building2 },
+    ],
+  },
+  {
+    title: "EINSTELLUNGEN",
+    items: [
+      { href: "/memory", label: "Gedächtnis", icon: Brain },
+      { href: "/templates", label: "Vorlagen", icon: FileText },
+      { href: "/delegation", label: "Delegation", icon: UserPlus },
+      { href: "/integrations", label: "Verbindungen", icon: Plug },
+      { href: "/shortcuts", label: "iPhone-Setup", icon: Smartphone },
+      { href: "/profile", label: "Profil", icon: Settings },
+    ],
+  },
 ];
+
+// Flache Liste für Mobile und Bottom-Nav
+const navItems = navGroups.flatMap(g => g.items);
 
 export default function JarvisLayout({
   children,
@@ -274,27 +292,34 @@ export default function JarvisLayout({
               </div>
             </div>
           </div>
-          <nav className="flex-1 p-4 space-y-1">
-            {navItems.map(({ href, label, icon: Icon }) => (
-              <Link key={href} href={href}>
-                <div
-                  className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
-                    isActive(href)
-                      ? "bg-primary/20 text-primary jarvis-border"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent"
-                  )}
-                >
-                  <Icon
-                    size={18}
-                    className={isActive(href) ? "text-primary" : ""}
-                  />
-                  {label}
-                  {isActive(href) && (
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />
-                  )}
+          <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+            {navGroups.map(group => (
+              <div key={group.title} className="space-y-1">
+                <div className="px-3 py-2 text-[10px] font-bold text-muted-foreground tracking-widest uppercase">
+                  {group.title}
                 </div>
-              </Link>
+                {group.items.map(({ href, label, icon: Icon }) => (
+                  <Link key={href} href={href}>
+                    <div
+                      className={cn(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150",
+                        isActive(href)
+                          ? "bg-primary/20 text-primary jarvis-border"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent"
+                      )}
+                    >
+                      <Icon
+                        size={18}
+                        className={isActive(href) ? "text-primary" : ""}
+                      />
+                      {label}
+                      {isActive(href) && (
+                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary jarvis-glow-sm" />
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
             ))}
           </nav>
           <div className="p-4 border-t border-border">

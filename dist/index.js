@@ -4050,7 +4050,7 @@ async function executeSpotifyAction(userId, action, params) {
         if (r2.status === 404) return noDevice;
         if (r2.status === 403)
           return "\u26A0\uFE0F F\xFCr die Wiedergabesteuerung wird Spotify Premium ben\xF6tigt.";
-        return `\u25B6\uFE0F Spiele **${formatTrack(track)}**`;
+        return `\u25B6\uFE0F Spiele **${formatTrack(track)}**. (Hinweis: Falls nichts zu h\xF6ren ist, \xF6ffne kurz die Spotify App auf dem Handy, um das Ger\xE4t aufzuwecken.)`;
       }
       const ctx = items[0];
       const r = await spotifyFetch(token, "/me/player/play", {
@@ -4061,7 +4061,7 @@ async function executeSpotifyAction(userId, action, params) {
       if (r.status === 403)
         return "\u26A0\uFE0F F\xFCr die Wiedergabesteuerung wird Spotify Premium ben\xF6tigt.";
       const label = type === "playlist" ? "Playlist" : type === "album" ? "Album" : "K\xFCnstler";
-      return `\u25B6\uFE0F Spiele ${label} **${ctx.name}**`;
+      return `\u25B6\uFE0F Spiele ${label} **${ctx.name}**. (Hinweis: Falls nichts zu h\xF6ren ist, \xF6ffne kurz die Spotify App auf dem Handy, um das Ger\xE4t aufzuwecken.)`;
     }
     case "pause": {
       const r = await spotifyFetch(token, "/me/player/pause", {
@@ -5236,8 +5236,9 @@ Zeige auch hier NIE den rohen Block, sondern pr\xE4sentiere die Antwort in nat\x
 
 GED\xC4CHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 <memory_action>{"category":"person","key":"Bine E-Mail","value":"bine@example.com"}</memory_action>
-Kategorien: person, contact, preference, project, fact.
-WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und d\xFCrfen im Antworttext nicht auftauchen. Formuliere den Inhalt in nat\xFCrlicher Sprache.
+Kategorien: person, contact, preference, project, fact, address.
+WICHTIG: Wenn der Nutzer dir eine Adresse (z.B. Wohnort, B\xFCro, Firma) nennt, speichere diese SOFORT und unaufgefordert unter der Kategorie 'address' ab!
+WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project], [fact] oder [address]. Das sind technische Kategorien aus dem gespeicherten Wissen und d\xFCrfen im Antworttext nicht auftauchen. Formuliere den Inhalt in nat\xFCrlicher Sprache.
 Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
 
 E-MAIL: Du kannst ungelesene E-Mails abrufen oder Mails durchsuchen:
@@ -5325,9 +5326,7 @@ Beispiele:
 <home_assistant_action>{"action":"call_service","domain":"cover","service":"set_cover_position","serviceData":{"entity_id":"cover.wohnzimmer","position":50}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"button","service":"press","serviceData":{"entity_id":"button.evb_sofa_my_position"}}</home_assistant_action>
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Ger\xE4te zur\xFCck)
-WICHTIG F\xDCR DIE GESCHWINDIGKEIT: 
-1. Nutze \`get_states\` NUR im absoluten Notfall! Versuche IMMER sofort \`call_service\` im ersten Schritt zu nutzen (z.B. \`light.buero\`, \`light.wohnzimmer\`).
-2. Antworte bei Smarthome-Befehlen EXTREM KURZ (maximal 2-3 W\xF6rter wie "Wird gemacht" oder "Licht an"), damit das Smart Home sofort und ohne Verz\xF6gerung schaltet! Vermeide lange Erkl\xE4rungen.
+WICHTIG F\xDCR DIE GESCHWINDIGKEIT: Nutze \`get_states\` NUR im absoluten Notfall! Versuche IMMER sofort \`call_service\` im ersten Schritt zu nutzen (z.B. \`light.buero\`, \`light.wohnzimmer\`). Behalte deinen normalen, h\xF6flichen Stil bei, aber verzichte auf \xFCberfl\xFCssige Romane.
 
 KARTEN & GPS:
 Wenn du eine Karte \xFCber \`<maps_action>\` anzeigst, LIES NIEMALS DIE L\xC4NGEN- ODER BREITENGRADE VOR! Beschreibe den Ort nur kurz ("Die Karte zu [Ort] wurde eingeblendet").`;
@@ -5941,6 +5940,7 @@ ${upcoming}`;
               preference: "Vorlieben",
               project: "Projekte",
               fact: "Fakten",
+              address: "Adressen",
               context: "Kontext"
             };
             const lines = Object.entries(grouped).map(([cat, items]) => `${namen[cat] ?? cat}:
