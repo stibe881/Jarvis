@@ -1657,7 +1657,7 @@ function JarvisChatInner() {
             </div>
           )}
         </div>
-        <ScrollArea className="flex-1">
+        <ScrollArea className="flex-1 min-h-0">
           {manageMode && (
             <div className="p-2 border-b">
               <Button
@@ -1998,7 +1998,7 @@ function JarvisChatInner() {
 
         {/* Messages */}
         <ScrollArea
-          className="flex-1 px-3 md:px-6 py-4"
+          className="flex-1 min-h-0 px-3 md:px-6 py-4"
           ref={scrollRef as React.RefObject<HTMLDivElement>}
         >
           {messages.length === 0 && !isListening ? (

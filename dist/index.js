@@ -3446,11 +3446,15 @@ async function createTicket(data) {
   });
 }
 async function resolveTicketId(idOrTitle) {
-  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrTitle)) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    idOrTitle
+  )) {
     return idOrTitle;
   }
   const cleanTitle = sanitizeSearchTerm(idOrTitle);
-  const tickets = await sbFetch(`/tickets?title=ilike.*${encodeURIComponent(cleanTitle)}*`);
+  const tickets = await sbFetch(
+    `/tickets?title=ilike.*${encodeURIComponent(cleanTitle)}*`
+  );
   if (tickets && tickets.length > 0) {
     return tickets[0].id;
   }
@@ -3458,7 +3462,9 @@ async function resolveTicketId(idOrTitle) {
 }
 async function assignTicket(id, user_name) {
   const cleanName = sanitizeSearchTerm(user_name);
-  const users2 = await sbFetch(`/users?name=ilike.*${encodeURIComponent(cleanName)}*`);
+  const users2 = await sbFetch(
+    `/users?name=ilike.*${encodeURIComponent(cleanName)}*`
+  );
   if (!users2 || users2.length === 0) {
     throw new Error(`Mitarbeiter '${user_name}' nicht gefunden.`);
   }
