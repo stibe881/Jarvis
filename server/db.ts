@@ -352,14 +352,12 @@ export async function getGoogleToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return undefined;
 
-  let q = db.select().from(googleTokens).where(eq(googleTokens.userId, userId));
+  let condition = eq(googleTokens.userId, userId);
   if (email) {
-    q = q.where(
-      and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
-    );
+    condition = and(eq(googleTokens.userId, userId), eq(googleTokens.email, email)) as any;
   }
 
-  const rows = await q.limit(1);
+  const rows = await db.select().from(googleTokens).where(condition).limit(1);
   return rows[0];
 }
 
@@ -395,8 +393,8 @@ export async function upsertGoogleToken(data: {
         accessToken: data.accessToken,
         ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
         expiresAt: data.expiresAt,
-        scope: data.scope ?? null,
-        email: data.email ?? null,
+        scope: data.scope ?? "",
+        email: data.email ?? "",
         ...(data.disabledCalendars
           ? { disabledCalendars: data.disabledCalendars }
           : {}),
@@ -424,17 +422,12 @@ export async function getMicrosoftToken(userId: number, email?: string) {
   const db = await getDb();
   if (!db) return undefined;
 
-  let q = db
-    .select()
-    .from(microsoftTokens)
-    .where(eq(microsoftTokens.userId, userId));
+  let condition = eq(microsoftTokens.userId, userId);
   if (email) {
-    q = q.where(
-      and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email))
-    );
+    condition = and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email)) as any;
   }
 
-  const rows = await q.limit(1);
+  const rows = await db.select().from(microsoftTokens).where(condition).limit(1);
   return rows[0];
 }
 
@@ -470,8 +463,8 @@ export async function upsertMicrosoftToken(data: {
         accessToken: data.accessToken,
         ...(data.refreshToken ? { refreshToken: data.refreshToken } : {}),
         expiresAt: data.expiresAt,
-        scope: data.scope ?? null,
-        email: data.email ?? null,
+        scope: data.scope ?? "",
+        email: data.email ?? "",
         ...(data.disabledCalendars
           ? { disabledCalendars: data.disabledCalendars }
           : {}),

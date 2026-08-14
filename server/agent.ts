@@ -193,6 +193,9 @@ export const ACTION_TAGS = [
   "tasks_action",
   "schedule_task",
   "github_action",
+  "email_action",
+  "web_search",
+  "maps_action",
 ] as const;
 
 export type ActionTag = (typeof ACTION_TAGS)[number];

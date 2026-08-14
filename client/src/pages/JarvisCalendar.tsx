@@ -16,9 +16,6 @@ import {
   Edit2,
   ExternalLink,
   RefreshCw,
-  Edit2,
-  ExternalLink,
-  RefreshCw,
   ChevronLeft,
   ChevronRight,
   Settings,
@@ -465,7 +462,7 @@ export default function JarvisCalendar() {
                 Keine Termine in diesem Monat
               </div>
             )}
-            {events?.map(ev => (
+            {events?.map((ev: any) => (
               <div
                 key={ev.id}
                 className="group flex items-start gap-3 p-3 rounded-lg bg-card border border-border hover:border-primary/30 transition-all"

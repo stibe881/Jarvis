@@ -23,6 +23,7 @@ import { newsRouter } from "./routers/news";
 
 export const appRouter = router({
   system: systemRouter,
+  news: newsRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

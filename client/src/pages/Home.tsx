@@ -60,7 +60,7 @@ export default function Home() {
               </div>
             ) : (
               <div className="prose prose-sm md:prose-base dark:prose-invert max-w-none">
-                <Streamdown>{briefingData?.briefing || "Keine Informationen verfügbar."}</Streamdown>
+                <Streamdown>{(typeof briefingData?.briefing === 'string' ? briefingData.briefing : String(briefingData?.briefing || "Keine Informationen verfügbar."))}</Streamdown>
               </div>
             )}
           </div>

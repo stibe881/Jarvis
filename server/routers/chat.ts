@@ -23,7 +23,6 @@ import {
   transcribeAudio,
   type WhisperResponse,
 } from "../_core/voiceTranscription";
-import { invokeLLM } from "../_core/llm";
 import { ENV } from "../_core/env";
 import { getGoogleToken, upsertGoogleToken } from "../db";
 import { executeAppAction } from "./appIntegration";
@@ -408,7 +407,7 @@ export const chatRouter = router({
 
     // 2. Offene Aufgaben holen
     const tasks = await getTasksByUser(ctx.user.id);
-    const pendingTasks = tasks.filter(t => t.status !== "done");
+    const pendingTasks = tasks.filter(t => !t.completed);
     const tasksContext =
       pendingTasks.length > 0
         ? `Offene Aufgaben:\n${pendingTasks
