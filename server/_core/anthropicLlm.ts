@@ -64,6 +64,9 @@ export async function invokeViaAnthropic(
   params: InvokeParams
 ): Promise<InvokeResult> {
   let model = params.model ?? "claude-sonnet-4-5";
+  if (model.includes("sonnet")) model = "claude-3-5-sonnet-20241022";
+  else if (model.includes("haiku")) model = "claude-3-5-haiku-20241022";
+  else if (model.includes("opus")) model = "claude-3-opus-20240229";
   const maxTokens = params.max_tokens ?? params.maxTokens ?? 4096;
 
   // System-Nachrichten einsammeln; sie werden bei Anthropic als eigenes Feld
