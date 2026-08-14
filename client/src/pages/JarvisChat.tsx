@@ -1009,11 +1009,45 @@ function JarvisChatInner() {
           if ("geolocation" in navigator) {
             const getPos = () =>
               new Promise<GeolocationPosition>((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, {
-                  timeout: 10000,
-                  maximumAge: 0,
-                  enableHighAccuracy: true,
-                });
+                let bestPos: GeolocationPosition | null = null;
+
+                const timeoutId = setTimeout(() => {
+                  if (typeof watchId !== "undefined")
+                    navigator.geolocation.clearWatch(watchId);
+                  if (bestPos) resolve(bestPos);
+                  else reject(new Error("Timeout beim Warten auf GPS-Signal"));
+                }, 10000);
+
+                const watchId = navigator.geolocation.watchPosition(
+                  pos => {
+                    // Update best position if accuracy is better
+                    if (
+                      !bestPos ||
+                      pos.coords.accuracy < bestPos.coords.accuracy
+                    ) {
+                      bestPos = pos;
+                    }
+                    // If accuracy is good enough (e.g. < 30 meters), we accept it immediately
+                    if (pos.coords.accuracy <= 30) {
+                      clearTimeout(timeoutId);
+                      navigator.geolocation.clearWatch(watchId);
+                      resolve(pos);
+                    }
+                  },
+                  err => {
+                    if (!bestPos) {
+                      clearTimeout(timeoutId);
+                      if (typeof watchId !== "undefined")
+                        navigator.geolocation.clearWatch(watchId);
+                      reject(err);
+                    }
+                  },
+                  {
+                    timeout: 10000,
+                    maximumAge: 0,
+                    enableHighAccuracy: true,
+                  }
+                );
               });
             try {
               const pos = await getPos();

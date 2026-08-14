@@ -3048,7 +3048,10 @@ var init_voiceTranscription = __esm({
 // shared/cleanText.ts
 function removeInternalTags(text2) {
   if (!text2) return text2;
-  return text2.replace(/<(?!maps_action>)[a-z_]+_action>[\s\S]*?(?:<\/(?!maps_action>)[a-z_]+_action>|$)/gi, "").replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ");
+  return text2.replace(
+    /<(?!maps_action>)[a-z_]+_action>[\s\S]*?(?:<\/(?!maps_action>)[a-z_]+_action>|$)/gi,
+    ""
+  ).replace(new RegExp(`\\s*\\[(?:${INTERNE_TAGS})\\]`, "gi"), "").replace(/\s+([.,;:!?])/g, "$1").replace(/[ \t]{2,}/g, " ");
 }
 function splitSentences(text2) {
   return text2.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);

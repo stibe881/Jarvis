@@ -144,6 +144,26 @@ export function MapView({
     });
 
     if (address) {
+      // Simple regex to check if address is lat,lng coordinates
+      const coordMatch = address.match(/(-?\d+\.\d+)[\s,]+(-?\d+\.\d+)/);
+
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lng = parseFloat(coordMatch[2]);
+        if (!isNaN(lat) && !isNaN(lng) && map.current) {
+          const loc = { lat, lng };
+          map.current.setCenter(loc);
+          map.current.setZoom(14);
+          new window.google.maps.marker.AdvancedMarkerElement({
+            map: map.current,
+            position: loc,
+            title: "Standort",
+          });
+          if (onMapReady) onMapReady(map.current);
+          return;
+        }
+      }
+
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ address }, (results, status) => {
         if (status === "OK" && results && results[0] && map.current) {
@@ -152,8 +172,15 @@ export function MapView({
           new window.google.maps.marker.AdvancedMarkerElement({
             map: map.current,
             position: results[0].geometry.location,
-            title: address
+            title: address,
           });
+        } else {
+          console.error(
+            "Geocoding failed for address:",
+            address,
+            "Status:",
+            status
+          );
         }
       });
     }
