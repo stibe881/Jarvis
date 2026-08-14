@@ -5191,6 +5191,7 @@ Beispiele f\xFCr Aktionen:
 Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du \xC4nderungen vornimmst.
 
 HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Ger\xE4te (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
+WICHTIG: Wenn Stefan dich bittet, ein Licht, Schalter oder Ger\xE4t ein- oder auszuschalten, MUSST du \`home_assistant_action\` nutzen! Erstelle daf\xFCr NIEMALS eine Aufgabe (tasks_action) oder ein Ticket!
 Beispiele:
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt alle Ger\xE4te und deren Status zur\xFCck)
 <home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>

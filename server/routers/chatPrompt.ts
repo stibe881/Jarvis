@@ -168,8 +168,8 @@ Beispiele für Aktionen:
 <smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
 Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du Änderungen vornimmst.
 
-HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Geräte (Lichter, Schalter, etc.) steuern und Status abfragen via `home_assistant_action`.
-WICHTIG: Wenn Stefan dich bittet, ein Licht, Schalter oder Gerät ein- oder auszuschalten, MUSST du `home_assistant_action` nutzen! Erstelle dafür NIEMALS eine Aufgabe (tasks_action) oder ein Ticket!
+HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Geräte (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
+WICHTIG: Wenn Stefan dich bittet, ein Licht, Schalter oder Gerät ein- oder auszuschalten, MUSST du \`home_assistant_action\` nutzen! Erstelle dafür NIEMALS eine Aufgabe (tasks_action) oder ein Ticket!
 Beispiele:
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt alle Geräte und deren Status zurück)
 <home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>
