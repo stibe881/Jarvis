@@ -22,11 +22,17 @@ import {
   getTasksByUser,
   updateTask,
   upsertMemory,
-  getMicrosoftTokens
+  getMicrosoftTokens,
 } from "./db";
 import { msFetch } from "./routers/calendar";
-import { executeSmarthomeAction, SmarthomeActionParams } from "./_core/smarthome";
-import { executeHomeAssistantAction, HomeAssistantActionParams } from "./_core/homeassistant";
+import {
+  executeSmarthomeAction,
+  SmarthomeActionParams,
+} from "./_core/smarthome";
+import {
+  executeHomeAssistantAction,
+  HomeAssistantActionParams,
+} from "./_core/homeassistant";
 import { ToolCall } from "./_core/llm";
 
 async function executeGithubAction(
@@ -506,12 +512,18 @@ export async function executeAction(
       case "web_search": {
         const query = typeof payload.query === "string" ? payload.query : "";
         try {
-          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
+          const res = await fetch(
+            "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query)
+          );
           const html = await res.text();
           const results = [];
-          const snippetRegex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/g;
+          const snippetRegex =
+            /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/g;
           let match;
-          while ((match = snippetRegex.exec(html)) !== null && results.length < 5) {
+          while (
+            (match = snippetRegex.exec(html)) !== null &&
+            results.length < 5
+          ) {
             results.push("- " + match[1].replace(/<\/?[^>]+(>|$)/g, "").trim());
           }
           if (results.length === 0) result = "Keine Suchergebnisse gefunden.";
@@ -529,15 +541,20 @@ export async function executeAction(
         try {
           const { fetchLatestNews } = await import("./routers/news");
           const allNews = await fetchLatestNews();
-          
+
           let filteredNews = allNews;
-          const sourceFilter = typeof payload.source === "string" ? payload.source.toLowerCase() : null;
-          
+          const sourceFilter =
+            typeof payload.source === "string"
+              ? payload.source.toLowerCase()
+              : null;
+
           if (sourceFilter && sourceFilter !== "alle") {
-            filteredNews = allNews.filter(n => n.source.toLowerCase().includes(sourceFilter));
+            filteredNews = allNews.filter(n =>
+              n.source.toLowerCase().includes(sourceFilter)
+            );
             if (filteredNews.length === 0) filteredNews = allNews; // Fallback
           }
-          
+
           result = JSON.stringify(filteredNews.slice(0, 5));
         } catch (e: any) {
           result = `Fehler beim Abrufen der News: ${e.message}`;
@@ -687,6 +704,7 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
   const maxRounds = opts.maxRounds ?? MAX_AGENT_ROUNDS;
   const steps: AgentStep[] = [];
   const pending: PendingAction[] = [];
+  const mapsActionsToAppend: string[] = [];
   let current = opts.firstResponse;
   let rounds = 0;
 
@@ -698,15 +716,39 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
       const parsed = parseActions(current);
       text = parsed.text;
       actions = parsed.actions;
+
+      // Also grab maps_actions from string parsing
+      for (const a of parsed.actions) {
+        if (a.tag === "maps_action") {
+          mapsActionsToAppend.push(
+            `<maps_action>${JSON.stringify(a.payload)}</maps_action>`
+          );
+        }
+      }
     } else {
       const parsed = parseActions(current.text);
       text = parsed.text;
       actions = parsed.actions;
+
+      for (const a of parsed.actions) {
+        if (a.tag === "maps_action") {
+          mapsActionsToAppend.push(
+            `<maps_action>${JSON.stringify(a.payload)}</maps_action>`
+          );
+        }
+      }
+
       if (current.tool_calls) {
         for (const tc of current.tool_calls) {
           try {
             const payload = JSON.parse(tc.function.arguments || "{}");
             actions.push({ tag: tc.function.name as ActionTag, payload });
+
+            if (tc.function.name === "maps_action") {
+              mapsActionsToAppend.push(
+                `<maps_action>${JSON.stringify(payload)}</maps_action>`
+              );
+            }
           } catch {
             // ignorieren
           }
@@ -781,6 +823,11 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
     const list = pending.map(p => `• ${p.description}`).join("\n");
     finalText = `${finalText}\n\nDafür brauche ich deine Freigabe:\n${list}\n\nSoll ich das ausführen?`;
   }
+
+  if (mapsActionsToAppend.length > 0) {
+    finalText += `\n\n${mapsActionsToAppend.join("\n")}`;
+  }
+
   return { text: finalText, steps, rounds, pending };
 }
 
