@@ -817,15 +817,16 @@ export async function runAgentLoop(opts: RunAgentLoopOptions): Promise<{
 
   let finalText =
     typeof current === "string" ? current.trim() : current.text.trim();
+
+  if (mapsActionsToAppend.length > 0) {
+    finalText += `\n\n${mapsActionsToAppend.join("\n")}`;
+  }
+
   finalText = ensureNextStep(finalText, steps);
   // Sicherheitsnetz: Fragt Jarvis nicht selbst nach, ergänzen wir die Rückfrage
   if (pending.length > 0 && !hasNextStep(finalText)) {
     const list = pending.map(p => `• ${p.description}`).join("\n");
     finalText = `${finalText}\n\nDafür brauche ich deine Freigabe:\n${list}\n\nSoll ich das ausführen?`;
-  }
-
-  if (mapsActionsToAppend.length > 0) {
-    finalText += `\n\n${mapsActionsToAppend.join("\n")}`;
   }
 
   return { text: finalText, steps, rounds, pending };

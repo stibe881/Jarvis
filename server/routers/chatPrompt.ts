@@ -171,7 +171,7 @@ Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit ope
 HOME ASSISTANT (Smarthome Pro): Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst ALLE Geräte aus der Smarthome Pro App steuern.
 WICHTIG: Nutze IMMER \`home_assistant_action\` für Geräte! Erstelle dafür NIEMALS eine Aufgabe!
 Unterstützte Domains und Aktionen:
-- **Licht** (light): \`turn_on\`, \`turn_off\`, \`toggle\` (mit \`brightness\`)
+- **Licht** (light): \`turn_on\` (optional mit \`brightness\`), \`turn_off\` (WICHTIG: KEINE \`brightness\` bei turn_off!), \`toggle\`
 - **Rollläden / Storen** (cover): \`open_cover\`, \`close_cover\`, \`set_cover_position\`. WICHTIG: Für spezielle Storen-Positionen (Essbereich, Küche Balkon, Küche/Küchenfenster, Wohnzimmer/Sofa, Spielplätzchen, Terrasse) rufe \`press\` auf den zugehörigen Button auf, z.B. \`button.evb_sofa_my_position\`.
 - **Staubsauger** (vacuum.robi): \`start\`, \`pause\`, \`return_to_base\`, oder \`send_command\` mit \`{"command":"app_segment_clean","params":[roomId]}\`.
 - **Media Player** (media_player.fernseher_im_wohnzimmer_2, media_player.hub_lina): \`play_media\`, \`media_play_pause\`, \`media_stop\`.

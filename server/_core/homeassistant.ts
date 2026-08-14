@@ -6,7 +6,9 @@ export interface HomeAssistantActionParams {
   entityId?: string; // Optional filter for get_states
 }
 
-export async function executeHomeAssistantAction(params: HomeAssistantActionParams): Promise<any> {
+export async function executeHomeAssistantAction(
+  params: HomeAssistantActionParams
+): Promise<any> {
   const baseUrl = process.env.HA_BASE_URL;
   const token = process.env.HA_ACCESS_TOKEN;
 
@@ -15,7 +17,7 @@ export async function executeHomeAssistantAction(params: HomeAssistantActionPara
   }
 
   const headers = {
-    "Authorization": `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
 
@@ -23,16 +25,25 @@ export async function executeHomeAssistantAction(params: HomeAssistantActionPara
     if (params.action === "get_states") {
       const res = await fetch(`${baseUrl}/api/states`, { headers });
       if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
-      
+
       const states = await res.json();
-      
+
       // Filter states if entityId is provided, otherwise return all
       if (params.entityId) {
         const entity = states.find((s: any) => s.entity_id === params.entityId);
         return entity || `Entität ${params.entityId} nicht gefunden.`;
       }
-      
-      const ACTIONABLE_DOMAINS = ["light", "switch", "climate", "cover", "scene", "script", "media_player", "automation"];
+
+      const ACTIONABLE_DOMAINS = [
+        "light",
+        "switch",
+        "climate",
+        "cover",
+        "scene",
+        "script",
+        "media_player",
+        "automation",
+      ];
       const filtered = states.filter((s: any) => {
         const domain = s.entity_id.split(".")[0];
         return ACTIONABLE_DOMAINS.includes(domain);
@@ -42,21 +53,33 @@ export async function executeHomeAssistantAction(params: HomeAssistantActionPara
       return filtered.map((s: any) => ({
         entity_id: s.entity_id,
         state: s.state,
-        friendly_name: s.attributes?.friendly_name
+        friendly_name: s.attributes?.friendly_name,
       }));
-    } 
-    
+    }
+
     if (params.action === "call_service") {
       if (!params.domain || !params.service) {
         return "Fehler: Für call_service müssen 'domain' und 'service' angegeben werden.";
       }
-      
-      const res = await fetch(`${baseUrl}/api/services/${params.domain}/${params.service}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(params.serviceData || {})
-      });
-      
+
+      const serviceData = { ...(params.serviceData || {}) };
+      // Sicherheitsmassnahme: turn_off akzeptiert keine brightness
+      if (
+        params.service === "turn_off" &&
+        serviceData.brightness !== undefined
+      ) {
+        delete serviceData.brightness;
+      }
+
+      const res = await fetch(
+        `${baseUrl}/api/services/${params.domain}/${params.service}`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify(serviceData),
+        }
+      );
+
       if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
       return await res.json();
     }

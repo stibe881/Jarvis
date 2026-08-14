@@ -4429,10 +4429,14 @@ async function executeHomeAssistantAction(params) {
       if (!params.domain || !params.service) {
         return "Fehler: F\xFCr call_service m\xFCssen 'domain' und 'service' angegeben werden.";
       }
+      const serviceData = { ...params.serviceData || {} };
+      if (params.service === "turn_off" && serviceData.brightness !== void 0) {
+        delete serviceData.brightness;
+      }
       const res = await fetch(`${baseUrl}/api/services/${params.domain}/${params.service}`, {
         method: "POST",
         headers: headers2,
-        body: JSON.stringify(params.serviceData || {})
+        body: JSON.stringify(serviceData)
       });
       if (!res.ok) throw new Error(`Status ${res.status}: ${await res.text()}`);
       return await res.json();
@@ -4799,7 +4803,9 @@ async function executeAction(ctx, parsed2) {
       case "web_search": {
         const query = typeof payload.query === "string" ? payload.query : "";
         try {
-          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
+          const res = await fetch(
+            "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query)
+          );
           const html = await res.text();
           const results = [];
           const snippetRegex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/g;
@@ -4825,7 +4831,9 @@ async function executeAction(ctx, parsed2) {
           let filteredNews = allNews;
           const sourceFilter = typeof payload.source === "string" ? payload.source.toLowerCase() : null;
           if (sourceFilter && sourceFilter !== "alle") {
-            filteredNews = allNews.filter((n) => n.source.toLowerCase().includes(sourceFilter));
+            filteredNews = allNews.filter(
+              (n) => n.source.toLowerCase().includes(sourceFilter)
+            );
             if (filteredNews.length === 0) filteredNews = allNews;
           }
           result = JSON.stringify(filteredNews.slice(0, 5));
@@ -4903,6 +4911,7 @@ async function runAgentLoop(opts) {
   const maxRounds = opts.maxRounds ?? MAX_AGENT_ROUNDS;
   const steps = [];
   const pending = [];
+  const mapsActionsToAppend = [];
   let current = opts.firstResponse;
   let rounds = 0;
   for (let round = 0; round < maxRounds; round++) {
@@ -4912,15 +4921,34 @@ async function runAgentLoop(opts) {
       const parsed2 = parseActions(current);
       text2 = parsed2.text;
       actions = parsed2.actions;
+      for (const a of parsed2.actions) {
+        if (a.tag === "maps_action") {
+          mapsActionsToAppend.push(
+            `<maps_action>${JSON.stringify(a.payload)}</maps_action>`
+          );
+        }
+      }
     } else {
       const parsed2 = parseActions(current.text);
       text2 = parsed2.text;
       actions = parsed2.actions;
+      for (const a of parsed2.actions) {
+        if (a.tag === "maps_action") {
+          mapsActionsToAppend.push(
+            `<maps_action>${JSON.stringify(a.payload)}</maps_action>`
+          );
+        }
+      }
       if (current.tool_calls) {
         for (const tc of current.tool_calls) {
           try {
             const payload = JSON.parse(tc.function.arguments || "{}");
             actions.push({ tag: tc.function.name, payload });
+            if (tc.function.name === "maps_action") {
+              mapsActionsToAppend.push(
+                `<maps_action>${JSON.stringify(payload)}</maps_action>`
+              );
+            }
           } catch {
           }
         }
@@ -4981,6 +5009,11 @@ Wenn du f\xFCr die Aufgabe noch Daten brauchst, nutze weitere Aktionsbl\xF6cke. 
     }
   }
   let finalText = typeof current === "string" ? current.trim() : current.text.trim();
+  if (mapsActionsToAppend.length > 0) {
+    finalText += `
+
+${mapsActionsToAppend.join("\n")}`;
+  }
   finalText = ensureNextStep(finalText, steps);
   if (pending.length > 0 && !hasNextStep(finalText)) {
     const list = pending.map((p) => `\u2022 ${p.description}`).join("\n");
@@ -5264,12 +5297,18 @@ Beispiele f\xFCr Aktionen:
 <smarthome_action>{"table":"household_cameras","operation":"update","match":{"id":"uuid"},"body":{"is_active":true}}</smarthome_action>
 Da du das genaue Datenmodell nicht auswendig kennst, kannst du jederzeit mit operation: "select" auf eine Tabelle zugreifen, um ihre Spalten und Werte zu untersuchen, bevor du \xC4nderungen vornimmst.
 
-HOME ASSISTANT: Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst Ger\xE4te (Lichter, Schalter, etc.) steuern und Status abfragen via \`home_assistant_action\`.
-WICHTIG: Wenn Stefan dich bittet, ein Licht, Schalter oder Ger\xE4t ein- oder auszuschalten, MUSST du \`home_assistant_action\` nutzen! Erstelle daf\xFCr NIEMALS eine Aufgabe (tasks_action) oder ein Ticket!
+HOME ASSISTANT (Smarthome Pro): Stefan hat sein echtes Smarthome (Home Assistant) angebunden. Du kannst ALLE Ger\xE4te aus der Smarthome Pro App steuern.
+WICHTIG: Nutze IMMER \`home_assistant_action\` f\xFCr Ger\xE4te! Erstelle daf\xFCr NIEMALS eine Aufgabe!
+Unterst\xFCtzte Domains und Aktionen:
+- **Licht** (light): \`turn_on\` (optional mit \`brightness\`), \`turn_off\` (WICHTIG: KEINE \`brightness\` bei turn_off!), \`toggle\`
+- **Rolll\xE4den / Storen** (cover): \`open_cover\`, \`close_cover\`, \`set_cover_position\`. WICHTIG: F\xFCr spezielle Storen-Positionen (Essbereich, K\xFCche Balkon, K\xFCche/K\xFCchenfenster, Wohnzimmer/Sofa, Spielpl\xE4tzchen, Terrasse) rufe \`press\` auf den zugeh\xF6rigen Button auf, z.B. \`button.evb_sofa_my_position\`.
+- **Staubsauger** (vacuum.robi): \`start\`, \`pause\`, \`return_to_base\`, oder \`send_command\` mit \`{"command":"app_segment_clean","params":[roomId]}\`.
+- **Media Player** (media_player.fernseher_im_wohnzimmer_2, media_player.hub_lina): \`play_media\`, \`media_play_pause\`, \`media_stop\`.
+- **Spotify via Cast** (spotcast): \`start\` mit \`{"uri":"spotify:playlist:...", "device_name":"Lina Speaker"}\`.
 Beispiele:
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Ger\xE4te zur\xFCck)
-<home_assistant_action>{"action":"get_states","entityId":"light.wohnzimmer"}</home_assistant_action>
-<home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
+<home_assistant_action>{"action":"call_service","domain":"cover","service":"set_cover_position","serviceData":{"entity_id":"cover.wohnzimmer","position":50}}</home_assistant_action>
+<home_assistant_action>{"action":"call_service","domain":"button","service":"press","serviceData":{"entity_id":"button.evb_sofa_my_position"}}</home_assistant_action>
 Nutze get_states immer kurz im Hintergrund, um die exakte entity_id herauszufinden, bevor du call_service verwendest! Sag dem Nutzer einfach "Wird erledigt" und mach es im Hintergrund.
 
 KARTEN & GPS:

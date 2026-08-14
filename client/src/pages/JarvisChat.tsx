@@ -64,10 +64,12 @@ function AssistantMessage({ content }: { content: string }) {
   // Interne Kategorie-Markierungen ausblenden – sie sind technische Hinweise
   // aus dem Gedächtnis-Kontext und gehören nicht in die Antwort.
   const roh = idx >= 0 ? content.slice(0, idx).trim() : content;
-  
+
   // Bereinige den Text für die Anzeige (entferne den rohen XML-Block, da wir die Karte separiert rendern)
-  const displayText = roh.replace(/<maps_action>[\s\S]*?<\/maps_action>/gi, "").trim();
-    
+  const displayText = roh
+    .replace(/<maps_action>[\s\S]*?<\/maps_action>/gi, "")
+    .trim();
+
   // Extrahiere Map-Location, falls vorhanden
   let mapLocation: string | null = null;
   const mapsMatch = roh.match(/<maps_action>([\s\S]*?)<\/maps_action>/i);
@@ -75,7 +77,7 @@ function AssistantMessage({ content }: { content: string }) {
     try {
       const payload = JSON.parse(mapsMatch[1]);
       mapLocation = payload.location;
-    } catch(e) {}
+    } catch (e) {}
   }
 
   const text = removeInternalTags(displayText);
@@ -838,14 +840,16 @@ function JarvisChatInner() {
   const { data: conversations } = trpc.chat.listConversations.useQuery();
   const { data: suggestions } = trpc.chat.suggestions.useQuery();
   const { data: groups } = trpc.chat.listGroups.useQuery();
-  const createGroupMutation = trpc.chat.createGroup.useMutation({ onSuccess: () => utils.chat.listGroups.invalidate() });
-  const moveToGroupMutation = trpc.chat.moveToGroup.useMutation({ 
-    onSuccess: () => { 
-      utils.chat.listConversations.invalidate(); 
-      utils.chat.listGroups.invalidate(); 
-      setSelectedConvs([]); 
-      setManageMode(false); 
-    } 
+  const createGroupMutation = trpc.chat.createGroup.useMutation({
+    onSuccess: () => utils.chat.listGroups.invalidate(),
+  });
+  const moveToGroupMutation = trpc.chat.moveToGroup.useMutation({
+    onSuccess: () => {
+      utils.chat.listConversations.invalidate();
+      utils.chat.listGroups.invalidate();
+      setSelectedConvs([]);
+      setManageMode(false);
+    },
   });
   const [expandedGroups, setExpandedGroups] = useState<number[]>([]);
   const createConvMutation = trpc.chat.createConversation.useMutation({
@@ -1006,7 +1010,7 @@ function JarvisChatInner() {
             const getPos = () =>
               new Promise<GeolocationPosition>((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, {
-                  timeout: 5000,
+                  timeout: 10000,
                   maximumAge: 0,
                   enableHighAccuracy: true,
                 });
@@ -1108,7 +1112,9 @@ function JarvisChatInner() {
                         return updated;
                       });
                     } else if (eventName === "error") {
-                      throw new Error(data.message || "Unbekannter Stream-Fehler");
+                      throw new Error(
+                        data.message || "Unbekannter Stream-Fehler"
+                      );
                     }
                   } catch (e) {
                     console.error("Fehler beim Parsen von SSE", e);
@@ -1585,15 +1591,25 @@ function JarvisChatInner() {
                   <select
                     className="text-[10px] bg-background text-muted-foreground border rounded px-1"
                     value=""
-                    onChange={(e) => {
-                      if(e.target.value) {
-                        moveToGroupMutation.mutate({ conversationIds: selectedConvs, groupId: e.target.value === "none" ? null : parseInt(e.target.value) });
+                    onChange={e => {
+                      if (e.target.value) {
+                        moveToGroupMutation.mutate({
+                          conversationIds: selectedConvs,
+                          groupId:
+                            e.target.value === "none"
+                              ? null
+                              : parseInt(e.target.value),
+                        });
                       }
                     }}
                   >
                     <option value="">Verschieben...</option>
                     <option value="none">Ohne Ordner</option>
-                    {groups?.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                    {groups?.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                      </option>
+                    ))}
                   </select>
                   <button
                     onClick={() =>
@@ -1611,10 +1627,15 @@ function JarvisChatInner() {
         <ScrollArea className="flex-1">
           {manageMode && (
             <div className="p-2 border-b">
-              <Button variant="outline" size="sm" className="w-full text-xs h-7 gap-1" onClick={() => {
-                const name = prompt("Name der neuen Gruppe:");
-                if (name) createGroupMutation.mutate({ name });
-              }}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7 gap-1"
+                onClick={() => {
+                  const name = prompt("Name der neuen Gruppe:");
+                  if (name) createGroupMutation.mutate({ name });
+                }}
+              >
                 <FolderPlus size={12} /> Neuer Ordner
               </Button>
             </div>
@@ -1623,16 +1644,29 @@ function JarvisChatInner() {
             {/* Groups */}
             {groups?.map(group => {
               const isExpanded = expandedGroups.includes(group.id);
-              const groupConvs = conversations?.filter(c => c.groupId === group.id) || [];
+              const groupConvs =
+                conversations?.filter(c => c.groupId === group.id) || [];
               return (
                 <div key={`group-${group.id}`} className="mb-1">
                   <div
                     className="flex items-center gap-2 px-2 py-1.5 rounded text-xs font-semibold text-muted-foreground cursor-pointer hover:text-foreground hover:bg-accent/50"
-                    onClick={() => setExpandedGroups(prev => prev.includes(group.id) ? prev.filter(id => id !== group.id) : [...prev, group.id])}
+                    onClick={() =>
+                      setExpandedGroups(prev =>
+                        prev.includes(group.id)
+                          ? prev.filter(id => id !== group.id)
+                          : [...prev, group.id]
+                      )
+                    }
                   >
-                    {isExpanded ? <FolderOpen size={12} /> : <Folder size={12} />}
+                    {isExpanded ? (
+                      <FolderOpen size={12} />
+                    ) : (
+                      <Folder size={12} />
+                    )}
                     <span className="flex-1 truncate">{group.name}</span>
-                    <span className="text-[10px] opacity-50">{groupConvs.length}</span>
+                    <span className="text-[10px] opacity-50">
+                      {groupConvs.length}
+                    </span>
                   </div>
                   {isExpanded && groupConvs.length > 0 && (
                     <div className="pl-3 mt-1 space-y-1 border-l ml-3 border-border/50">
@@ -1644,11 +1678,17 @@ function JarvisChatInner() {
                             activeConvId === conv.id && !manageMode
                               ? "bg-primary/20 text-primary"
                               : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                            manageMode && selectedConvs.includes(conv.id) && "bg-accent text-foreground"
+                            manageMode &&
+                              selectedConvs.includes(conv.id) &&
+                              "bg-accent text-foreground"
                           )}
                           onClick={() => {
                             if (manageMode) {
-                              setSelectedConvs(prev => prev.includes(conv.id) ? prev.filter(id => id !== conv.id) : [...prev, conv.id]);
+                              setSelectedConvs(prev =>
+                                prev.includes(conv.id)
+                                  ? prev.filter(id => id !== conv.id)
+                                  : [...prev, conv.id]
+                              );
                             } else {
                               setActiveConvId(conv.id);
                               setShowConvSidebar(false);
@@ -1656,13 +1696,32 @@ function JarvisChatInner() {
                           }}
                         >
                           {manageMode && (
-                            <div className={cn("w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0", selectedConvs.includes(conv.id) ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground")}>
-                              {selectedConvs.includes(conv.id) && <CheckSquare size={10} />}
+                            <div
+                              className={cn(
+                                "w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0",
+                                selectedConvs.includes(conv.id)
+                                  ? "bg-primary border-primary text-primary-foreground"
+                                  : "border-muted-foreground"
+                              )}
+                            >
+                              {selectedConvs.includes(conv.id) && (
+                                <CheckSquare size={10} />
+                              )}
                             </div>
                           )}
                           <span className="flex-1 truncate">{conv.title}</span>
                           {!manageMode && (
-                            <button onClick={e => { e.stopPropagation(); deleteConvMutation.mutate({ id: conv.id }); if (activeConvId === conv.id) { setActiveConvId(null); setMessages([]); } }} className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity">
+                            <button
+                              onClick={e => {
+                                e.stopPropagation();
+                                deleteConvMutation.mutate({ id: conv.id });
+                                if (activeConvId === conv.id) {
+                                  setActiveConvId(null);
+                                  setMessages([]);
+                                }
+                              }}
+                              className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                            >
                               <Trash2 size={12} />
                             </button>
                           )}
@@ -1675,39 +1734,68 @@ function JarvisChatInner() {
             })}
 
             {/* Ungrouped */}
-            {groups && groups.length > 0 && <div className="h-px bg-border my-2" />}
-            {conversations?.filter(c => !c.groupId).map(conv => (
-              <div
-                key={conv.id}
-                className={cn(
-                  "group flex items-center gap-2 px-2 py-2 rounded text-xs cursor-pointer transition-all",
-                  activeConvId === conv.id && !manageMode
-                    ? "bg-primary/20 text-primary"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent",
-                  manageMode && selectedConvs.includes(conv.id) && "bg-accent text-foreground"
-                )}
-                onClick={() => {
-                  if (manageMode) {
-                    setSelectedConvs(prev => prev.includes(conv.id) ? prev.filter(id => id !== conv.id) : [...prev, conv.id]);
-                  } else {
-                    setActiveConvId(conv.id);
-                    setShowConvSidebar(false);
-                  }
-                }}
-              >
-                {manageMode && (
-                  <div className={cn("w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0", selectedConvs.includes(conv.id) ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground")}>
-                    {selectedConvs.includes(conv.id) && <CheckSquare size={10} />}
-                  </div>
-                )}
-                <span className="flex-1 truncate">{conv.title}</span>
-                {!manageMode && (
-                  <button onClick={e => { e.stopPropagation(); deleteConvMutation.mutate({ id: conv.id }); if (activeConvId === conv.id) { setActiveConvId(null); setMessages([]); } }} className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity">
-                    <Trash2 size={12} />
-                  </button>
-                )}
-              </div>
-            ))}
+            {groups && groups.length > 0 && (
+              <div className="h-px bg-border my-2" />
+            )}
+            {conversations
+              ?.filter(c => !c.groupId)
+              .map(conv => (
+                <div
+                  key={conv.id}
+                  className={cn(
+                    "group flex items-center gap-2 px-2 py-2 rounded text-xs cursor-pointer transition-all",
+                    activeConvId === conv.id && !manageMode
+                      ? "bg-primary/20 text-primary"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent",
+                    manageMode &&
+                      selectedConvs.includes(conv.id) &&
+                      "bg-accent text-foreground"
+                  )}
+                  onClick={() => {
+                    if (manageMode) {
+                      setSelectedConvs(prev =>
+                        prev.includes(conv.id)
+                          ? prev.filter(id => id !== conv.id)
+                          : [...prev, conv.id]
+                      );
+                    } else {
+                      setActiveConvId(conv.id);
+                      setShowConvSidebar(false);
+                    }
+                  }}
+                >
+                  {manageMode && (
+                    <div
+                      className={cn(
+                        "w-3 h-3 rounded-sm border flex items-center justify-center flex-shrink-0",
+                        selectedConvs.includes(conv.id)
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "border-muted-foreground"
+                      )}
+                    >
+                      {selectedConvs.includes(conv.id) && (
+                        <CheckSquare size={10} />
+                      )}
+                    </div>
+                  )}
+                  <span className="flex-1 truncate">{conv.title}</span>
+                  {!manageMode && (
+                    <button
+                      onClick={e => {
+                        e.stopPropagation();
+                        deleteConvMutation.mutate({ id: conv.id });
+                        if (activeConvId === conv.id) {
+                          setActiveConvId(null);
+                          setMessages([]);
+                        }
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+              ))}
           </div>
         </ScrollArea>
       </div>
