@@ -938,8 +938,14 @@ export async function executeAppAction(
         return `✅ Ticket ${params.id} Status auf **${params.status}** gesetzt.`;
       }
       case "assign_ticket": {
-        await assignTicket(params.id as string, params.user_name as string);
-        return `✅ Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen.`;
+        await assignTicket(
+          params.id as string,
+          params.user_name as string,
+          params.customer_name as string
+        );
+        return `✅ Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen${
+          params.customer_name ? ` (Kunde: ${params.customer_name})` : ""
+        }.`;
       }
       case "list_quotes": {
         const data = await listQuotes(10, params.status as string);

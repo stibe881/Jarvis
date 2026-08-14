@@ -3771,8 +3771,12 @@ async function executeAppAction(action, params) {
         return `\u2705 Ticket ${params.id} Status auf **${params.status}** gesetzt.`;
       }
       case "assign_ticket": {
-        await assignTicket(params.id, params.user_name);
-        return `\u2705 Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen.`;
+        await assignTicket(
+          params.id,
+          params.user_name,
+          params.customer_name
+        );
+        return `\u2705 Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen${params.customer_name ? ` (Kunde: ${params.customer_name})` : ""}.`;
       }
       case "list_quotes": {
         const data = await listQuotes(10, params.status);
