@@ -5761,7 +5761,9 @@ ${tasksContext}` }
             max_tokens: 500,
             messages: llmMessages
           });
-          return { briefing: llmResp.choices[0]?.message?.content || "Konnte kein Briefing generieren." };
+          return {
+            briefing: llmResp.choices[0]?.message?.content || "Konnte kein Briefing generieren."
+          };
         } catch (e) {
           console.error("Error generating morning briefing:", e);
           return { briefing: "Fehler beim Generieren der Tagesplanung." };

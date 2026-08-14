@@ -211,7 +211,7 @@ export default function JarvisLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="h-[100dvh] overflow-hidden flex flex-col bg-background">
       {/* ── Mobile Top-Bar (nur auf kleinen Bildschirmen) ── */}
       <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-sidebar flex-shrink-0">
         <div className="flex items-center gap-2">
