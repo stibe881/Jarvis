@@ -3425,13 +3425,34 @@ async function listTickets(limit = 20, status) {
   return tickets;
 }
 async function createTicket(data) {
+  const { assigned_to, ...rest } = data;
+  let assignedToId = assigned_to;
+  if (assignedToId && !assignedToId.includes("-")) {
+    const users2 = await sbFetch(`/users?name=ilike.*${assignedToId}*`);
+    if (users2 && users2.length > 0) {
+      assignedToId = users2[0].id;
+    } else {
+      assignedToId = void 0;
+    }
+  }
   return sbFetch("/tickets", {
     method: "POST",
     body: JSON.stringify({
-      ...data,
+      ...rest,
+      ...assignedToId ? { assigned_to: assignedToId } : {},
       status: data.status ?? "open",
       priority: data.priority ?? "medium"
     })
+  });
+}
+async function assignTicket(id, user_name) {
+  const users2 = await sbFetch(`/users?name=ilike.*${user_name}*`);
+  if (!users2 || users2.length === 0) {
+    throw new Error(`Mitarbeiter '${user_name}' nicht gefunden.`);
+  }
+  return sbFetch(`/tickets?id=eq.${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ assigned_to: users2[0].id, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
   });
 }
 async function updateTicketStatus(id, status) {
@@ -3711,6 +3732,10 @@ async function executeAppAction(action, params) {
       case "update_ticket_status": {
         await updateTicketStatus(params.id, params.status);
         return `\u2705 Ticket ${params.id} Status auf **${params.status}** gesetzt.`;
+      }
+      case "assign_ticket": {
+        await assignTicket(params.id, params.user_name);
+        return `\u2705 Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen.`;
       }
       case "list_quotes": {
         const data = await listQuotes(10, params.status);
@@ -5279,7 +5304,7 @@ Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als nae
 
 ERSTELLEN:
 <app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
+<app_action>{"action":"create_ticket","customer_id":"uuid","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium", "assigned_to":"stefan"}</app_action>
 <app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
 <app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
 <app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
@@ -5289,6 +5314,7 @@ ERSTELLEN:
 
 \xC4NDERN:
 <app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
+<app_action>{"action":"assign_ticket","id":"uuid","user_name":"stefan"}</app_action>
 <app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
 <app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
 <app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>

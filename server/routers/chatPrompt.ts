@@ -135,7 +135,7 @@ Fasse danach in zwei bis drei Saetzen zusammen, was auffaellt und was du als nae
 
 ERSTELLEN:
 <app_action>{"action":"create_customer","company_name":"Muster AG","email":"info@muster.ch","phone":"+41 41 xxx"}</app_action>
-<app_action>{"action":"create_ticket","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium"}</app_action>
+<app_action>{"action":"create_ticket","customer_id":"uuid","title":"Problem mit Drucker","description":"Drucker druckt nicht","priority":"medium", "assigned_to":"stefan"}</app_action>
 <app_action>{"action":"create_lead","name":"Max Muster","company":"Muster AG","email":"max@muster.ch","value":5000}</app_action>
 <app_action>{"action":"create_project","title":"Webseite Muster AG","customer_id":"uuid","budget":3500}</app_action>
 <app_action>{"action":"create_project_task","project_id":"uuid","title":"Design erstellen","priority":"high"}</app_action>
@@ -145,6 +145,7 @@ ERSTELLEN:
 
 ÄNDERN:
 <app_action>{"action":"update_ticket_status","id":"uuid","status":"closed"}</app_action>
+<app_action>{"action":"assign_ticket","id":"uuid","user_name":"stefan"}</app_action>
 <app_action>{"action":"update_ticket_priority","id":"uuid","priority":"high"}</app_action>
 <app_action>{"action":"add_ticket_comment","ticket_id":"uuid","comment":"Problem wurde behoben","is_internal":false}</app_action>
 <app_action>{"action":"mark_invoice_paid","id":"uuid"}</app_action>

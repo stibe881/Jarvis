@@ -454,13 +454,41 @@ export async function createTicket(data: {
   description?: string;
   status?: string;
   priority?: string;
+  assigned_to?: string;
 }) {
+  const { assigned_to, ...rest } = data;
+  let assignedToId = assigned_to;
+  if (assignedToId && !assignedToId.includes("-")) {
+    const users = await sbFetch(`/users?name=ilike.*${assignedToId}*`);
+    if (users && users.length > 0) {
+      assignedToId = users[0].id;
+    } else {
+      assignedToId = undefined;
+    }
+  }
+
   return sbFetch("/tickets", {
     method: "POST",
     body: JSON.stringify({
-      ...data,
+      ...rest,
+      ...(assignedToId ? { assigned_to: assignedToId } : {}),
       status: data.status ?? "open",
       priority: data.priority ?? "medium",
+    }),
+  });
+}
+
+export async function assignTicket(id: string, user_name: string) {
+  const users = await sbFetch(`/users?name=ilike.*${user_name}*`);
+  if (!users || users.length === 0) {
+    throw new Error(`Mitarbeiter '${user_name}' nicht gefunden.`);
+  }
+
+  return sbFetch(`/tickets?id=eq.${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      assigned_to: users[0].id,
+      updated_at: new Date().toISOString(),
     }),
   });
 }
@@ -865,6 +893,10 @@ export async function executeAppAction(
       case "update_ticket_status": {
         await updateTicketStatus(params.id as string, params.status as string);
         return `✅ Ticket ${params.id} Status auf **${params.status}** gesetzt.`;
+      }
+      case "assign_ticket": {
+        await assignTicket(params.id as string, params.user_name as string);
+        return `✅ Ticket ${params.id} an Mitarbeiter **${params.user_name}** zugewiesen.`;
       }
       case "list_quotes": {
         const data = await listQuotes(10, params.status as string);
