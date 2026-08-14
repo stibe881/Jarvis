@@ -478,13 +478,35 @@ export async function createTicket(data: {
   });
 }
 
+async function resolveTicketId(idOrTitle: string) {
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      idOrTitle
+    )
+  ) {
+    return idOrTitle;
+  }
+  const cleanTitle = sanitizeSearchTerm(idOrTitle);
+  const tickets = await sbFetch(
+    `/tickets?title=ilike.*${encodeURIComponent(cleanTitle)}*`
+  );
+  if (tickets && tickets.length > 0) {
+    return tickets[0].id;
+  }
+  throw new Error(`Ticket mit Titel/ID '${idOrTitle}' nicht gefunden.`);
+}
+
 export async function assignTicket(id: string, user_name: string) {
-  const users = await sbFetch(`/users?name=ilike.*${user_name}*`);
+  const cleanName = sanitizeSearchTerm(user_name);
+  const users = await sbFetch(
+    `/users?name=ilike.*${encodeURIComponent(cleanName)}*`
+  );
   if (!users || users.length === 0) {
     throw new Error(`Mitarbeiter '${user_name}' nicht gefunden.`);
   }
 
-  return sbFetch(`/tickets?id=eq.${id}`, {
+  const realId = await resolveTicketId(id);
+  return sbFetch(`/tickets?id=eq.${realId}`, {
     method: "PATCH",
     body: JSON.stringify({
       assigned_to: users[0].id,
@@ -494,7 +516,8 @@ export async function assignTicket(id: string, user_name: string) {
 }
 
 export async function updateTicketStatus(id: string, status: string) {
-  return sbFetch(`/tickets?id=eq.${id}`, {
+  const realId = await resolveTicketId(id);
+  return sbFetch(`/tickets?id=eq.${realId}`, {
     method: "PATCH",
     body: JSON.stringify({ status, updated_at: new Date().toISOString() }),
   });

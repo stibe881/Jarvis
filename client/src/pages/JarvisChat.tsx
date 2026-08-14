@@ -1578,8 +1578,8 @@ function JarvisChatInner() {
       {/* Conversation Sidebar */}
       <div
         className={cn(
-          "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200",
-          "md:w-40 md:flex-shrink-0 md:relative md:translate-x-0",
+          "flex flex-col bg-sidebar/80 border-r border-border transition-all duration-200 overflow-hidden",
+          "md:w-56 md:flex-shrink-0 md:relative md:translate-x-0",
           "fixed top-0 bottom-0 left-0 z-40 w-56",
           showConvSidebar
             ? "translate-x-0"
@@ -1596,10 +1596,9 @@ function JarvisChatInner() {
                 createConvMutation.mutate({});
                 setShowConvSidebar(false);
               }}
-              size="sm"
-              className="flex-1 gap-2 bg-primary/20 text-primary hover:bg-primary/30 border border-primary/30 font-jarvis text-xs tracking-wider"
             >
-              <Plus size={14} /> NEUES GESPRÄCH
+              <Plus size={14} className="flex-shrink-0" />{" "}
+              <span className="truncate">NEUES GESPRÄCH</span>
             </Button>
             <button
               className="md:hidden text-muted-foreground hover:text-primary p-1"
@@ -1823,7 +1822,7 @@ function JarvisChatInner() {
                           setMessages([]);
                         }
                       }}
-                      className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                      className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity flex-shrink-0"
                     >
                       <Trash2 size={12} />
                     </button>
@@ -2163,6 +2162,19 @@ function JarvisChatInner() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={e => {
+                  const items = e.clipboardData?.items;
+                  if (!items) return;
+                  for (let i = 0; i < items.length; i++) {
+                    if (items[i].type.startsWith("image/")) {
+                      const file = items[i].getAsFile();
+                      if (file) {
+                        setUploadedFile(file);
+                        e.preventDefault();
+                      }
+                    }
+                  }
+                }}
                 placeholder={
                   isListening
                     ? "Höre zu..."

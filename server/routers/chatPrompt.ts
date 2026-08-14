@@ -153,6 +153,7 @@ ERSTELLEN:
 <app_action>{"action":"update_quote_status","id":"uuid","status":"sent"}</app_action>
 
 WICHTIG: Zeige dem Nutzer NIE den rohen app_action-Block. Führe die Aktion aus und zeige das Ergebnis natürlich in der Antwort.
+KRITISCHE REGEL: Du MUSST für JEDE Aktion ZWINGEND die XML-Tags <app_action>...</app_action> verwenden. Wenn du nur JSON wie {"action":"..."} schreibst, WIRD ES IGNORIERT und schlägt fehl!
 STATUS-WERTE in der App:
 - Rechnungen: open (offen), sent (gesendet), paid (bezahlt), draft (Entwurf)
 - Offene/unbezahlte Rechnungen = status "open" (der Filter deckt open+sent ab)
