@@ -5325,7 +5325,9 @@ Beispiele:
 <home_assistant_action>{"action":"call_service","domain":"cover","service":"set_cover_position","serviceData":{"entity_id":"cover.wohnzimmer","position":50}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"button","service":"press","serviceData":{"entity_id":"button.evb_sofa_my_position"}}</home_assistant_action>
 <home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Ger\xE4te zur\xFCck)
-WICHTIG F\xDCR DIE GESCHWINDIGKEIT: Nutze \`get_states\` NUR im absoluten Notfall, wenn du eine entity_id nicht erraten kannst! Versuche IMMER sofort \`call_service\` im ersten Schritt zu nutzen (z.B. \`light.buero\`, \`light.wohnzimmer\`), um Verz\xF6gerungen zu vermeiden!
+WICHTIG F\xDCR DIE GESCHWINDIGKEIT: 
+1. Nutze \`get_states\` NUR im absoluten Notfall! Versuche IMMER sofort \`call_service\` im ersten Schritt zu nutzen (z.B. \`light.buero\`, \`light.wohnzimmer\`).
+2. Antworte bei Smarthome-Befehlen EXTREM KURZ (maximal 2-3 W\xF6rter wie "Wird gemacht" oder "Licht an"), damit das Smart Home sofort und ohne Verz\xF6gerung schaltet! Vermeide lange Erkl\xE4rungen.
 
 KARTEN & GPS:
 Wenn du eine Karte \xFCber \`<maps_action>\` anzeigst, LIES NIEMALS DIE L\xC4NGEN- ODER BREITENGRADE VOR! Beschreibe den Ort nur kurz ("Die Karte zu [Ort] wurde eingeblendet").`;
