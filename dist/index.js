@@ -3452,7 +3452,10 @@ async function assignTicket(id, user_name) {
   }
   return sbFetch(`/tickets?id=eq.${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ assigned_to: users2[0].id, updated_at: (/* @__PURE__ */ new Date()).toISOString() })
+    body: JSON.stringify({
+      assigned_to: users2[0].id,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    })
   });
 }
 async function updateTicketStatus(id, status) {

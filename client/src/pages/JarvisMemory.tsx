@@ -26,6 +26,7 @@ import {
   Briefcase,
   Star,
   Info,
+  MapPin,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,12 @@ import { cn } from "@/lib/utils";
 const CATEGORIES = [
   { value: "person", label: "Person", icon: User, color: "text-blue-400" },
   { value: "contact", label: "Kontakt", icon: User, color: "text-cyan-400" },
+  {
+    value: "address",
+    label: "Adressen",
+    icon: MapPin,
+    color: "text-emerald-400",
+  },
   {
     value: "preference",
     label: "Präferenz",
@@ -60,6 +67,7 @@ export default function JarvisMemory() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({ category: "fact", key: "", value: "" });
   const [filterCat, setFilterCat] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
   const utils = trpc.useUtils();
   const { data: memories, isLoading } = trpc.memory.list.useQuery();
@@ -114,10 +122,15 @@ export default function JarvisMemory() {
     upsertMutation.mutate(form);
   };
 
-  const filtered =
-    filterCat === "all"
-      ? (memories ?? [])
-      : (memories ?? []).filter(m => m.category === filterCat);
+  const filtered = (memories ?? []).filter(m => {
+    const matchCat = filterCat === "all" || m.category === filterCat;
+    const term = search.toLowerCase();
+    const matchSearch =
+      term === "" ||
+      m.key.toLowerCase().includes(term) ||
+      m.value.toLowerCase().includes(term);
+    return matchCat && matchSearch;
+  });
 
   // Gruppiert nach Kategorie
   const grouped = filtered.reduce<Record<string, typeof filtered>>((acc, m) => {
@@ -127,7 +140,7 @@ export default function JarvisMemory() {
   }, {});
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 md:px-6 py-3 border-b border-border flex-shrink-0">
         <Brain className="text-primary flex-shrink-0" size={18} />
@@ -138,6 +151,12 @@ export default function JarvisMemory() {
           {memories?.length ?? 0} Erinnerungen gespeichert
         </span>
         <div className="ml-auto flex items-center gap-2">
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Suchen..."
+            className="h-7 text-xs w-24 sm:w-40 bg-transparent border-border"
+          />
           <Select value={filterCat} onValueChange={setFilterCat}>
             <SelectTrigger className="h-7 text-xs w-32 bg-transparent border-border">
               <SelectValue />
