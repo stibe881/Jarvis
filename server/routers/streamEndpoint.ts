@@ -149,7 +149,7 @@ export async function handleChatStream(req: Request, res: Response) {
       model: "claude-sonnet-4-5",
       max_tokens: 4096,
       messages: llmMessages as any,
-      tools: jarvisTools,
+      
       onStream,
     });
 
@@ -177,7 +177,7 @@ export async function handleChatStream(req: Request, res: Response) {
           model: "claude-sonnet-4-5",
           max_tokens: 4096,
           messages: msgs as any,
-          tools: jarvisTools,
+          
           onStream: streamCb,
         });
         const msg = next.choices[0]?.message;
