@@ -181,7 +181,7 @@ export default function JarvisMemory() {
       </div>
 
       {/* Inhalt */}
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 w-full overflow-y-auto scroll-smooth">
         <div className="p-3 md:p-6">
           {isLoading && (
             <div className="text-center text-muted-foreground py-12">
@@ -274,7 +274,7 @@ export default function JarvisMemory() {
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Modal */}
       <Dialog
