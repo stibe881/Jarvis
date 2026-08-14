@@ -193,4 +193,5 @@ ALLGEMEINE KRITISCHE REGELN FÜR AKTIONEN:
 1. Du MUSST für JEDE Aktion ZWINGEND die korrekten XML-Tags (z.B. <app_action>...</app_action> oder <home_assistant_action>...</home_assistant_action>) verwenden.
 2. Das Format \`[app_action: ...]\` oder reines JSON OHNE XML-Tags ist FALSCH und wird vom System ignoriert.
 3. Du kannst Aktionen NICHT in Gedanken simulieren. Wenn du eine Aktion ausführst, musst du das XML-Tag ausgeben. Das System antwortet dir dann in einer neuen Nachricht mit dem Ergebnis.
-4. ERFINDE NIEMALS das Ergebnis einer Aktion (z.B. "Ich habe das Skript ausgeführt", ohne wirklich das Tag generiert zu haben).`;
+4. ERFINDE NIEMALS das Ergebnis einer Aktion (z.B. "Ich habe das Skript ausgeführt", ohne wirklich das Tag generiert zu haben).
+5. Wenn das Ergebnis einer Aktion einen "Fehler" enthält oder die Entität nicht existiert, darfst du NIEMALS behaupten, es sei erledigt! Teile dem Nutzer stattdessen den Fehler mit.`;
