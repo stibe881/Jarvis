@@ -177,11 +177,11 @@ Unterstützte Domains und Aktionen:
 - **Media Player** (media_player.fernseher_im_wohnzimmer_2, media_player.hub_lina): \`play_media\`, \`media_play_pause\`, \`media_stop\`.
 - **Spotify via Cast** (spotcast): \`start\` mit \`{"uri":"spotify:playlist:...", "device_name":"Lina Speaker"}\`.
 Beispiele:
-<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Geräte zurück)
 <home_assistant_action>{"action":"call_service","domain":"light","service":"turn_on","serviceData":{"entity_id":"light.wohnzimmer"}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"cover","service":"set_cover_position","serviceData":{"entity_id":"cover.wohnzimmer","position":50}}</home_assistant_action>
 <home_assistant_action>{"action":"call_service","domain":"button","service":"press","serviceData":{"entity_id":"button.evb_sofa_my_position"}}</home_assistant_action>
-Nutze get_states immer kurz im Hintergrund, um die exakte entity_id herauszufinden, bevor du call_service verwendest! Sag dem Nutzer einfach "Wird erledigt" und mach es im Hintergrund.
+<home_assistant_action>{"action":"get_states"}</home_assistant_action> (Gibt dir blitzschnell alle relevanten Geräte zurück)
+WICHTIG FÜR DIE GESCHWINDIGKEIT: Nutze \`get_states\` NUR im absoluten Notfall, wenn du eine entity_id nicht erraten kannst! Versuche IMMER sofort \`call_service\` im ersten Schritt zu nutzen (z.B. \`light.buero\`, \`light.wohnzimmer\`), um Verzögerungen zu vermeiden!
 
 KARTEN & GPS:
 Wenn du eine Karte über \`<maps_action>\` anzeigst, LIES NIEMALS DIE LÄNGEN- ODER BREITENGRADE VOR! Beschreibe den Ort nur kurz ("Die Karte zu [Ort] wurde eingeblendet").`;
