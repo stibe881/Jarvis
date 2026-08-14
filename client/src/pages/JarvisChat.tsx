@@ -1085,6 +1085,8 @@ function JarvisChatInner() {
                         }
                         return updated;
                       });
+                    } else if (eventName === "error") {
+                      throw new Error(data.message || "Unbekannter Stream-Fehler");
                     }
                   } catch (e) {
                     console.error("Fehler beim Parsen von SSE", e);

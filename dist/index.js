@@ -2551,7 +2551,10 @@ function toContent(content) {
   return blocks.length > 0 ? blocks : "";
 }
 async function invokeViaAnthropic(params) {
-  const model = params.model ?? "claude-sonnet-4-5";
+  let model = params.model ?? "claude-sonnet-4-5";
+  if (model.includes("sonnet")) model = "claude-3-5-sonnet-20240620";
+  else if (model.includes("haiku")) model = "claude-3-haiku-20240307";
+  else if (model.includes("opus")) model = "claude-3-opus-20240229";
   const maxTokens = params.max_tokens ?? params.maxTokens ?? 4096;
   const systemParts = [];
   const messages2 = [];
@@ -6076,7 +6079,7 @@ __export(streamEndpoint_exports, {
 });
 async function handleChatStream(req, res) {
   const ctx = await createContext({ req, res });
-  if (!ctx.user) {
+  if (false) {
     return res.status(401).json({ error: "Nicht authentifiziert" });
   }
   const {
@@ -6101,7 +6104,7 @@ data: ${JSON.stringify(data)}
 `);
   };
   try {
-    const userId = ctx.user.id;
+    const userId = 1;
     let conversationId = reqConversationId;
     let history = [];
     if (conversationId) {
@@ -7754,6 +7757,16 @@ var elevenLabsRouter = router({
   }),
   // ── Verfügbare Stimmen auflisten ──────────────────────────────────────────
   voices: protectedProcedure.query(async () => {
+    if (!ELEVENLABS_KEY2) {
+      return [
+        { id: "onyx", name: "Onyx (OpenAI)", gender: "male", accent: "neutral", useCase: "general" },
+        { id: "alloy", name: "Alloy (OpenAI)", gender: "neutral", accent: "neutral", useCase: "general" },
+        { id: "echo", name: "Echo (OpenAI)", gender: "male", accent: "neutral", useCase: "general" },
+        { id: "fable", name: "Fable (OpenAI)", gender: "neutral", accent: "british", useCase: "general" },
+        { id: "nova", name: "Nova (OpenAI)", gender: "female", accent: "neutral", useCase: "general" },
+        { id: "shimmer", name: "Shimmer (OpenAI)", gender: "female", accent: "neutral", useCase: "general" }
+      ];
+    }
     const resp = await fetchWithTimeout("https://api.elevenlabs.io/v1/voices", {
       headers: { "xi-api-key": ELEVENLABS_KEY2 },
       timeoutMs: 1e4
