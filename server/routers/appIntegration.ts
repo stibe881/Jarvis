@@ -496,7 +496,11 @@ async function resolveTicketId(idOrTitle: string) {
   throw new Error(`Ticket mit Titel/ID '${idOrTitle}' nicht gefunden.`);
 }
 
-export async function assignTicket(id: string, user_name: string) {
+export async function assignTicket(
+  id: string,
+  user_name: string,
+  customer_name?: string
+) {
   const cleanName = sanitizeSearchTerm(user_name);
   const users = await sbFetch(
     `/users?name=ilike.*${encodeURIComponent(cleanName)}*`
@@ -505,13 +509,29 @@ export async function assignTicket(id: string, user_name: string) {
     throw new Error(`Mitarbeiter '${user_name}' nicht gefunden.`);
   }
 
+  let finalCustomerId;
+  if (customer_name) {
+    const cleanCustomer = sanitizeSearchTerm(customer_name);
+    const customers = await sbFetch(
+      `/customers?company_name=ilike.*${encodeURIComponent(cleanCustomer)}*`
+    );
+    if (customers && customers.length > 0) {
+      finalCustomerId = customers[0].id;
+    }
+  }
+
   const realId = await resolveTicketId(id);
+  const body: any = {
+    assigned_to: users[0].id,
+    updated_at: new Date().toISOString(),
+  };
+  if (finalCustomerId) {
+    body.customer_id = finalCustomerId;
+  }
+
   return sbFetch(`/tickets?id=eq.${realId}`, {
     method: "PATCH",
-    body: JSON.stringify({
-      assigned_to: users[0].id,
-      updated_at: new Date().toISOString(),
-    }),
+    body: JSON.stringify(body),
   });
 }
 
