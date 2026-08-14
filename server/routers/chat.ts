@@ -877,7 +877,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: llmMessages2 as any,
-            tools: jarvisTools,
+            
           });
           const msgContent2 = llmResp2.choices[0]?.message;
           const fullResponse2 = {
@@ -904,7 +904,7 @@ ${profileContext}${calendarContext}${memoryContext}${approvalContext}`;
                 model: "claude-sonnet-4-5",
                 max_tokens: 4096,
                 messages: msgs as any,
-                tools: jarvisTools,
+                
               });
               const msg = next.choices[0]?.message;
               return {
@@ -1057,7 +1057,7 @@ ${calendarContext}${memoryContext}${approvalContext}`;
         model: "claude-sonnet-4-5",
         max_tokens: 4096,
         messages: llmMessages as any,
-        tools: jarvisTools,
+        
       });
       const msgContent = llmResp.choices[0]?.message;
       const fullResponse = {
@@ -1077,7 +1077,7 @@ ${calendarContext}${memoryContext}${approvalContext}`;
             model: "claude-sonnet-4-5",
             max_tokens: 4096,
             messages: msgs as any,
-            tools: jarvisTools,
+            
           });
           const msg = next.choices[0]?.message;
           return {

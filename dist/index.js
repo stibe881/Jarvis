@@ -956,13 +956,11 @@ async function deleteTask(id, userId) {
 async function getGoogleToken(userId, email) {
   const db = await getDb();
   if (!db) return void 0;
-  let q = db.select().from(googleTokens).where(eq(googleTokens.userId, userId));
+  let condition = eq(googleTokens.userId, userId);
   if (email) {
-    q = q.where(
-      and(eq(googleTokens.userId, userId), eq(googleTokens.email, email))
-    );
+    condition = and(eq(googleTokens.userId, userId), eq(googleTokens.email, email));
   }
-  const rows = await q.limit(1);
+  const rows = await db.select().from(googleTokens).where(condition).limit(1);
   return rows[0];
 }
 async function getGoogleTokens(userId) {
@@ -983,8 +981,8 @@ async function upsertGoogleToken(data) {
       accessToken: data.accessToken,
       ...data.refreshToken ? { refreshToken: data.refreshToken } : {},
       expiresAt: data.expiresAt,
-      scope: data.scope ?? null,
-      email: data.email ?? null,
+      scope: data.scope ?? "",
+      email: data.email ?? "",
       ...data.disabledCalendars ? { disabledCalendars: data.disabledCalendars } : {}
     }
   });
@@ -1003,13 +1001,11 @@ async function deleteGoogleToken(userId, email) {
 async function getMicrosoftToken(userId, email) {
   const db = await getDb();
   if (!db) return void 0;
-  let q = db.select().from(microsoftTokens).where(eq(microsoftTokens.userId, userId));
+  let condition = eq(microsoftTokens.userId, userId);
   if (email) {
-    q = q.where(
-      and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email))
-    );
+    condition = and(eq(microsoftTokens.userId, userId), eq(microsoftTokens.email, email));
   }
-  const rows = await q.limit(1);
+  const rows = await db.select().from(microsoftTokens).where(condition).limit(1);
   return rows[0];
 }
 async function getMicrosoftTokens(userId) {
@@ -1029,8 +1025,8 @@ async function upsertMicrosoftToken(data) {
       accessToken: data.accessToken,
       ...data.refreshToken ? { refreshToken: data.refreshToken } : {},
       expiresAt: data.expiresAt,
-      scope: data.scope ?? null,
-      email: data.email ?? null,
+      scope: data.scope ?? "",
+      email: data.email ?? "",
       ...data.disabledCalendars ? { disabledCalendars: data.disabledCalendars } : {}
     }
   });
@@ -1821,7 +1817,7 @@ var init_calendar = __esm({
       "email",
       "profile"
     ].join(" ");
-    MS_SCOPES = ["Calendars.ReadWrite", "offline_access", "User.Read"].join(
+    MS_SCOPES = ["Calendars.ReadWrite", "Mail.Read", "offline_access", "User.Read"].join(
       " "
     );
     calendarRouter = router({
@@ -2523,140 +2519,6 @@ var init_storage = __esm({
   }
 });
 
-// server/_core/voiceTranscription.ts
-async function transcribeAudio(options) {
-  try {
-    if (!ENV.forgeApiUrl) {
-      return {
-        error: "Voice transcription service is not configured",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set"
-      };
-    }
-    if (!ENV.forgeApiKey) {
-      return {
-        error: "Voice transcription service authentication is missing",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set"
-      };
-    }
-    let audioBuffer;
-    let mimeType;
-    try {
-      const response2 = await fetch(options.audioUrl);
-      if (!response2.ok) {
-        return {
-          error: "Failed to download audio file",
-          code: "INVALID_FORMAT",
-          details: `HTTP ${response2.status}: ${response2.statusText}`
-        };
-      }
-      audioBuffer = Buffer.from(await response2.arrayBuffer());
-      mimeType = response2.headers.get("content-type") || "audio/mpeg";
-      const sizeMB = audioBuffer.length / (1024 * 1024);
-      if (sizeMB > 16) {
-        return {
-          error: "Audio file exceeds maximum size limit",
-          code: "FILE_TOO_LARGE",
-          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
-        };
-      }
-    } catch (error) {
-      return {
-        error: "Failed to fetch audio file",
-        code: "SERVICE_ERROR",
-        details: error instanceof Error ? error.message : "Unknown error"
-      };
-    }
-    const formData = new FormData();
-    const filename = `audio.${getFileExtension(mimeType)}`;
-    const audioBlob = new Blob([new Uint8Array(audioBuffer)], {
-      type: mimeType
-    });
-    formData.append("file", audioBlob, filename);
-    formData.append("model", "whisper-1");
-    formData.append("response_format", "verbose_json");
-    const prompt = options.prompt || (options.language ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}` : "Transcribe the user's voice to text");
-    formData.append("prompt", prompt);
-    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-    const fullUrl = new URL("v1/audio/transcriptions", baseUrl).toString();
-    const response = await fetch(fullUrl, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "Accept-Encoding": "identity"
-      },
-      body: formData
-    });
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      return {
-        error: "Transcription service request failed",
-        code: "TRANSCRIPTION_FAILED",
-        details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`
-      };
-    }
-    const whisperResponse = await response.json();
-    if (!whisperResponse.text || typeof whisperResponse.text !== "string") {
-      return {
-        error: "Invalid transcription response",
-        code: "SERVICE_ERROR",
-        details: "Transcription service returned an invalid response format"
-      };
-    }
-    return whisperResponse;
-  } catch (error) {
-    return {
-      error: "Voice transcription failed",
-      code: "SERVICE_ERROR",
-      details: error instanceof Error ? error.message : "An unexpected error occurred"
-    };
-  }
-}
-function getFileExtension(mimeType) {
-  const mimeToExt = {
-    "audio/webm": "webm",
-    "audio/mp3": "mp3",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/wave": "wav",
-    "audio/ogg": "ogg",
-    "audio/m4a": "m4a",
-    "audio/mp4": "m4a"
-  };
-  return mimeToExt[mimeType] || "audio";
-}
-function getLanguageName(langCode) {
-  const langMap = {
-    en: "English",
-    es: "Spanish",
-    fr: "French",
-    de: "German",
-    it: "Italian",
-    pt: "Portuguese",
-    ru: "Russian",
-    ja: "Japanese",
-    ko: "Korean",
-    zh: "Chinese",
-    ar: "Arabic",
-    hi: "Hindi",
-    nl: "Dutch",
-    pl: "Polish",
-    tr: "Turkish",
-    sv: "Swedish",
-    da: "Danish",
-    no: "Norwegian",
-    fi: "Finnish"
-  };
-  return langMap[langCode] || langCode;
-}
-var init_voiceTranscription = __esm({
-  "server/_core/voiceTranscription.ts"() {
-    "use strict";
-    init_env();
-  }
-});
-
 // server/_core/anthropicLlm.ts
 import Anthropic from "@anthropic-ai/sdk";
 function getClient() {
@@ -3037,6 +2899,140 @@ var init_llm = __esm({
   }
 });
 
+// server/_core/voiceTranscription.ts
+async function transcribeAudio(options) {
+  try {
+    if (!ENV.forgeApiUrl) {
+      return {
+        error: "Voice transcription service is not configured",
+        code: "SERVICE_ERROR",
+        details: "BUILT_IN_FORGE_API_URL is not set"
+      };
+    }
+    if (!ENV.forgeApiKey) {
+      return {
+        error: "Voice transcription service authentication is missing",
+        code: "SERVICE_ERROR",
+        details: "BUILT_IN_FORGE_API_KEY is not set"
+      };
+    }
+    let audioBuffer;
+    let mimeType;
+    try {
+      const response2 = await fetch(options.audioUrl);
+      if (!response2.ok) {
+        return {
+          error: "Failed to download audio file",
+          code: "INVALID_FORMAT",
+          details: `HTTP ${response2.status}: ${response2.statusText}`
+        };
+      }
+      audioBuffer = Buffer.from(await response2.arrayBuffer());
+      mimeType = response2.headers.get("content-type") || "audio/mpeg";
+      const sizeMB = audioBuffer.length / (1024 * 1024);
+      if (sizeMB > 16) {
+        return {
+          error: "Audio file exceeds maximum size limit",
+          code: "FILE_TOO_LARGE",
+          details: `File size is ${sizeMB.toFixed(2)}MB, maximum allowed is 16MB`
+        };
+      }
+    } catch (error) {
+      return {
+        error: "Failed to fetch audio file",
+        code: "SERVICE_ERROR",
+        details: error instanceof Error ? error.message : "Unknown error"
+      };
+    }
+    const formData = new FormData();
+    const filename = `audio.${getFileExtension(mimeType)}`;
+    const audioBlob = new Blob([new Uint8Array(audioBuffer)], {
+      type: mimeType
+    });
+    formData.append("file", audioBlob, filename);
+    formData.append("model", "whisper-1");
+    formData.append("response_format", "verbose_json");
+    const prompt = options.prompt || (options.language ? `Transcribe the user's voice to text, the user's working language is ${getLanguageName(options.language)}` : "Transcribe the user's voice to text");
+    formData.append("prompt", prompt);
+    const baseUrl = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
+    const fullUrl = new URL("v1/audio/transcriptions", baseUrl).toString();
+    const response = await fetch(fullUrl, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${ENV.forgeApiKey}`,
+        "Accept-Encoding": "identity"
+      },
+      body: formData
+    });
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      return {
+        error: "Transcription service request failed",
+        code: "TRANSCRIPTION_FAILED",
+        details: `${response.status} ${response.statusText}${errorText ? `: ${errorText}` : ""}`
+      };
+    }
+    const whisperResponse = await response.json();
+    if (!whisperResponse.text || typeof whisperResponse.text !== "string") {
+      return {
+        error: "Invalid transcription response",
+        code: "SERVICE_ERROR",
+        details: "Transcription service returned an invalid response format"
+      };
+    }
+    return whisperResponse;
+  } catch (error) {
+    return {
+      error: "Voice transcription failed",
+      code: "SERVICE_ERROR",
+      details: error instanceof Error ? error.message : "An unexpected error occurred"
+    };
+  }
+}
+function getFileExtension(mimeType) {
+  const mimeToExt = {
+    "audio/webm": "webm",
+    "audio/mp3": "mp3",
+    "audio/mpeg": "mp3",
+    "audio/wav": "wav",
+    "audio/wave": "wav",
+    "audio/ogg": "ogg",
+    "audio/m4a": "m4a",
+    "audio/mp4": "m4a"
+  };
+  return mimeToExt[mimeType] || "audio";
+}
+function getLanguageName(langCode) {
+  const langMap = {
+    en: "English",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    ru: "Russian",
+    ja: "Japanese",
+    ko: "Korean",
+    zh: "Chinese",
+    ar: "Arabic",
+    hi: "Hindi",
+    nl: "Dutch",
+    pl: "Polish",
+    tr: "Turkish",
+    sv: "Swedish",
+    da: "Danish",
+    no: "Norwegian",
+    fi: "Finnish"
+  };
+  return langMap[langCode] || langCode;
+}
+var init_voiceTranscription = __esm({
+  "server/_core/voiceTranscription.ts"() {
+    "use strict";
+    init_env();
+  }
+});
+
 // server/_core/tools.ts
 var jarvisTools;
 var init_tools = __esm({
@@ -3233,6 +3229,51 @@ var init_tools = __esm({
               }
             },
             required: ["action"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "email_action",
+          description: "E-Mails abrufen (Microsoft 365 / Outlook)",
+          parameters: {
+            type: "object",
+            properties: {
+              action: { type: "string", enum: ["list_unread", "search"] },
+              query: { type: "string" }
+            },
+            required: ["action"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "web_search",
+          description: "Eine Websuche durchf\xFChren (z.B. f\xFCr Konkurrenz-Monitoring)",
+          parameters: {
+            type: "object",
+            properties: {
+              query: { type: "string" }
+            },
+            required: ["query"]
+          }
+        }
+      },
+      {
+        type: "function",
+        function: {
+          name: "maps_action",
+          description: "Google Maps Karte f\xFCr den Nutzer einblenden (als Antwort-Widget)",
+          parameters: {
+            type: "object",
+            properties: {
+              location: { type: "string" },
+              mode: { type: "string", enum: ["place", "directions"] },
+              origin: { type: "string" }
+            },
+            required: ["location", "mode"]
           }
         }
       }
@@ -4801,6 +4842,59 @@ async function executeAction(ctx, parsed2) {
         result = await executeGithubAction(ctx.userId, action, params);
         break;
       }
+      case "email_action": {
+        const msTokens = await getMicrosoftTokens(ctx.userId);
+        if (msTokens.length === 0) {
+          result = "Kein Microsoft-Konto verkn\xFCpft.";
+          break;
+        }
+        const email = msTokens[0].email;
+        if (action === "list_unread") {
+          try {
+            const data = await msFetch(
+              ctx.userId,
+              email,
+              "/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=10"
+            );
+            if (!data.value || data.value.length === 0) {
+              result = "Keine ungelesenen E-Mails gefunden.";
+            } else {
+              result = data.value.map(
+                (m) => `- Von: ${m.sender?.emailAddress?.name}
+  Betreff: ${m.subject}
+  Auszug: ${m.bodyPreview}`
+              ).join("\n\n");
+            }
+          } catch (e) {
+            result = "Fehler beim Abruf der Mails: " + e.message;
+          }
+        } else {
+          result = "Unbekannte Mail-Aktion";
+        }
+        break;
+      }
+      case "web_search": {
+        const query = typeof payload.query === "string" ? payload.query : "";
+        try {
+          const res = await fetch("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
+          const html = await res.text();
+          const results = [];
+          const snippetRegex = /<a class="result__snippet[^>]*>([\s\S]*?)<\/a>/g;
+          let match;
+          while ((match = snippetRegex.exec(html)) !== null && results.length < 5) {
+            results.push("- " + match[1].replace(/<\/?[^>]+(>|$)/g, "").trim());
+          }
+          if (results.length === 0) result = "Keine Suchergebnisse gefunden.";
+          else result = results.join("\n");
+        } catch (e) {
+          result = "Fehler bei der Websuche: " + e.message;
+        }
+        break;
+      }
+      case "maps_action": {
+        result = `Google Maps Ansicht f\xFCr ${payload.location || "den Ort"} wurde auf dem Dashboard aktualisiert (Der Nutzer sieht dies als eingebettete Karte in der App).`;
+        break;
+      }
       default:
         result = `Unbekanntes Werkzeug: ${tag}`;
     }
@@ -4963,6 +5057,7 @@ var init_agent = __esm({
     init_spotify();
     init_deviceCommands();
     init_db();
+    init_calendar();
     WRITING_ACTIONS = [
       "create_customer",
       "create_ticket",
@@ -5007,7 +5102,10 @@ var init_agent = __esm({
       "notes_action",
       "tasks_action",
       "schedule_task",
-      "github_action"
+      "github_action",
+      "email_action",
+      "web_search",
+      "maps_action"
     ];
     STEP_LOG_MARKER = "\u27E6schritte\u27E7 ";
     MAX_AGENT_ROUNDS = 5;
@@ -5117,13 +5215,14 @@ AUFGABEN: Du kannst Aufgaben lesen, anlegen und abschliessen:
 Nutze diese Werkzeuge aktiv: erkennst du im Gespr\xE4ch eine offene Pendenz, lege selbst eine Aufgabe an
 und sage Stefan in einem Satz, dass du das getan hast.
 
-KALENDER: Wenn der Nutzer Kalender-Aktionen m\xF6chte, nutze einen Aktionsblock:
+KALENDER & PREDICTIVE SCHEDULING: Wenn der Nutzer Kalender-Aktionen m\xF6chte, nutze einen Aktionsblock:
 <calendar_action>{"action":"list_events","timeMin":"ISO8601","timeMax":"ISO8601"}</calendar_action>
 <calendar_action>{"action":"create_event","summary":"Titel","startDateTime":"2026-08-10T14:00:00","endDateTime":"2026-08-10T15:00:00","description":"","location":""}</calendar_action>
 <calendar_action>{"action":"update_event","eventId":"ID","summary":"neuer Titel"}</calendar_action>
 <calendar_action>{"action":"delete_event","eventId":"ID"}</calendar_action>
 <calendar_action>{"action":"invite_attendee","eventId":"ID","email":"person@example.com"}</calendar_action>
 <calendar_action>{"action":"get_event","keyword":"Suchbegriff"}</calendar_action>
+WICHTIG (Predictive Scheduling): Ber\xFCcksichtige IMMER Stefans Arbeitsrhythmus (z.B. Feierabend um 15:30 an bestimmten Tagen, Pausenzeiten), wenn du Termine vorschl\xE4gst. Suche diese Vorlieben im Ged\xE4chtnis (memory_action). Schlage keine Termine au\xDFerhalb seiner \xFCblichen Arbeitszeiten vor!
 WICHTIG: Zeige dem Nutzer NIE den rohen Aktionsblock.
 
 GITHUB: Wenn Stefan nach seinen Repositories (Code-Projekten) fragt, nutze das GitHub-Werkzeug:
@@ -5136,6 +5235,17 @@ GED\xC4CHTNIS: Wenn der Nutzer wichtige Informationen mitteilt, speichere sie:
 Kategorien: person, contact, preference, project, fact.
 WICHTIG zur Ausgabe: Verwende in deinen Antworten NIE interne Markierungen in eckigen Klammern wie [person], [context], [preference], [project] oder [fact]. Das sind technische Kategorien aus dem gespeicherten Wissen und d\xFCrfen im Antworttext nicht auftauchen. Formuliere den Inhalt in nat\xFCrlicher Sprache.
 Kategorien-Hinweis Ende. Zeige dem Nutzer NIE den rohen memory_action-Block.
+
+E-MAIL: Du kannst ungelesene E-Mails abrufen oder Mails durchsuchen:
+<email_action>{"action":"list_unread"}</email_action>
+Nutze dies proaktiv, um \xFCberf\xE4llige Kundenanfragen zu erkennen, Angebote nachzufassen oder wichtige Anh\xE4nge in Notizen zu sichern. Erstelle bei Bedarf selbst\xE4ndig Tasks daf\xFCr.
+
+WEB-SUCHE & KONKURRENZ: Du kannst das Internet durchsuchen, um z.B. Konkurrenz-Monitoring durchzuf\xFChren (Preise und Angebote anderer IT-Dienstleister in der Zentralschweiz):
+<web_search>{"query":"IT Dienstleister Zentralschweiz Preise"}</web_search>
+
+MAPS: Du kannst Google Maps Karten direkt f\xFCr den Nutzer einblenden:
+<maps_action>{"location":"Zell LU","mode":"place"}</maps_action>
+Nutze dies, wenn der Nutzer nach Standorten, Verkehr oder Routen fragt. Die Karte erscheint dann in der App.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Vertr\xE4gen, Ausgaben und Produkten.
 Wenn Stefan etwas aus seiner App m\xF6chte, nutze app_action-Bl\xF6cke. Du darfst mehrere pro Runde einsetzen,
@@ -5435,8 +5545,8 @@ var init_chat = __esm({
     init_db();
     init_trpc();
     init_storage();
-    init_voiceTranscription();
     init_llm();
+    init_voiceTranscription();
     init_env();
     init_tools();
     init_db();
@@ -5602,7 +5712,7 @@ ${upcoming.map(
           calendarContext = "Kalender konnte nicht abgerufen werden.";
         }
         const tasks2 = await getTasksByUser(ctx.user.id);
-        const pendingTasks = tasks2.filter((t2) => t2.status !== "done");
+        const pendingTasks = tasks2.filter((t2) => !t2.completed);
         const tasksContext = pendingTasks.length > 0 ? `Offene Aufgaben:
 ${pendingTasks.map((t2) => `- [${t2.priority}] ${t2.title}`).join("\n")}` : "Keine offenen Aufgaben.";
         const systemPrompt = `Du bist Jarvis, der pers\xF6nliche Assistent von Stefan Gross.
@@ -8590,8 +8700,49 @@ var webhooksRouter = router({
 // server/routers.ts
 init_spotify();
 init_deviceCommands();
+
+// server/routers/news.ts
+init_trpc();
+var newsRouter = router({
+  getLatest: protectedProcedure.query(async () => {
+    const feeds = [
+      { name: "SRF", url: "https://www.srf.ch/news/bnf/rss/1646" },
+      { name: "Blick", url: "https://www.blick.ch/news/rss.xml" },
+      { name: "20 Minuten", url: "https://www.20min.ch/rss/rss.xml" }
+    ];
+    const results = await Promise.allSettled(
+      feeds.map(async (f) => {
+        const res = await fetch(f.url);
+        if (!res.ok) throw new Error("Fetch failed");
+        const xml = await res.text();
+        const items = [];
+        const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+        let match;
+        while ((match = itemRegex.exec(xml)) !== null && items.length < 5) {
+          const itemXml = match[1];
+          const titleMatch = /<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>|<title>([\s\S]*?)<\/title>/.exec(itemXml);
+          const linkMatch = /<link>([\s\S]*?)<\/link>/.exec(itemXml);
+          const pubDateMatch = /<pubDate>([\s\S]*?)<\/pubDate>/.exec(itemXml);
+          items.push({
+            title: titleMatch ? titleMatch[1] || titleMatch[2] : "Kein Titel",
+            link: linkMatch ? linkMatch[1] : "",
+            pubDate: pubDateMatch ? pubDateMatch[1] : ""
+          });
+        }
+        return {
+          source: f.name,
+          items
+        };
+      })
+    );
+    return results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+  })
+});
+
+// server/routers.ts
 var appRouter = router({
   system: systemRouter,
+  news: newsRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
