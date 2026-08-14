@@ -188,6 +188,16 @@ export const elevenLabsRouter = router({
 
   // ── Verfügbare Stimmen auflisten ──────────────────────────────────────────
   voices: protectedProcedure.query(async () => {
+    if (!ELEVENLABS_KEY) {
+      return [
+        { id: "onyx", name: "Onyx (OpenAI)", gender: "male", accent: "neutral", useCase: "general" },
+        { id: "alloy", name: "Alloy (OpenAI)", gender: "neutral", accent: "neutral", useCase: "general" },
+        { id: "echo", name: "Echo (OpenAI)", gender: "male", accent: "neutral", useCase: "general" },
+        { id: "fable", name: "Fable (OpenAI)", gender: "neutral", accent: "british", useCase: "general" },
+        { id: "nova", name: "Nova (OpenAI)", gender: "female", accent: "neutral", useCase: "general" },
+        { id: "shimmer", name: "Shimmer (OpenAI)", gender: "female", accent: "neutral", useCase: "general" }
+      ];
+    }
     const resp = await fetchWithTimeout("https://api.elevenlabs.io/v1/voices", {
       headers: { "xi-api-key": ELEVENLABS_KEY },
       timeoutMs: 10_000,
