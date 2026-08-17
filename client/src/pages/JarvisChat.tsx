@@ -1527,16 +1527,47 @@ function JarvisChatInner() {
     }
     setIsUploading(true);
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
+      let base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(",")[1]);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
+
+      if (file.type.startsWith("image/")) {
+        // Bild verkleinern, um API Limits (Anthropic max 5MB) zu verhindern
+        base64 = await new Promise<string>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            let { width, height } = img;
+            const maxSize = 1920;
+            if (width > maxSize || height > maxSize) {
+              if (width > height) {
+                height = Math.round((height * maxSize) / width);
+                width = maxSize;
+              } else {
+                width = Math.round((width * maxSize) / height);
+                height = maxSize;
+              }
+            }
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) return resolve(base64); // Fallback
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+            resolve(dataUrl.split(",")[1]);
+          };
+          img.onerror = () => resolve(base64); // Fallback
+          img.src = `data:${file.type};base64,${base64}`;
+        });
+      }
+
       const result = await uploadMutation.mutateAsync({
         fileName: file.name,
         fileBase64: base64,
-        mimeType: file.type,
+        mimeType: file.type.startsWith("image/") ? "image/jpeg" : file.type,
       });
       setUploadedFiles(prev => [
         ...prev,
