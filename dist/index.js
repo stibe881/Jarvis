@@ -1765,9 +1765,9 @@ async function getValidMsAccessToken(userId, email) {
   });
   return refreshed.accessToken;
 }
-async function gcalFetch(userId, email, path4, options = {}) {
+async function gcalFetch(userId, email, path6, options = {}) {
   const accessToken = await getValidGoogleAccessToken(userId, email);
-  const resp = await fetch(`https://www.googleapis.com/calendar/v3${path4}`, {
+  const resp = await fetch(`https://www.googleapis.com/calendar/v3${path6}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -1785,9 +1785,9 @@ async function gcalFetch(userId, email, path4, options = {}) {
   if (resp.status === 204) return {};
   return resp.json();
 }
-async function msFetch(userId, email, path4, options = {}) {
+async function msFetch(userId, email, path6, options = {}) {
   const accessToken = await getValidMsAccessToken(userId, email);
-  const resp = await fetch(`https://graph.microsoft.com/v1.0${path4}`, {
+  const resp = await fetch(`https://graph.microsoft.com/v1.0${path6}`, {
     ...options,
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -2470,16 +2470,9 @@ var init_calendarAI = __esm({
 });
 
 // server/storage.ts
-function getForgeConfig() {
-  const forgeUrl = ENV.forgeApiUrl;
-  const forgeKey = ENV.forgeApiKey;
-  if (!forgeUrl || !forgeKey) {
-    throw new Error(
-      "Storage config missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
-    );
-  }
-  return { forgeUrl: forgeUrl.replace(/\/+$/, ""), forgeKey };
-}
+import fs from "fs/promises";
+import path3 from "path";
+import crypto from "crypto";
 function normalizeKey(relKey) {
   return relKey.replace(/^\/+/, "");
 }
@@ -2490,28 +2483,12 @@ function appendHashSuffix(relKey) {
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
 }
 async function storagePut(relKey, data, contentType = "application/octet-stream") {
-  const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
-  const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
-  presignUrl.searchParams.set("path", key);
-  const presignResp = await fetch(presignUrl, {
-    headers: { Authorization: `Bearer ${forgeKey}` }
-  });
-  if (!presignResp.ok) {
-    const msg = await presignResp.text().catch(() => presignResp.statusText);
-    throw new Error(`Storage presign failed (${presignResp.status}): ${msg}`);
-  }
-  const { url: s3Url } = await presignResp.json();
-  if (!s3Url) throw new Error("Forge returned empty presign URL");
-  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
-  const uploadResp = await fetch(s3Url, {
-    method: "PUT",
-    headers: { "Content-Type": contentType },
-    body: blob
-  });
-  if (!uploadResp.ok) {
-    throw new Error(`Storage upload to S3 failed (${uploadResp.status})`);
-  }
+  const uploadDir = path3.resolve(process.cwd(), "uploads");
+  const filePath = path3.join(uploadDir, key);
+  await fs.mkdir(path3.dirname(filePath), { recursive: true });
+  const bufferData = typeof data === "string" ? Buffer.from(data) : data;
+  await fs.writeFile(filePath, bufferData);
   return { key, url: `/manus-storage/${key}` };
 }
 var init_storage = __esm({
@@ -3152,8 +3129,8 @@ var init_http = __esm({
 });
 
 // server/routers/appIntegration.ts
-async function sbFetch(path4, options = {}) {
-  const resp = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1${path4}`, {
+async function sbFetch(path6, options = {}) {
+  const resp = await fetchWithTimeout(`${SUPABASE_URL}/rest/v1${path6}`, {
     ...options,
     timeoutMs: 1e4,
     headers: {
@@ -3998,8 +3975,8 @@ async function getValidSpotifyAccessToken(userId) {
   });
   return data.access_token;
 }
-async function spotifyFetch(token, path4, init = {}) {
-  const res = await fetch(`https://api.spotify.com/v1${path4}`, {
+async function spotifyFetch(token, path6, init = {}) {
+  const res = await fetch(`https://api.spotify.com/v1${path6}`, {
     method: init.method ?? "GET",
     headers: {
       Authorization: `Bearer ${token}`,
@@ -6669,13 +6646,13 @@ __export(vite_exports, {
   serveStatic: () => serveStatic2,
   setupVite: () => setupVite
 });
-import express2 from "express";
-import fs2 from "fs";
+import express3 from "express";
+import fs3 from "fs";
 import { nanoid } from "nanoid";
-import path3 from "path";
+import path5 from "path";
 async function createViteServer(app, server) {
   const { createServer: createServer2 } = await import("vite");
-  const configFile = path3.resolve(import.meta.dirname, "../../vite.config.ts");
+  const configFile = path5.resolve(import.meta.dirname, "../../vite.config.ts");
   const vite = await createServer2({
     configFile,
     server: {
@@ -6693,13 +6670,13 @@ async function setupVite(app, server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path3.resolve(
+      const clientTemplate = path5.resolve(
         import.meta.dirname,
         "../..",
         "client",
         "index.html"
       );
-      let template = await fs2.promises.readFile(clientTemplate, "utf-8");
+      let template = await fs3.promises.readFile(clientTemplate, "utf-8");
       template = template.replace(
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`
@@ -6713,15 +6690,15 @@ async function setupVite(app, server) {
   });
 }
 function serveStatic2(app) {
-  const distPath = process.env.NODE_ENV === "development" ? path3.resolve(import.meta.dirname, "../..", "dist", "public") : path3.resolve(import.meta.dirname, "public");
-  if (!fs2.existsSync(distPath)) {
+  const distPath = process.env.NODE_ENV === "development" ? path5.resolve(import.meta.dirname, "../..", "dist", "public") : path5.resolve(import.meta.dirname, "public");
+  if (!fs3.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
-  app.use(express2.static(distPath));
+  app.use(express3.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
+    res.sendFile(path5.resolve(distPath, "index.html"));
   });
 }
 var init_vite = __esm({
@@ -6919,7 +6896,7 @@ for (const file of candidates) {
 // server/_core/index.ts
 init_env();
 init_logger();
-import express3 from "express";
+import express4 from "express";
 import { createServer } from "http";
 import net from "net";
 
@@ -7077,47 +7054,11 @@ function registerLocalAuthRoutes(app) {
 }
 
 // server/_core/storageProxy.ts
-init_env();
+import express from "express";
+import path2 from "path";
 function registerStorageProxy(app) {
-  app.get("/manus-storage/*", async (req, res) => {
-    const key = req.params[0];
-    if (!key) {
-      res.status(400).send("Missing storage key");
-      return;
-    }
-    if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-      res.status(500).send("Storage proxy not configured");
-      return;
-    }
-    try {
-      const forgeUrl = new URL(
-        "v1/storage/presign/get",
-        ENV.forgeApiUrl.replace(/\/+$/, "") + "/"
-      );
-      forgeUrl.searchParams.set("path", key);
-      const forgeResp = await fetch(forgeUrl, {
-        headers: { Authorization: `Bearer ${ENV.forgeApiKey}` }
-      });
-      if (!forgeResp.ok) {
-        const body = await forgeResp.text().catch(() => "");
-        console.error(
-          `[StorageProxy] forge error: ${forgeResp.status} ${body}`
-        );
-        res.status(502).send("Storage backend error");
-        return;
-      }
-      const { url } = await forgeResp.json();
-      if (!url) {
-        res.status(502).send("Empty signed URL from backend");
-        return;
-      }
-      res.set("Cache-Control", "no-store");
-      res.redirect(307, url);
-    } catch (err) {
-      console.error("[StorageProxy] failed:", err);
-      res.status(502).send("Storage proxy error");
-    }
-  });
+  const uploadDir = path2.resolve(process.cwd(), "uploads");
+  app.use("/manus-storage", express.static(uploadDir));
 }
 
 // server/routers.ts
@@ -8874,19 +8815,19 @@ var appRouter = router({
 init_context();
 
 // server/_core/serveStatic.ts
-import express from "express";
-import fs from "fs";
-import path2 from "path";
+import express2 from "express";
+import fs2 from "fs";
+import path4 from "path";
 function serveStatic(app) {
-  const distPath = path2.resolve(import.meta.dirname, "public");
-  if (!fs.existsSync(distPath)) {
+  const distPath = path4.resolve(import.meta.dirname, "public");
+  if (!fs2.existsSync(distPath)) {
     console.error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
     );
   }
-  app.use(express.static(distPath));
+  app.use(express2.static(distPath));
   app.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path4.resolve(distPath, "index.html"));
   });
 }
 
@@ -9557,11 +9498,11 @@ async function findAvailablePort(startPort = 3e3) {
 }
 async function startServer() {
   validateEnv();
-  const app = express3();
+  const app = express4();
   const server = createServer(app);
   app.use(httpLogger);
-  app.use(express3.json({ limit: "50mb" }));
-  app.use(express3.urlencoded({ limit: "50mb", extended: true }));
+  app.use(express4.json({ limit: "50mb" }));
+  app.use(express4.urlencoded({ limit: "50mb", extended: true }));
   const health = (_req, res) => res.json({ status: "ok", uptime: process.uptime() });
   app.get("/health", health);
   app.get("/api/health", health);
