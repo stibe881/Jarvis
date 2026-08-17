@@ -118,19 +118,22 @@ export async function handleChatStream(req: Request, res: Response) {
         }
         
         if (isImage) {
-          let dataUrl = absUrl;
           if (absUrl.startsWith("/manus-storage/")) {
             const relPath = absUrl.replace("/manus-storage/", "");
             const localPath = path.resolve(process.cwd(), "uploads", relPath);
             try {
                const buffer = await fs.readFile(localPath);
                const mimeType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
-               dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
-            } catch (err) {
+               const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+               images.push({ type: "image_url", image_url: { url: dataUrl } });
+            } catch (err: any) {
                console.error("Local image read error", err);
+               textContent += `\n\n[Fehler: Das Bild ${file.name} konnte auf dem Server nicht gelesen werden: ${err.message}]`;
             }
+          } else {
+             // Es ist eine externe URL (http:// oder https://)
+             images.push({ type: "image_url", image_url: { url: absUrl } });
           }
-          images.push({ type: "image_url", image_url: { url: dataUrl } });
         } else {
           let fileContent = "";
           try {
@@ -144,8 +147,9 @@ export async function handleChatStream(req: Request, res: Response) {
             }
             if (fileContent.length > 15000)
               fileContent = fileContent.slice(0, 15000) + "\n...[gekürzt]";
-          } catch (err) {
+          } catch (err: any) {
             console.error("Local file read error", err);
+            fileContent = `[Fehler beim Lesen der Datei auf dem Server: ${err.message}]`;
           }
           
           if (fileContent) {

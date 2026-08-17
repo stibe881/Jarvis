@@ -44,7 +44,24 @@ function toBlock(part: MessageContent): AnthropicBlock | null {
     return part.text ? { type: "text", text: part.text } : null;
   }
   if (part.type === "image_url") {
-    return { type: "image", source: { type: "url", url: part.image_url.url } };
+    const url = part.image_url.url;
+    if (url.startsWith("data:image/")) {
+      const parts = url.split(",");
+      const meta = parts[0];
+      const data = parts[1];
+      const mediaTypeMatch = meta.match(/data:(image\/[a-zA-Z0-9+-]+);base64/);
+      if (mediaTypeMatch && data) {
+        return {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaTypeMatch[1] as any,
+            data: data,
+          },
+        } as any;
+      }
+    }
+    return { type: "image", source: { type: "url", url: part.image_url.url } } as any;
   }
   // file_url u.ä. werden nicht unterstützt und übersprungen.
   return null;

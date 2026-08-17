@@ -42,7 +42,6 @@ export async function storageGet(
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
   const key = normalizeKey(relKey);
-  const baseUrl = ENV.appUrl || "";
   // Für lokales Hosting reicht die öffentliche URL völlig aus (kein Presigned Hash nötig)
-  return `${baseUrl}/manus-storage/${key}`;
+  return `/manus-storage/${key}`;
 }
