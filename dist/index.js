@@ -2495,7 +2495,6 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 var init_storage = __esm({
   "server/storage.ts"() {
     "use strict";
-    init_env();
   }
 });
 
@@ -2520,6 +2519,23 @@ function toBlock(part) {
     return part.text ? { type: "text", text: part.text } : null;
   }
   if (part.type === "image_url") {
+    const url = part.image_url.url;
+    if (url.startsWith("data:image/")) {
+      const parts = url.split(",");
+      const meta = parts[0];
+      const data = parts[1];
+      const mediaTypeMatch = meta.match(/data:(image\/[a-zA-Z0-9+-]+);base64/);
+      if (mediaTypeMatch && data) {
+        return {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: mediaTypeMatch[1],
+            data
+          }
+        };
+      }
+    }
     return { type: "image", source: { type: "url", url: part.image_url.url } };
   }
   return null;
@@ -6536,19 +6552,23 @@ ${ctxStr}]`;
           absUrl = `${baseUrl}${file.url}`;
         }
         if (isImage) {
-          let dataUrl = absUrl;
           if (absUrl.startsWith("/manus-storage/")) {
             const relPath = absUrl.replace("/manus-storage/", "");
             const localPath = path6.resolve(process.cwd(), "uploads", relPath);
             try {
               const buffer = await fs4.readFile(localPath);
               const mimeType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
-              dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+              const dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+              images.push({ type: "image_url", image_url: { url: dataUrl } });
             } catch (err) {
               console.error("Local image read error", err);
+              textContent += `
+
+[Fehler: Das Bild ${file.name} konnte auf dem Server nicht gelesen werden: ${err.message}]`;
             }
+          } else {
+            images.push({ type: "image_url", image_url: { url: absUrl } });
           }
-          images.push({ type: "image_url", image_url: { url: dataUrl } });
         } else {
           let fileContent = "";
           try {
@@ -6564,6 +6584,7 @@ ${ctxStr}]`;
               fileContent = fileContent.slice(0, 15e3) + "\n...[gek\xFCrzt]";
           } catch (err) {
             console.error("Local file read error", err);
+            fileContent = `[Fehler beim Lesen der Datei auf dem Server: ${err.message}]`;
           }
           if (fileContent) {
             textContent += `
