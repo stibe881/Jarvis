@@ -4470,12 +4470,15 @@ async function executeHomeAssistantAction(params) {
   if (!sbUrl || !sbKey) {
     return "Fehler: Supabase Zugangsdaten f\xFCr Smarthome Pro sind nicht in der .env hinterlegt.";
   }
-  const settingsRes = await fetch(`${sbUrl}/rest/v1/user_settings?select=ha_url,ha_token&limit=1`, {
-    headers: {
-      apikey: sbKey,
-      Authorization: `Bearer ${sbKey}`
+  const settingsRes = await fetch(
+    `${sbUrl}/rest/v1/user_settings?select=ha_url,ha_token&limit=1`,
+    {
+      headers: {
+        apikey: sbKey,
+        Authorization: `Bearer ${sbKey}`
+      }
     }
-  });
+  );
   if (!settingsRes.ok) {
     return `Fehler beim Abrufen der HA-Zugangsdaten: ${settingsRes.statusText}`;
   }
@@ -5338,6 +5341,8 @@ WEB-SUCHE & KONKURRENZ: Du kannst das Internet durchsuchen, um z.B. Konkurrenz-M
 
 MAPS: Du kannst Google Maps Karten direkt f\xFCr den Nutzer einblenden:
 <maps_action>{"location":"Zell LU","mode":"place"}</maps_action>
+Oder f\xFCr eine Routenberechnung:
+<maps_action>{"origin":"Zell LU","destination":"Luzern","mode":"route"}</maps_action>
 Nutze dies, wenn der Nutzer nach Standorten, Verkehr oder Routen fragt. Die Karte erscheint dann direkt hier im Chat als interaktives Widget.
 
 APP (Gross ICT ERP/CRM): Stefan hat eine eigene App mit Kunden, Angeboten, Rechnungen, Tickets, Projekten, Leads, Vertr\xE4gen, Ausgaben und Produkten.

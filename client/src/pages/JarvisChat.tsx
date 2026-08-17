@@ -1519,37 +1519,43 @@ function JarvisChatInner() {
     }
   }, [wakeWordMode, startListening, stopListening]);
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const processAndUploadFile = async (file: File) => {
     if (file.size > 10 * 1024 * 1024) {
       toast.error("Datei zu groß (max. 10 MB)");
       return;
     }
     setIsUploading(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const result = await uploadMutation.mutateAsync({
-          fileName: file.name,
-          fileBase64: base64,
-          mimeType: file.type,
-        });
-        setUploadedFile({
-          url: result.url,
-          key: result.key,
-          name: result.fileName,
-          mime: result.mimeType,
-        });
-        toast.success(`${file.name} hochgeladen`);
-      };
-      reader.readAsDataURL(file);
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadMutation.mutateAsync({
+        fileName: file.name,
+        fileBase64: base64,
+        mimeType: file.type,
+      });
+      setUploadedFile({
+        url: result.url,
+        key: result.key,
+        name: result.fileName,
+        mime: result.mimeType,
+      });
+      toast.success(`${file.name} hochgeladen`);
     } catch {
       toast.error("Upload fehlgeschlagen");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      await processAndUploadFile(file);
     }
   };
 
@@ -2177,7 +2183,7 @@ function JarvisChatInner() {
                     if (items[i].type.startsWith("image/")) {
                       const file = items[i].getAsFile();
                       if (file) {
-                        setUploadedFile(file);
+                        processAndUploadFile(file);
                         e.preventDefault();
                       }
                     }
@@ -2198,7 +2204,7 @@ function JarvisChatInner() {
                 type="file"
                 className="hidden"
                 onChange={handleFileUpload}
-                accept=".pdf,.txt,.md,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.txt,.md,.doc,.docx,image/*"
               />
               <Button
                 variant="ghost"
