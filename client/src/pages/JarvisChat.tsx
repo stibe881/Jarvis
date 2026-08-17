@@ -175,12 +175,14 @@ function JarvisChatInner() {
   const ttsUnlockedRef = useRef(false); // iOS: speechSynthesis muss einmal per User-Gesture entsperrt werden
   const [ttsUnlocked, setTtsUnlocked] = useState(false);
   const [interimText, setInterimText] = useState("");
-  const [uploadedFile, setUploadedFile] = useState<{
-    url: string;
-    key: string;
-    name: string;
-    mime: string;
-  } | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<
+    Array<{
+      url: string;
+      key: string;
+      name: string;
+      mime: string;
+    }>
+  >([]);
   const [isUploading, setIsUploading] = useState(false);
   const [searchEnabled, setSearchEnabled] = useState(false);
   const [showConvSidebar, setShowConvSidebar] = useState(false);
@@ -924,10 +926,10 @@ function JarvisChatInner() {
   const sendMessageFromText = useCallback(
     async (
       text: string,
-      file?: typeof uploadedFile,
+      files?: typeof uploadedFiles,
       quelle: "sprache" | "tippen" = "tippen"
     ) => {
-      if (!text.trim() && !file) return;
+      if (!text.trim() && (!files || files.length === 0)) return;
       // Läuft noch eine Antwort? Dann Text merken und nach dem Ende automatisch senden,
       // statt ihn stillschweigend zu verwerfen (das war die Ursache für „nur eine Antwort").
       if (isBusyRef.current) {
@@ -961,8 +963,8 @@ function JarvisChatInner() {
       const userMsg: Message = {
         role: "user",
         content: text,
-        fileUrl: file?.url,
-        fileName: file?.name,
+        fileUrl: files && files.length > 0 ? files[0].url : undefined,
+        fileName: files && files.length > 0 ? files[0].name : undefined,
       };
       setMessages(prev => [...prev, userMsg]);
       setIsStreaming(true);
@@ -1080,8 +1082,7 @@ function JarvisChatInner() {
             conversationId: convId,
             message: text,
             context: smartContext,
-            fileUrl: file?.url ?? undefined,
-            fileName: file?.name ?? undefined,
+            files: files?.length ? files : undefined,
             searchResults,
           }),
         });
@@ -1248,13 +1249,13 @@ function JarvisChatInner() {
   }, [isStreaming, isSpeaking]);
 
   const sendMessage = useCallback(async () => {
-    if (!input.trim() && !uploadedFile) return;
-    const file = uploadedFile;
+    if (!input.trim() && uploadedFiles.length === 0) return;
+    const currentFiles = [...uploadedFiles];
     const text = input;
     setInput("");
-    setUploadedFile(null);
-    await sendMessageFromText(text, file ?? undefined);
-  }, [input, uploadedFile, sendMessageFromText]);
+    setUploadedFiles([]);
+    await sendMessageFromText(text, currentFiles);
+  }, [input, uploadedFiles, sendMessageFromText]);
 
   // Refs aktuell halten (vermeidet Abhängigkeitsschleifen in Callbacks)
   useEffect(() => {
@@ -1537,12 +1538,15 @@ function JarvisChatInner() {
         fileBase64: base64,
         mimeType: file.type,
       });
-      setUploadedFile({
-        url: result.url,
-        key: result.key,
-        name: result.fileName,
-        mime: result.mimeType,
-      });
+      setUploadedFiles(prev => [
+        ...prev,
+        {
+          url: result.url,
+          key: result.key,
+          name: result.fileName,
+          mime: result.mimeType,
+        }
+      ]);
       toast.success(`${file.name} hochgeladen`);
     } catch {
       toast.error("Upload fehlgeschlagen");
@@ -1553,9 +1557,11 @@ function JarvisChatInner() {
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      await processAndUploadFile(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length > 0) {
+      for (const file of files) {
+        await processAndUploadFile(file);
+      }
     }
   };
 
@@ -2127,21 +2133,30 @@ function JarvisChatInner() {
 
         {/* Input Area */}
         <div className="px-3 md:px-6 py-3 border-t border-border">
-          {uploadedFile && (
-            <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary">
-              <FileText size={12} />
-              <span className="flex-1 truncate">{uploadedFile.name}</span>
-              <button
-                onClick={() => setUploadedFile(null)}
-                className="hover:text-destructive"
-              >
-                <X size={12} />
-              </button>
+          {uploadedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {uploadedFiles.map((file, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary max-w-[200px]"
+                >
+                  <FileText size={12} className="flex-shrink-0" />
+                  <span className="truncate">{file.name}</span>
+                  <button
+                    onClick={() =>
+                      setUploadedFiles(prev => prev.filter((_, i) => i !== idx))
+                    }
+                    className="hover:text-destructive flex-shrink-0 ml-1"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
 
           {/* Großer Mikrofon-Button (Gemini-Style) wenn kein Text eingegeben */}
-          {!input.trim() && !uploadedFile && (
+          {!input.trim() && uploadedFiles.length === 0 && (
             <div className="flex flex-col items-center gap-2 mb-3">
               <button
                 onClick={() => {
@@ -2202,9 +2217,10 @@ function JarvisChatInner() {
               <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 onChange={handleFileUpload}
-                accept=".pdf,.txt,.md,.doc,.docx,image/*"
+                accept="image/*,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
               />
               <Button
                 variant="ghost"
@@ -2255,7 +2271,7 @@ function JarvisChatInner() {
               <Button
                 size="icon"
                 onClick={sendMessage}
-                disabled={!input.trim() && !uploadedFile}
+                disabled={!input.trim() && uploadedFiles.length === 0}
                 className="h-8 w-8 bg-primary text-primary-foreground hover:bg-primary/90"
                 aria-label="Nachricht senden"
               >

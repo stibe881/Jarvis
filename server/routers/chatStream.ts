@@ -275,6 +275,14 @@ export const chatRouter = router({
         message: z.string(),
         fileUrl: z.string().optional(),
         fileName: z.string().optional(),
+        files: z.array(
+          z.object({
+            url: z.string(),
+            key: z.string(),
+            name: z.string(),
+            mimeType: z.string().optional(),
+          })
+        ).optional(),
         searchResults: z
           .array(
             z.object({
@@ -287,7 +295,7 @@ export const chatRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { conversationId, message, fileUrl, fileName, searchResults } =
+      const { conversationId, message, fileUrl, fileName, files, searchResults } =
         input;
       const userId = ctx.user.id;
 
@@ -304,6 +312,7 @@ export const chatRouter = router({
         content: message,
         fileUrl: fileUrl ?? null,
         fileName: fileName ?? null,
+        files: files ?? null,
       });
 
       // ── Freigabe für kritische Aktionen prüfen ──────────────────────────

@@ -30,6 +30,7 @@ export async function handleChatStream(req: Request, res: Response) {
     searchResults,
     fileUrl,
     fileName,
+    files,
     approved,
     context,
   } = req.body;
@@ -96,37 +97,74 @@ export async function handleChatStream(req: Request, res: Response) {
         .join("\n");
       userContent = `${message}\n\n[Web-Suchergebnisse:\n${ctxStr}]`;
     }
-    if (fileUrl && fileName) {
-      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-      const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
-      const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
-      const absUrl = fileUrl.startsWith("http")
-        ? fileUrl
-        : `${baseUrl}${fileUrl}`;
-      if (isImage) {
+
+    const allFiles = files ?? (fileUrl ? [{ url: fileUrl, name: fileName }] : []);
+    
+    if (allFiles.length > 0) {
+      let textContent = typeof userContent === "string" ? userContent : message;
+      const images: any[] = [];
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      
+      for (const file of allFiles) {
+        const ext = file.name?.split(".").pop()?.toLowerCase() ?? "";
+        const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+        
+        let absUrl = file.url;
+        if (!absUrl.startsWith("http") && !absUrl.startsWith("/manus-storage/")) {
+           const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+           absUrl = `${baseUrl}${file.url}`;
+        }
+        
+        if (isImage) {
+          let dataUrl = absUrl;
+          if (absUrl.startsWith("/manus-storage/")) {
+            const relPath = absUrl.replace("/manus-storage/", "");
+            const localPath = path.resolve(process.cwd(), "uploads", relPath);
+            try {
+               const buffer = await fs.readFile(localPath);
+               const mimeType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+               dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+            } catch (err) {
+               console.error("Local image read error", err);
+            }
+          }
+          images.push({ type: "image_url", image_url: { url: dataUrl } });
+        } else {
+          let fileContent = "";
+          try {
+            if (absUrl.startsWith("/manus-storage/")) {
+              const relPath = absUrl.replace("/manus-storage/", "");
+              const localPath = path.resolve(process.cwd(), "uploads", relPath);
+              fileContent = await fs.readFile(localPath, "utf-8");
+            } else {
+              const fr = await fetchWithTimeout(absUrl);
+              if (fr.ok) fileContent = await fr.text();
+            }
+            if (fileContent.length > 15000)
+              fileContent = fileContent.slice(0, 15000) + "\n...[gekürzt]";
+          } catch (err) {
+            console.error("Local file read error", err);
+          }
+          
+          if (fileContent) {
+            textContent += `\n\n[Dateiinhalt von ${file.name}:\n\`\`\`\n${fileContent}\n\`\`\`]`;
+          } else {
+            textContent += `\n\n[Datei: ${file.name} konnte nicht gelesen werden]`;
+          }
+        }
+      }
+      
+      if (images.length > 0) {
         userContent = [
-          { type: "image_url", image_url: { url: absUrl } },
+          ...images,
           {
             type: "text",
-            text:
-              typeof userContent === "string"
-                ? userContent || `Analysiere dieses Bild: ${fileName}`
-                : message,
+            text: textContent || `Analysiere ${images.length > 1 ? "diese Bilder" : "dieses Bild"}`,
           },
         ];
       } else {
-        let fileContent = "";
-        try {
-          const fr = await fetchWithTimeout(absUrl);
-          if (fr.ok) {
-            fileContent = await fr.text();
-            if (fileContent.length > 8000)
-              fileContent = fileContent.slice(0, 8000) + "\n...[gekürzt]";
-          }
-        } catch {}
-        userContent = fileContent
-          ? `${typeof userContent === "string" ? userContent : message}\n\n[Dateiinhalt von ${fileName}:\n\`\`\`\n${fileContent}\n\`\`\`]`
-          : `${typeof userContent === "string" ? userContent : message}\n\n[Datei: ${fileName}]`;
+        userContent = textContent;
       }
     }
 

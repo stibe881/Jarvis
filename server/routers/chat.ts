@@ -540,6 +540,14 @@ Antworte auf Deutsch.`;
         message: z.string(),
         fileUrl: z.string().optional(),
         fileName: z.string().optional(),
+        files: z.array(
+          z.object({
+            url: z.string(),
+            key: z.string(),
+            name: z.string(),
+            mimeType: z.string().optional(),
+          })
+        ).optional(),
         searchResults: z
           .array(
             z.object({
@@ -563,6 +571,7 @@ Antworte auf Deutsch.`;
         message,
         fileUrl,
         fileName,
+        files,
         searchResults,
         context,
       } = input;
@@ -581,6 +590,7 @@ Antworte auf Deutsch.`;
         content: message,
         fileUrl: fileUrl ?? null,
         fileName: fileName ?? null,
+        files: files ?? null,
       });
 
       // ── Freigabe für kritische Aktionen prüfen ──────────────────────────

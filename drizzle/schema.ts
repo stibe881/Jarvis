@@ -83,6 +83,7 @@ export const messages = mysqlTable(
     fileUrl: varchar("fileUrl", { length: 1024 }),
     fileKey: varchar("fileKey", { length: 512 }),
     fileName: varchar("fileName", { length: 255 }),
+    files: json("files").$type<Array<{ url: string; key: string; name: string; mimeType?: string }>>(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   t => [index("messages_conversationId_idx").on(t.conversationId)]

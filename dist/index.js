@@ -287,6 +287,7 @@ var init_schema = __esm({
         fileUrl: varchar("fileUrl", { length: 1024 }),
         fileKey: varchar("fileKey", { length: 512 }),
         fileName: varchar("fileName", { length: 255 }),
+        files: json("files").$type(),
         createdAt: timestamp("createdAt").defaultNow().notNull()
       },
       (t2) => [index("messages_conversationId_idx").on(t2.conversationId)]
@@ -5260,6 +5261,7 @@ A) ZUSAMMENH\xC4NGE ERKENNEN: Verkn\xFCpfe Informationen aus verschiedenen Quell
    - Ein Angebot ist seit \xFCber zwei Wochen "sent" und ohne Reaktion? Schlage vor nachzufassen.
    - Ein Termin \xFCberschneidet sich mit einer f\xE4lligen Aufgabe? Melde den Konflikt aktiv.
    - Ein Projekt ist "active", aber es gibt keine Rechnung dazu? Frage, ob abgerechnet werden soll.
+   - WICHTIG F\xDCR DOKUMENTE: Wenn du ein Dokument hochgeladen bekommst und gebeten wirst, dir Informationen zu merken, nutze IMMER die entsprechenden Ged\xE4chtnis-Werkzeuge (z.B. save_note_or_memory). Nenne in deiner Antwort danach immer explizit und detailliert in einer Aufz\xE4hlung, was genau du dir im Ged\xE4chtnis abgespeichert hast.
 
 B) N\xC4CHSTER SCHRITT: Beende jede Antwort, die Daten oder Ergebnisse enth\xE4lt, mit genau EINEM konkreten,
    sofort ausf\xFChrbaren Vorschlag \u2013 keine Floskeln wie "Sag mir, wenn du Hilfe brauchst".
@@ -5926,6 +5928,14 @@ ${tasksContext}` }
           message: z6.string(),
           fileUrl: z6.string().optional(),
           fileName: z6.string().optional(),
+          files: z6.array(
+            z6.object({
+              url: z6.string(),
+              key: z6.string(),
+              name: z6.string(),
+              mimeType: z6.string().optional()
+            })
+          ).optional(),
           searchResults: z6.array(
             z6.object({
               title: z6.string(),
@@ -5944,6 +5954,7 @@ ${tasksContext}` }
           message,
           fileUrl,
           fileName,
+          files,
           searchResults,
           context
         } = input;
@@ -5957,7 +5968,8 @@ ${tasksContext}` }
           role: "user",
           content: message,
           fileUrl: fileUrl ?? null,
-          fileName: fileName ?? null
+          fileName: fileName ?? null,
+          files: files ?? null
         });
         const wasPending = hasPending(conversationId);
         const approvedNow = wasPending && isApproval(message);
@@ -6445,6 +6457,7 @@ async function handleChatStream(req, res) {
     searchResults,
     fileUrl,
     fileName,
+    files,
     approved,
     context
   } = req.body;
@@ -6508,38 +6521,74 @@ ${parts.join("\n")}`;
 [Web-Suchergebnisse:
 ${ctxStr}]`;
     }
-    if (fileUrl && fileName) {
-      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
-      const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
-      const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
-      const absUrl = fileUrl.startsWith("http") ? fileUrl : `${baseUrl}${fileUrl}`;
-      if (isImage) {
+    const allFiles = files ?? (fileUrl ? [{ url: fileUrl, name: fileName }] : []);
+    if (allFiles.length > 0) {
+      let textContent = typeof userContent === "string" ? userContent : message;
+      const images = [];
+      const fs4 = await import("fs/promises");
+      const path6 = await import("path");
+      for (const file of allFiles) {
+        const ext = file.name?.split(".").pop()?.toLowerCase() ?? "";
+        const isImage = ["png", "jpg", "jpeg", "gif", "webp"].includes(ext);
+        let absUrl = file.url;
+        if (!absUrl.startsWith("http") && !absUrl.startsWith("/manus-storage/")) {
+          const baseUrl = ENV.forgeApiUrl?.replace("/v1", "") ?? "";
+          absUrl = `${baseUrl}${file.url}`;
+        }
+        if (isImage) {
+          let dataUrl = absUrl;
+          if (absUrl.startsWith("/manus-storage/")) {
+            const relPath = absUrl.replace("/manus-storage/", "");
+            const localPath = path6.resolve(process.cwd(), "uploads", relPath);
+            try {
+              const buffer = await fs4.readFile(localPath);
+              const mimeType = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+              dataUrl = `data:${mimeType};base64,${buffer.toString("base64")}`;
+            } catch (err) {
+              console.error("Local image read error", err);
+            }
+          }
+          images.push({ type: "image_url", image_url: { url: dataUrl } });
+        } else {
+          let fileContent = "";
+          try {
+            if (absUrl.startsWith("/manus-storage/")) {
+              const relPath = absUrl.replace("/manus-storage/", "");
+              const localPath = path6.resolve(process.cwd(), "uploads", relPath);
+              fileContent = await fs4.readFile(localPath, "utf-8");
+            } else {
+              const fr = await fetchWithTimeout(absUrl);
+              if (fr.ok) fileContent = await fr.text();
+            }
+            if (fileContent.length > 15e3)
+              fileContent = fileContent.slice(0, 15e3) + "\n...[gek\xFCrzt]";
+          } catch (err) {
+            console.error("Local file read error", err);
+          }
+          if (fileContent) {
+            textContent += `
+
+[Dateiinhalt von ${file.name}:
+\`\`\`
+${fileContent}
+\`\`\`]`;
+          } else {
+            textContent += `
+
+[Datei: ${file.name} konnte nicht gelesen werden]`;
+          }
+        }
+      }
+      if (images.length > 0) {
         userContent = [
-          { type: "image_url", image_url: { url: absUrl } },
+          ...images,
           {
             type: "text",
-            text: typeof userContent === "string" ? userContent || `Analysiere dieses Bild: ${fileName}` : message
+            text: textContent || `Analysiere ${images.length > 1 ? "diese Bilder" : "dieses Bild"}`
           }
         ];
       } else {
-        let fileContent = "";
-        try {
-          const fr = await fetchWithTimeout(absUrl);
-          if (fr.ok) {
-            fileContent = await fr.text();
-            if (fileContent.length > 8e3)
-              fileContent = fileContent.slice(0, 8e3) + "\n...[gek\xFCrzt]";
-          }
-        } catch {
-        }
-        userContent = fileContent ? `${typeof userContent === "string" ? userContent : message}
-
-[Dateiinhalt von ${fileName}:
-\`\`\`
-${fileContent}
-\`\`\`]` : `${typeof userContent === "string" ? userContent : message}
-
-[Datei: ${fileName}]`;
+        userContent = textContent;
       }
     }
     const llmMessages = [
