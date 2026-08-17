@@ -4703,10 +4703,50 @@ function parseActions(response) {
     const rx = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "g");
     let m;
     while ((m = rx.exec(response)) !== null) {
+      let rawJson = m[1].trim();
+      if (rawJson.startsWith("```json")) {
+        rawJson = rawJson.substring(7);
+      } else if (rawJson.startsWith("```")) {
+        rawJson = rawJson.substring(3);
+      }
+      if (rawJson.endsWith("```")) {
+        rawJson = rawJson.substring(0, rawJson.length - 3);
+      }
+      rawJson = rawJson.trim();
+      let inString = false;
+      let isEscaped = false;
+      let cleanedJson = "";
+      for (let i = 0; i < rawJson.length; i++) {
+        const char = rawJson[i];
+        if (inString) {
+          if (char === '"' && !isEscaped) {
+            inString = false;
+            cleanedJson += char;
+          } else if (char === "\\") {
+            isEscaped = !isEscaped;
+            cleanedJson += char;
+          } else if (char === "\n") {
+            cleanedJson += "\\n";
+            isEscaped = false;
+          } else if (char === "\r") {
+            isEscaped = false;
+          } else if (char === "	") {
+            cleanedJson += "\\t";
+            isEscaped = false;
+          } else {
+            cleanedJson += char;
+            isEscaped = false;
+          }
+        } else {
+          if (char === '"') inString = true;
+          cleanedJson += char;
+        }
+      }
       try {
-        const payload = JSON.parse(m[1].trim());
+        const payload = JSON.parse(cleanedJson);
         actions.push({ tag, payload });
-      } catch {
+      } catch (err) {
+        console.error("Fehler beim Parsen der Aktion:", tag, "Raw:", rawJson, "Cleaned:", cleanedJson, err);
       }
     }
     if (tag !== "maps_action") {
