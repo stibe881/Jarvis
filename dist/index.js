@@ -4746,7 +4746,15 @@ function parseActions(response) {
         const payload = JSON.parse(cleanedJson);
         actions.push({ tag, payload });
       } catch (err) {
-        console.error("Fehler beim Parsen der Aktion:", tag, "Raw:", rawJson, "Cleaned:", cleanedJson, err);
+        console.error(
+          "Fehler beim Parsen der Aktion:",
+          tag,
+          "Raw:",
+          rawJson,
+          "Cleaned:",
+          cleanedJson,
+          err
+        );
       }
     }
     if (tag !== "maps_action") {
@@ -4869,15 +4877,33 @@ async function executeAction(ctx, parsed2) {
         break;
       }
       case "memory_action": {
-        const key = typeof payload.key === "string" ? payload.key : "";
-        const value = typeof payload.value === "string" ? payload.value : "";
-        if (!key || !value) {
-          result = "F\xFCr das Ged\xE4chtnis werden Schl\xFCssel und Wert ben\xF6tigt.";
-          break;
+        const items = Array.isArray(payload) ? payload : [payload];
+        let savedCount = 0;
+        let lastKey = "";
+        let lastValue = "";
+        for (const item of items) {
+          const key = typeof item?.key === "string" ? item.key : String(item?.key || "");
+          let value = "";
+          if (typeof item?.value === "string") {
+            value = item.value;
+          } else if (item?.value !== void 0 && item?.value !== null) {
+            value = typeof item.value === "object" ? JSON.stringify(item.value) : String(item.value);
+          }
+          if (key && value) {
+            const category = typeof item?.category === "string" ? item.category : "fact";
+            await upsertMemory(ctx.userId, category, key, value, "chat");
+            savedCount++;
+            lastKey = key;
+            lastValue = value;
+          }
         }
-        const category = typeof payload.category === "string" ? payload.category : "fact";
-        await upsertMemory(ctx.userId, category, key, value, "chat");
-        result = `Gemerkt: ${key} = ${value}`;
+        if (savedCount === 0) {
+          result = "F\xFCr das Ged\xE4chtnis werden Schl\xFCssel und Wert ben\xF6tigt.";
+        } else if (savedCount === 1) {
+          result = `Gemerkt: ${lastKey} = ${lastValue}`;
+        } else {
+          result = `${savedCount} Eintr\xE4ge im Ged\xE4chtnis gespeichert.`;
+        }
         break;
       }
       case "spotify_action": {
